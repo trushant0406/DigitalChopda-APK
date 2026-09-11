@@ -26,7 +26,10 @@ export default function QuotationsPage({ presetContact }) {
     setSendingId(id);
     setSendError(null);
     try {
-      await api.sendQuotationWhatsApp(id);
+      const res = await api.sendQuotationWhatsApp(id);
+      if (!res?.sentViaWeb && res?.whatsappUrl) {
+        window.open(res.whatsappUrl, '_blank');
+      }
       await load();
     } catch (err) {
       setSendError(err.message);

@@ -21,15 +21,34 @@ export default function SettingsPage() {
   const [status, setStatus] = useState(null);
   const [pushState, setPushState] = useState('idle');
   const [error, setError] = useState(null);
+  const [reconnecting, setReconnecting] = useState(false);
 
   const [profile, setProfile] = useState(emptyProfile);
   const [profileSaving, setProfileSaving] = useState(false);
   const [profileSaved, setProfileSaved] = useState(false);
 
   useEffect(() => {
-    api.settingsStatus().then(setStatus).catch(() => {});
+    function checkStatus() {
+      api.settingsStatus().then(setStatus).catch(() => {});
+    }
+    checkStatus();
     api.getBusinessProfile().then((p) => p && setProfile({ ...emptyProfile, ...p })).catch(() => {});
+
+    const interval = setInterval(checkStatus, 3000);
+    return () => clearInterval(interval);
   }, []);
+
+  async function handleReconnect(forceReset = false) {
+    setReconnecting(true);
+    try {
+      const res = await api.reconnectWhatsAppWeb(forceReset);
+      setStatus((prev) => ({ ...prev, ...res }));
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setReconnecting(false);
+    }
+  }
 
   function updateProfile(field) {
     return (e) => {
@@ -160,24 +179,47 @@ export default function SettingsPage() {
       </div>
 
       <div className="card">
-        <h2>Customer messages (WhatsApp)</h2>
+        <h2>WhatsApp Direct PDF Attachment (Tokenless)</h2>
         <p className="subtitle">
-          Business-initiated follow-ups to customers require a pre-approved WhatsApp template
-          (~24h approval lead time) and Cloud API credentials.
+          Scan the QR code once with your phone (WhatsApp → Linked Devices) to send actual PDF file attachments directly without Meta tokens or API keys.
+        </p>
+        <p>
+          Status:{' '}
+          <span className={status?.whatsappWebStatus === 'CONNECTED' ? 'badge ok' : 'badge warn'}>
+            {status?.whatsappWebStatus === 'CONNECTED'
+              ? 'Connected ✓ (Ready to send PDF attachments)'
+              : status?.whatsappWebStatus === 'QR_READY'
+              ? 'Scan QR Code Below'
+              : 'Initializing WhatsApp Web Client…'}
+          </span>
+        </p>
+        {status?.whatsappWebQr && (
+          <div style={{ marginTop: '16px', textAlign: 'center' }}>
+            <p><strong>Scan with WhatsApp (Linked Devices):</strong></p>
+            <img src={status.whatsappWebQr} alt="WhatsApp Web QR Code" style={{ width: '220px', borderRadius: '8px', border: '1px solid #ccc', margin: '8px 0' }} />
+          </div>
+        )}
+        <div style={{ marginTop: '16px', display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+          <button type="button" onClick={() => handleReconnect(false)} disabled={reconnecting}>
+            {reconnecting ? 'Syncing…' : '🔄 Refresh / Sync Connection'}
+          </button>
+          <button type="button" className="remove-item" onClick={() => handleReconnect(true)} disabled={reconnecting}>
+            {reconnecting ? 'Resetting…' : '🔑 Reset Session & Get New QR'}
+          </button>
+        </div>
+      </div>
+
+      <div className="card">
+        <h2>Customer messages (WhatsApp Cloud API)</h2>
+        <p className="subtitle">
+          Optional Meta Cloud API integration using pre-approved templates.
         </p>
         <p>
           Status:{' '}
           <span className={status?.whatsappConfigured ? 'badge ok' : 'badge warn'}>
-            {status ? (status.whatsappConfigured ? 'Configured' : 'Not configured — dry-run mode') : '…'}
+            {status ? (status.whatsappConfigured ? 'Configured' : 'Not configured') : '…'}
           </span>
         </p>
-        {!status?.whatsappConfigured && (
-          <p className="hint">
-            Reminders on the WhatsApp channel are logged to the backend console instead of sent.
-            Set WHATSAPP_TOKEN, WHATSAPP_PHONE_NUMBER_ID, and WHATSAPP_TEMPLATE_NAME in backend/.env
-            once you have Cloud API access.
-          </p>
-        )}
       </div>
 
       <div className="card">

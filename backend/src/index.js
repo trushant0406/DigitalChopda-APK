@@ -15,6 +15,7 @@ import productsRouter from './routes/products.js';
 import quotationsRouter from './routes/quotations.js';
 import businessProfileRouter from './routes/businessProfile.js';
 import { startScheduler } from './scheduler.js';
+import { initWhatsAppWebClient } from './notify/whatsappWebClient.js';
 
 dotenv.config();
 
@@ -41,5 +42,8 @@ app.use('/api/business-profile', businessProfileRouter);
 app.get('/api/health', (req, res) => res.json({ ok: true }));
 
 const port = process.env.PORT || 4000;
-app.listen(port, () => console.log(`Call Intelligence backend on :${port}`));
-startScheduler();
+app.listen(port, () => {
+  console.log(`Call Intelligence backend on :${port}`);
+  startScheduler();
+  initWhatsAppWebClient();
+});

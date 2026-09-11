@@ -72,4 +72,5 @@ export const api = {
   vapidPublicKey: () => request('/push/vapid-public-key'),
   subscribePush: (subscription) => request('/push/subscribe', json(subscription)),
   settingsStatus: () => request('/settings/status'),
+  reconnectWhatsAppWeb: (forceReset) => request('/settings/whatsapp-web/reconnect', json({ forceReset })),
 };

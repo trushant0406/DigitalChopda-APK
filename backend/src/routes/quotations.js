@@ -167,24 +167,67 @@ router.get('/:id/pdf', async (req, res) => {
   }
 });
 
-// POST /api/quotations/:id/send-whatsapp — generate the PDF and send it to the customer
+// POST /api/quotations/:id/send-whatsapp — generate the PDF link and WhatsApp wa.me link
 router.post('/:id/send-whatsapp', async (req, res) => {
   try {
     const quotation = await loadFullQuotation(req.params.id);
     if (!quotation) return res.status(404).json({ error: 'Quotation not found' });
     const business = await loadBusinessProfile();
 
-    const html = buildQuotationHtml({ business, quotation, items: quotation.items });
-    const pdf = await renderHtmlToPdf(html);
+    const host = req.get('host');
+    const protocol = req.protocol;
+    const pdfUrl = `${protocol}://${host}/api/quotations/${quotation.id}/pdf`;
 
-    const result = await sendWhatsAppDocument(quotation.bill_to_mobile, {
-      pdfBuffer: pdf,
-      filename: `Quotation-${quotation.id}.pdf`,
-      caption: `Quotation #${quotation.id} from ${business?.name || 'us'}`,
-    });
+    const cleanPhone = (quotation.bill_to_mobile || '').replace(/\D/g, '');
+    const formattedPhone = cleanPhone.length === 10 ? `91${cleanPhone}` : cleanPhone;
+
+    const qDate = quotation.quotation_date ? new Date(quotation.quotation_date).toLocaleDateString('en-IN') : '';
+    const formattedAmount = Number(quotation.total_amount).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+    const pdfCaption = `📄 *Quotation #${quotation.id}*\n\nDear *${quotation.bill_to_name}*,\n\nThank you for reaching out to *${business?.name || 'us'}*! Please find your official quotation PDF attached above.\n\n💰 *Total Amount:* ₹${formattedAmount}${qDate ? `\n📅 *Date:* ${qDate}` : ''}\n\nIf you have any questions or would like to confirm this order, feel free to reply directly to this message.\n\nBest regards,\n*${business?.name || 'Customer Support Team'}*`;
+
+    const message = `Hello *${quotation.bill_to_name}*,\n\nPlease find attached your Quotation *#${quotation.id}* for *₹${formattedAmount}* from *${business?.name || 'us'}*.\n\nView or download PDF:\n${pdfUrl}\n\nThank you for your business!`;
+    const whatsappUrl = `https://wa.me/${formattedPhone}?text=${encodeURIComponent(message)}`;
+
+    // Try sending actual PDF file attachment via WhatsApp Web Client (tokenless)
+    let webResult = null;
+    try {
+      const { sendWhatsAppWebDocument } = await import('../notify/whatsappWebClient.js');
+      const html = buildQuotationHtml({ business, quotation, items: quotation.items });
+      const pdf = await renderHtmlToPdf(html);
+      webResult = await sendWhatsAppWebDocument(quotation.bill_to_mobile, {
+        pdfBuffer: pdf,
+        filename: `Quotation-${quotation.id}.pdf`,
+        caption: pdfCaption,
+      });
+    } catch (e) {
+      console.log('WhatsApp Web send fallback:', e.message);
+    }
+
+    let apiResult = { dryRun: true };
+    try {
+      const { isWhatsAppConfigured, sendWhatsAppDocument } = await import('../notify/whatsapp.js');
+      if (isWhatsAppConfigured()) {
+        const html = buildQuotationHtml({ business, quotation, items: quotation.items });
+        const pdf = await renderHtmlToPdf(html);
+        apiResult = await sendWhatsAppDocument(quotation.bill_to_mobile, {
+          pdfBuffer: pdf,
+          filename: `Quotation-${quotation.id}.pdf`,
+          caption: `Quotation #${quotation.id} from ${business?.name || 'us'}`,
+        });
+      }
+    } catch (e) {
+      console.warn('WhatsApp Cloud API notice:', e.message);
+    }
 
     await pool.query(`UPDATE quotations SET status = 'sent', sent_at = now() WHERE id = $1`, [quotation.id]);
-    res.json({ ...result, quotation: await loadFullQuotation(quotation.id) });
+    res.json({
+      ok: true,
+      sentViaWeb: Boolean(webResult?.sent),
+      whatsappUrl,
+      ...apiResult,
+      quotation: await loadFullQuotation(quotation.id),
+    });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: err.message || 'Failed to send quotation' });
