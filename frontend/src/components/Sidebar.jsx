@@ -6,6 +6,7 @@ const NAV = [
   { key: 'orders', label: 'Orders', icon: '▣' },
   { key: 'products', label: 'Products', icon: '▤' },
   { key: 'quotations', label: 'Quotations', icon: '▦' },
+  { key: 'credit', label: 'Credit (Khata)', icon: '₹' },
   { key: 'settings', label: 'Settings', icon: '⚙' },
 ];
 

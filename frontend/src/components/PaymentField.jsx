@@ -1,18 +1,19 @@
 import { PAYMENT_METHODS } from '../paymentMethods';
 
-export default function PaymentField({ paidNow, setPaidNow, method, setMethod }) {
+export default function PaymentField({ status, setStatus, method, setMethod }) {
   return (
     <fieldset>
       <legend>Payment</legend>
       <div className="grid">
         <label>
           Status
-          <select value={paidNow ? 'paid' : 'pending'} onChange={(e) => setPaidNow(e.target.value === 'paid')}>
+          <select value={status} onChange={(e) => setStatus(e.target.value)}>
             <option value="pending">Pending</option>
             <option value="paid">Paid now</option>
+            <option value="credit">On credit (Khata)</option>
           </select>
         </label>
-        {paidNow && (
+        {status === 'paid' && (
           <label>
             Method
             <select value={method} onChange={(e) => setMethod(e.target.value)}>
@@ -23,6 +24,9 @@ export default function PaymentField({ paidNow, setPaidNow, method, setMethod })
           </label>
         )}
       </div>
+      {status === 'credit' && (
+        <p className="hint">Added to this customer's khata balance. Collect payment later from the Credit page.</p>
+      )}
     </fieldset>
   );
 }

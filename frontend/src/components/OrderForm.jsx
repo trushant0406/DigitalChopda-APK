@@ -11,7 +11,7 @@ export default function OrderForm({ onCreated }) {
   const [city, setCity] = useState('');
   const [notes, setNotes] = useState('');
   const [items, setItems] = useState([emptyItem()]);
-  const [paidNow, setPaidNow] = useState(false);
+  const [status, setStatus] = useState('pending');
   const [method, setMethod] = useState('cash');
   const [business, setBusiness] = useState({});
   const [businessOnFile, setBusinessOnFile] = useState(false);
@@ -46,8 +46,8 @@ export default function OrderForm({ onCreated }) {
         city: city || undefined,
         notes: notes || undefined,
         items: itemsToPayload(items),
-        payment_status: paidNow ? 'paid' : 'pending',
-        payment_method: paidNow ? method : undefined,
+        payment_status: status === 'paid' ? 'paid' : 'pending',
+        payment_method: status === 'paid' ? method : status === 'credit' ? 'credit' : undefined,
         ...business,
       });
       setPhone('');
@@ -55,7 +55,7 @@ export default function OrderForm({ onCreated }) {
       setCity('');
       setNotes('');
       setItems([emptyItem()]);
-      setPaidNow(false);
+      setStatus('pending');
       setMethod('cash');
       setBusiness({});
       setBusinessOnFile(false);
@@ -100,7 +100,7 @@ export default function OrderForm({ onCreated }) {
         </p>
       </fieldset>
 
-      <PaymentField paidNow={paidNow} setPaidNow={setPaidNow} method={method} setMethod={setMethod} />
+      <PaymentField status={status} setStatus={setStatus} method={method} setMethod={setMethod} />
 
       <fieldset>
         <legend>GST / billing details (optional){businessOnFile && ' — on file, edit if needed'}</legend>

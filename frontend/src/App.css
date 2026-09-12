@@ -470,6 +470,76 @@ td.truncate {
   grid-template-columns: 1.6fr 0.8fr 0.7fr 0.8fr 0.7fr auto;
 }
 
+.credit-order-card {
+  margin-bottom: 0.75rem;
+}
+
+.payment-menu-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.payment-menu-caret {
+  font-size: 0.65rem;
+}
+
+.payment-menu-panel {
+  position: fixed;
+  z-index: 200;
+  min-width: 210px;
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.18);
+  padding: 0.4rem;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+}
+
+.payment-menu-label {
+  margin: 0.3rem 0.5rem 0.25rem;
+  color: var(--muted);
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.payment-menu-item {
+  background: transparent;
+  color: inherit;
+  border: none;
+  text-align: left;
+  padding: 0.5rem 0.6rem;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.payment-menu-item:hover {
+  background: var(--hover-bg);
+}
+
+.payment-menu-item-credit {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.payment-menu-divider {
+  height: 1px;
+  background: var(--border);
+  margin: 0.35rem 0.2rem;
+}
+
+.item-row-header {
+  color: var(--muted);
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  margin-bottom: 0.3rem;
+}
+
 .remove-item {
   background: transparent;
   color: var(--muted);

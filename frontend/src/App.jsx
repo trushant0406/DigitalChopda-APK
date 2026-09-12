@@ -7,6 +7,7 @@ import FollowupsPage from './pages/FollowupsPage';
 import OrdersPage from './pages/OrdersPage';
 import ProductsPage from './pages/ProductsPage';
 import QuotationsPage from './pages/QuotationsPage';
+import CreditPage from './pages/CreditPage';
 import SettingsPage from './pages/SettingsPage';
 import './App.css';
 
@@ -45,6 +46,7 @@ export default function App() {
         {page === 'orders' && <OrdersPage refreshKey={refreshKey} onLogged={bump} initialFilter={ordersFilter} />}
         {page === 'products' && <ProductsPage />}
         {page === 'quotations' && <QuotationsPage presetContact={quotationPresetContact} />}
+        {page === 'credit' && <CreditPage refreshKey={refreshKey} />}
         {page === 'settings' && <SettingsPage />}
       </main>
     </div>
