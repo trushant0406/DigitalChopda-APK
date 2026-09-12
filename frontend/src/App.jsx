@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Routes, Route, useNavigate, useLocation } from 'react-router-dom';
 import Sidebar from './components/Sidebar';
 import DashboardPage from './pages/DashboardPage';
 import CallsPage from './pages/CallsPage';
@@ -12,42 +13,49 @@ import SettingsPage from './pages/SettingsPage';
 import './App.css';
 
 export default function App() {
-  const [page, setPage] = useState('dashboard');
+  const navigate = useNavigate();
+  const location = useLocation();
   const [refreshKey, setRefreshKey] = useState(0);
   const [ordersFilter, setOrdersFilter] = useState(null);
   const [quotationPresetContact, setQuotationPresetContact] = useState(null);
 
   const bump = () => setRefreshKey((k) => k + 1);
 
+  const path = location.pathname.substring(1);
+  const activeTab = path || 'dashboard';
+
   function goToOrders(filter) {
     setOrdersFilter(filter || null);
-    setPage('orders');
+    navigate('/orders');
   }
 
   function goToQuotationFor(contact) {
     setQuotationPresetContact(contact);
-    setPage('quotations');
+    navigate('/quotations');
   }
 
-  function navigate(key) {
+  function handleNavigate(key) {
     if (key !== 'orders') setOrdersFilter(null);
     if (key !== 'quotations') setQuotationPresetContact(null);
-    setPage(key);
+    navigate(key === 'dashboard' ? '/' : `/${key}`);
   }
 
   return (
     <div className="shell">
-      <Sidebar active={page} onNavigate={navigate} />
+      <Sidebar active={activeTab} onNavigate={handleNavigate} />
       <main className="content">
-        {page === 'dashboard' && <DashboardPage refreshKey={refreshKey} onViewOrders={goToOrders} />}
-        {page === 'calls' && <CallsPage refreshKey={refreshKey} onLogged={bump} />}
-        {page === 'contacts' && <ContactsPage refreshKey={refreshKey} onChanged={bump} onCreateQuotation={goToQuotationFor} />}
-        {page === 'followups' && <FollowupsPage refreshKey={refreshKey} />}
-        {page === 'orders' && <OrdersPage refreshKey={refreshKey} onLogged={bump} initialFilter={ordersFilter} />}
-        {page === 'products' && <ProductsPage />}
-        {page === 'quotations' && <QuotationsPage presetContact={quotationPresetContact} />}
-        {page === 'credit' && <CreditPage refreshKey={refreshKey} />}
-        {page === 'settings' && <SettingsPage />}
+        <Routes>
+          <Route path="/" element={<DashboardPage refreshKey={refreshKey} onViewOrders={goToOrders} />} />
+          <Route path="/dashboard" element={<DashboardPage refreshKey={refreshKey} onViewOrders={goToOrders} />} />
+          <Route path="/calls" element={<CallsPage refreshKey={refreshKey} onLogged={bump} />} />
+          <Route path="/contacts" element={<ContactsPage refreshKey={refreshKey} onChanged={bump} onCreateQuotation={goToQuotationFor} />} />
+          <Route path="/followups" element={<FollowupsPage refreshKey={refreshKey} />} />
+          <Route path="/orders" element={<OrdersPage refreshKey={refreshKey} onLogged={bump} initialFilter={ordersFilter} />} />
+          <Route path="/products" element={<ProductsPage />} />
+          <Route path="/quotations" element={<QuotationsPage presetContact={quotationPresetContact} />} />
+          <Route path="/credit" element={<CreditPage refreshKey={refreshKey} />} />
+          <Route path="/settings" element={<SettingsPage />} />
+        </Routes>
       </main>
     </div>
   );
