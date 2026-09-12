@@ -1,70 +1,131 @@
-# Call Intelligence
+# Call Intelligence — Enterprise Platform
 
-Manual-first call journal. Answers: who called, who you answered, who's waiting
-on a follow-up. See `call-intelligence-handoff.md` (Desktop) for full project context
-and build phases. Phase 4 (virtual number / telephony) is intentionally not built yet —
-still to be brainstormed separately.
+Call Intelligence is an enterprise call journal, quotation, order, and credit (khata) management application built with Node/Express, PostgreSQL, and React (Vite).
 
-## Stack
+---
 
-- Backend: Node/Express + Postgres (`backend/`)
-- Frontend: React + Vite (`frontend/`)
-- DB: Postgres via `docker-compose.yml`, schema in `db/migrations/`
+## 🔐 User Authentication & User Management
 
-## Run it
+The application enforces authentication on all routes.
+
+### Default Admin Credentials
+- **Username**: `admin`
+- **Password**: `admin123`
+
+### Creating New Users (Direct Database Injection)
+To maintain security, user creation is performed directly in the PostgreSQL database instead of an open signup form.
+
+#### Method 1: Command-Line One-Liner (Recommended)
+Run this command inside `backend/` to create a new user instantly:
 
 ```bash
-# 1. Database
-docker-compose up -d db          # or: docker exec -i <container> psql -U callintel -d callintel < db/migrations/00N_*.sql
-                                  #   to apply a new migration against an already-initialized volume
+node -e "
+const crypto = require('crypto');
+const pg = require('pg');
+const pool = new pg.Pool({ connectionString: 'postgres://callintel:callintel@localhost:5432/callintel' });
 
-# 2. Backend
-cd backend
-cp env.sample .env               # only needed once; includes generated VAPID keys for push
-npm install
-npm run dev                       # http://localhost:4000
+const username = 'john';        // Set username
+const password = 'password123'; // Set password
+const name = 'John Doe';        // Set display name
 
-# 3. Frontend (separate terminal)
-cd frontend
-npm install
-npm run dev                       # http://localhost:5173
+const hash = crypto.pbkdf2Sync(password, 'callintel_salt_2026', 1000, 64, 'sha512').toString('hex');
+pool.query('INSERT INTO users (username, password_hash, name, role) VALUES (\$1, \$2, \$3, \$4) RETURNING id, username, name', [username.toLowerCase(), hash, name, 'admin'])
+  .then(res => { console.log('✅ User created:', res.rows[0]); pool.end(); })
+  .catch(err => { console.error('❌ Error:', err.message); pool.end(); });
+"
 ```
 
-## What's here
+#### Method 2: Manual SQL Query
+1. Generate the SHA-512 password hash for your password:
+   ```bash
+   node -e "console.log(require('crypto').pbkdf2Sync('YOUR_PASSWORD', 'callintel_salt_2026', 1000, 64, 'sha512').toString('hex'))"
+   ```
+2. Insert the user into PostgreSQL:
+   ```sql
+   INSERT INTO users (username, password_hash, name, role)
+   VALUES ('username_here', 'HASH_FROM_STEP_1', 'Display Name', 'admin');
+   ```
 
-### UI (enterprise shell — sidebar navigation)
+---
 
-- **Dashboard** — stat cards (due today, overdue, never followed up, repeat-no-connect,
-  calls today, total contacts) + the four intelligence tables.
-- **Calls** — log-call form (with optional recording upload and follow-up scheduling)
-  and a full call log with CSV export.
-- **Contacts** — searchable list; click a row to open a detail drawer with the full
-  call + follow-up timeline and an "add follow-up" form.
-- **Follow-ups** — every follow-up, filterable by status and channel, with
-  done/cancel actions.
-- **Settings** — enable owner push notifications on this device; WhatsApp
-  configuration status (dry-run until Cloud API credentials are set).
+## 🚀 Setting Up on a New Machine
 
-### Phase 2 — follow-up engine (built)
+Follow these step-by-step instructions to run the application on a clean computer.
 
-- A scheduler (`backend/src/scheduler.js`) polls every `REMINDER_POLL_SECONDS`
-  (default 60s) for follow-ups past due and not yet reminded.
-- **Owner reminders** (`channel: 'push'`) → Web Push via VAPID (free, no signup).
-  Keys are pre-generated in `env.sample`; register your device from Settings.
-- **Customer messages** (`channel: 'whatsapp'`) → WhatsApp Cloud API template send.
-  With no `WHATSAPP_TOKEN`/`WHATSAPP_PHONE_NUMBER_ID` set, it logs a dry-run line
-  to the backend console instead of failing — fully demoable with zero signup.
-- Rescheduling a follow-up's due date clears its `sent_at` so the scheduler fires
-  again for the new date.
+### Step 1: Install Prerequisites
+1. **Node.js (v18 or v20 LTS)**: [https://nodejs.org/](https://nodejs.org/)
+2. **PostgreSQL (v15 or v16)**: [https://www.postgresql.org/download/windows/](https://www.postgresql.org/download/windows/)
 
-### Phase 3 — reduce the typing
+### Step 2: Database Initialization (`callintel`)
+Open **Command Prompt** / **psql** as Administrator:
+```bash
+psql -U postgres
+```
 
-Skipped for now per decision: the Android companion app (reads `CallLog.Calls`,
-background sync) is a separate native codebase and out of scope for this pass.
-Nothing here blocks adding it later — `calls.source` already distinguishes
-`'manual' | 'device' | 'telephony'`.
+Execute the following commands:
+```sql
+CREATE USER callintel WITH PASSWORD 'callintel';
+CREATE DATABASE callintel OWNER callintel;
+GRANT ALL PRIVILEGES ON DATABASE callintel TO callintel;
+```
 
-## Next
+### Step 3: Backend Configuration & Migrations
+Navigate to `backend/`:
+```bash
+cd backend
+```
 
-- Phase 4 (virtual number / telephony) — needs a separate design discussion
-  (KooKoo vs Exotel, ingestion flow, audio fallback) before building.
+Create a `.env` file (copy from `env.sample`):
+```env
+DATABASE_URL=postgres://callintel:callintel@localhost:5432/callintel
+PORT=4000
+
+VAPID_PUBLIC_KEY=BAzn7LGy6dGVKArSZuhkP_4OTCePSwEMCZ1v1yflIRiywwIp56tfMq45W7OiNrhB4EP_T4TPpm-sA-jZ2kwwhDg
+VAPID_PRIVATE_KEY=XkwbRSCeiQtrF9ulQBKgb7verKDMD68N0AeUIlIAceQ
+VAPID_SUBJECT=mailto:admin@example.com
+
+REMINDER_POLL_SECONDS=60
+```
+
+Install dependencies & execute migrations:
+```bash
+npm install
+npm run migrate
+```
+*(Optionally restore full database dump: `psql -U callintel -d callintel -f ../callintel.sql`).*
+
+### Step 4: Frontend Setup & Dev Server
+Navigate to `frontend/`:
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+Open your browser at `http://localhost:5173`.
+
+---
+
+## 🌐 Custom Hostname Binding (`callintel.local`)
+
+Instead of accessing `localhost:5173`, you can bind a custom domain name:
+
+1. Open Notepad as Administrator and edit:
+   `C:\Windows\System32\drivers\etc\hosts`
+2. Add this line at the bottom:
+   ```text
+   127.0.0.1   callintel.local
+   ```
+3. Open your browser and go to:
+   `http://callintel.local:5173/`
+
+---
+
+## 📦 System Architecture & Features
+
+- **Dashboard**: Live analytics for due follow-ups, calls, quotations, and pending order collections.
+- **Calls**: Call logging, recording attachments, follow-up scheduling, and CSV export.
+- **Contacts**: Searchable CRM database with credit limits, GST details, and interactive customer timeline.
+- **Orders & Quotations**: Order management, GST calculations, downloadable PDF quotations, and payment actions.
+- **Credit (Khata)**: Customer ledger tracking, partial collections, over-limit badges, and auto-settlement upon full collection.
+- **WhatsApp Web Integration**: Direct tokenless WhatsApp PDF attachments via QR code linking (`SettingsPage`).

@@ -1,7 +1,13 @@
 const BASE = '/api';
 
+function getAuthHeaders() {
+  const token = localStorage.getItem('ci_token');
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
 async function request(path, options = {}) {
-  const res = await fetch(`${BASE}${path}`, options);
+  const headers = { ...getAuthHeaders(), ...(options.headers || {}) };
+  const res = await fetch(`${BASE}${path}`, { ...options, headers });
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
     throw new Error(body.error || `Request failed: ${res.status}`);
@@ -16,8 +22,12 @@ const json = (body) => ({
 });
 
 export const api = {
+  login: (username, password) => request('/auth/login', json({ username, password })),
+  getMe: () => request('/auth/me'),
+  changePassword: (currentPassword, newPassword) => request('/auth/change-password', json({ currentPassword, newPassword })),
+
   logCall: (formData) =>
-    fetch(`${BASE}/calls`, { method: 'POST', body: formData }).then(async (res) => {
+    fetch(`${BASE}/calls`, { method: 'POST', headers: getAuthHeaders(), body: formData }).then(async (res) => {
       if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'Failed to log call');
       return res.json();
     }),

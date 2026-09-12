@@ -1,5 +1,7 @@
 import { useState } from 'react';
 import { Routes, Route, useNavigate, useLocation } from 'react-router-dom';
+import { AuthProvider, useAuth } from './context/AuthContext';
+import LoginPage from './pages/LoginPage';
 import Sidebar from './components/Sidebar';
 import DashboardPage from './pages/DashboardPage';
 import CallsPage from './pages/CallsPage';
@@ -12,7 +14,7 @@ import CreditPage from './pages/CreditPage';
 import SettingsPage from './pages/SettingsPage';
 import './App.css';
 
-export default function App() {
+function MainLayout() {
   const navigate = useNavigate();
   const location = useLocation();
   const [refreshKey, setRefreshKey] = useState(0);
@@ -58,5 +60,32 @@ export default function App() {
         </Routes>
       </main>
     </div>
+  );
+}
+
+function AppContent() {
+  const { user, loading } = useAuth();
+
+  if (loading) {
+    return (
+      <div className="app-loading-screen">
+        <div className="brand-mark">CI</div>
+        <p>Loading Call Intelligence…</p>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return <LoginPage />;
+  }
+
+  return <MainLayout />;
+}
+
+export default function App() {
+  return (
+    <AuthProvider>
+      <AppContent />
+    </AuthProvider>
   );
 }
