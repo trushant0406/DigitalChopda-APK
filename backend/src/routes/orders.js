@@ -50,7 +50,7 @@ router.post('/', async (req, res) => {
     const orderResult = await client.query(
       `INSERT INTO orders (contact_id, call_id, order_number, notes, payment_status, payment_method)
        VALUES ($1, $2, '', $3, $4, $5) RETURNING *`,
-      [contact.id, call_id || null, notes || null, paidNow ? 'paid' : 'pending', paidNow ? (payment_method || 'other') : null]
+      [contact.id, call_id || null, notes || null, paidNow ? 'paid' : 'pending', payment_method || (paidNow ? 'other' : null)]
     );
     const order = orderResult.rows[0];
 

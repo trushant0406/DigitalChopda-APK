@@ -1,7 +1,7 @@
 import { api } from '../api';
 import DataTable from './DataTable';
 import PhoneLink from './PhoneLink';
-import MarkPaidSelect from './MarkPaidSelect';
+import PaymentActionMenu from './PaymentActionMenu';
 import { PAYMENT_METHOD_LABEL } from '../paymentMethods';
 import { FULFILLMENT_LABEL, NEXT_FULFILLMENT, NEXT_FULFILLMENT_LABEL } from '../orderStatus';
 
@@ -90,7 +90,7 @@ export default function OrdersTable({ orders, loading, onChanged, showCustomer =
           <span className="badge neutral">Cancelled</span>
         ) : (
           <div className="row-actions">
-            {r.payment_status === 'pending' && <MarkPaidSelect orderId={r.id} onDone={onChanged} />}
+            {r.payment_status === 'pending' && <PaymentActionMenu order={r} onDone={onChanged} />}
             {NEXT_FULFILLMENT[r.fulfillment_status] && (
               <button type="button" className="advance-action" onClick={() => advanceFulfillment(r)}>
                 {NEXT_FULFILLMENT_LABEL[r.fulfillment_status]}

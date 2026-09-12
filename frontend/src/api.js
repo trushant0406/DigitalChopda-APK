@@ -69,6 +69,14 @@ export const api = {
   quotationPdfUrl: (id) => `${BASE}/quotations/${id}/pdf`,
   sendQuotationWhatsApp: (id) => request(`/quotations/${id}/send-whatsapp`, json({})),
 
+  creditSummary: () => request('/credit/summary'),
+  listCreditCustomers: (params = {}) => {
+    const qs = new URLSearchParams(params).toString();
+    return request(`/credit/customers${qs ? `?${qs}` : ''}`);
+  },
+  listCreditOrders: (contactId) => request(`/credit/customers/${contactId}/orders`),
+  collectCreditPayment: (body) => request('/credit/collect', json(body)),
+
   vapidPublicKey: () => request('/push/vapid-public-key'),
   subscribePush: (subscription) => request('/push/subscribe', json(subscription)),
   settingsStatus: () => request('/settings/status'),

@@ -96,7 +96,7 @@ router.get('/:id', async (req, res) => {
 
 // PATCH /api/contacts/:id — edit GST/PAN/address details (or name/city)
 router.patch('/:id', async (req, res) => {
-  const { name, city, gstin, pan, billing_address, shipping_address, state } = req.body;
+  const { name, city, gstin, pan, billing_address, shipping_address, state, credit_limit } = req.body;
   const fields = [];
   const values = [];
   let i = 1;
@@ -114,6 +114,10 @@ router.patch('/:id', async (req, res) => {
   set('billing_address', billing_address);
   set('shipping_address', shipping_address);
   set('state', state);
+  if (credit_limit !== undefined) {
+    fields.push(`credit_limit = $${i++}`);
+    values.push(credit_limit === '' ? 0 : Number(credit_limit));
+  }
 
   if (fields.length === 0) return res.status(400).json({ error: 'Nothing to update' });
 

@@ -6,4 +6,7 @@ export const PAYMENT_METHODS = [
   { value: 'other', label: 'Other' },
 ];
 
-export const PAYMENT_METHOD_LABEL = Object.fromEntries(PAYMENT_METHODS.map((m) => [m.value, m.label]));
+export const PAYMENT_METHOD_LABEL = {
+  ...Object.fromEntries(PAYMENT_METHODS.map((m) => [m.value, m.label])),
+  credit: 'Credit (Khata)',
+};
