@@ -21,11 +21,28 @@ const ORDER_SELECT = `
   ) item_totals ON item_totals.order_id = orders.id
 `;
 
-// POST /api/orders — create an order with one or more line items
+// GET /api/orders/next-number — returns next suggested invoice number based on business profile settings
+router.get('/next-number', async (req, res) => {
+  try {
+    const profileRes = await pool.query('SELECT invoice_prefix, invoice_next_number, invoice_padding FROM business_profile WHERE id = 1');
+    const profile = profileRes.rows[0];
+    const prefix = profile?.invoice_prefix || 'INV-';
+    const nextNum = profile?.invoice_next_number || 1;
+    const padding = profile?.invoice_padding || 0;
+    const numStr = padding > 1 ? String(nextNum).padStart(padding, '0') : String(nextNum);
+    const suggestedNumber = `${prefix}${numStr}`;
+    res.json({ prefix, nextNumber: nextNum, padding, suggestedNumber });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to get next invoice number' });
+  }
+});
+
+// POST /api/orders — create an order/invoice with custom or auto-generated invoice number and date
 router.post('/', async (req, res) => {
   const {
     phone, name, city, call_id, notes, items, payment_status, payment_method,
     gstin, pan, billing_address, shipping_address, state,
+    order_number, invoice_date,
   } = req.body;
 
   if (!phone) return res.status(400).json({ error: 'phone is required' });
@@ -47,15 +64,64 @@ router.post('/', async (req, res) => {
     });
 
     const paidNow = payment_status === 'paid';
+
+    // Determine final invoice / order number
+    let finalOrderNumber = (order_number || '').trim();
+    if (finalOrderNumber) {
+      // Check for unique invoice number
+      const existing = await client.query('SELECT id FROM orders WHERE order_number = $1', [finalOrderNumber]);
+      if (existing.rows.length > 0) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ error: `Invoice number "${finalOrderNumber}" already exists. Please choose a different number.` });
+      }
+
+      // If user manually entered or overrode the invoice number:
+      // Check if it ends with digits (e.g. "INV-005", "INV-5", "5")
+      const match = finalOrderNumber.match(/^(.*?)(\d+)$/);
+      if (match) {
+        const detectedPrefix = match[1];
+        const digitStr = match[2];
+        const num = parseInt(digitStr, 10);
+        const padding = digitStr.length > 1 ? digitStr.length : 0;
+
+        // Auto-advance business_profile sequence so next orders start from the next number!
+        await client.query(
+          `UPDATE business_profile
+           SET invoice_next_number = $1,
+               invoice_padding = $2,
+               invoice_prefix = COALESCE(NULLIF($3, ''), invoice_prefix),
+               updated_at = now()
+           WHERE id = 1`,
+          [num + 1, padding, detectedPrefix]
+        );
+      }
+    } else {
+      // Auto-generate from business_profile prefix, sequence, and padding
+      const profileRes = await client.query(
+        'SELECT invoice_prefix, invoice_next_number, invoice_padding FROM business_profile WHERE id = 1 FOR UPDATE'
+      );
+      const profile = profileRes.rows[0];
+      const prefix = profile?.invoice_prefix || 'INV-';
+      const nextNum = profile?.invoice_next_number || 1;
+      const padding = profile?.invoice_padding || 0;
+      const numStr = padding > 1 ? String(nextNum).padStart(padding, '0') : String(nextNum);
+      finalOrderNumber = `${prefix}${numStr}`;
+
+      // Increment sequence in business_profile
+      await client.query(
+        'UPDATE business_profile SET invoice_next_number = $1, updated_at = now() WHERE id = 1',
+        [nextNum + 1]
+      );
+    }
+
+    const effectiveInvoiceDate = invoice_date || new Date().toISOString().split('T')[0];
+
     const orderResult = await client.query(
-      `INSERT INTO orders (contact_id, call_id, order_number, notes, payment_status, payment_method)
-       VALUES ($1, $2, '', $3, $4, $5) RETURNING *`,
-      [contact.id, call_id || null, notes || null, paidNow ? 'paid' : 'pending', payment_method || (paidNow ? 'other' : null)]
+      `INSERT INTO orders (contact_id, call_id, order_number, invoice_date, notes, payment_status, payment_method)
+       VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
+      [contact.id, call_id || null, finalOrderNumber, effectiveInvoiceDate, notes || null, paidNow ? 'paid' : 'pending', payment_method || (paidNow ? 'other' : null)]
     );
     const order = orderResult.rows[0];
-
-    const orderNumber = `ORD-${String(order.id).padStart(5, '0')}`;
-    await client.query('UPDATE orders SET order_number = $1 WHERE id = $2', [orderNumber, order.id]);
 
     for (const item of items) {
       await client.query(
@@ -72,7 +138,7 @@ router.post('/', async (req, res) => {
       await client.query(
         `INSERT INTO followups (contact_id, order_id, due_at, reason, channel)
          VALUES ($1, $2, $3, $4, 'push')`,
-        [contact.id, order.id, dueAt, `Collect payment for order ${orderNumber}`]
+        [contact.id, order.id, dueAt, `Collect payment for invoice ${finalOrderNumber}`]
       );
     }
 
@@ -89,9 +155,9 @@ router.post('/', async (req, res) => {
   }
 });
 
-// GET /api/orders — filterable by payment_status / fulfillment_status / status
+// GET /api/orders — filterable by payment_status / fulfillment_status / status / q (search)
 router.get('/', async (req, res) => {
-  const { payment_status, fulfillment_status, status } = req.query;
+  const { payment_status, fulfillment_status, status, q } = req.query;
   const conditions = [];
   const values = [];
   let i = 1;
@@ -107,6 +173,23 @@ router.get('/', async (req, res) => {
   if (status) {
     conditions.push(`orders.status = $${i++}`);
     values.push(status);
+  }
+  if (q && q.trim()) {
+    const term = `%${q.trim()}%`;
+    conditions.push(`(
+      orders.order_number ILIKE $${i} OR
+      contacts.name ILIKE $${i} OR
+      contacts.phone ILIKE $${i} OR
+      contacts.city ILIKE $${i} OR
+      COALESCE(orders.notes, '') ILIKE $${i} OR
+      EXISTS (
+        SELECT 1 FROM order_items
+        WHERE order_items.order_id = orders.id
+          AND order_items.product_name ILIKE $${i}
+      )
+    )`);
+    values.push(term);
+    i++;
   }
 
   const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';

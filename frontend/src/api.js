@@ -57,6 +57,7 @@ export const api = {
   summary: () => request('/dashboard/summary'),
 
   createOrder: (body) => request('/orders', json(body)),
+  getNextInvoiceNumber: () => request('/orders/next-number'),
   listOrders: (params = {}) => {
     const qs = new URLSearchParams(params).toString();
     const suffix = qs ? `?${qs}` : '';

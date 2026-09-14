@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { api } from '../api';
 import OrderForm from '../components/OrderForm';
 import OrdersTable from '../components/OrdersTable';
@@ -13,6 +13,7 @@ const STATUS_OPTIONS = [
 ];
 
 export default function OrdersPage({ refreshKey, onLogged, initialFilter }) {
+  const [search, setSearch] = useState('');
   const [paymentStatus, setPaymentStatus] = useState(initialFilter?.payment_status || '');
   const [fulfillmentStatus, setFulfillmentStatus] = useState(initialFilter?.fulfillment_status || '');
   const [orderStatus, setOrderStatus] = useState('');
@@ -20,13 +21,14 @@ export default function OrdersPage({ refreshKey, onLogged, initialFilter }) {
   const [summary, setSummary] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  async function load() {
+  async function load(queryText = search) {
     setLoading(true);
     try {
       const params = {};
       if (paymentStatus) params.payment_status = paymentStatus;
       if (fulfillmentStatus) params.fulfillment_status = fulfillmentStatus;
       if (orderStatus) params.status = orderStatus;
+      if (queryText && queryText.trim()) params.q = queryText.trim();
       setOrders(await api.listOrders(params));
     } finally {
       setLoading(false);
@@ -46,10 +48,43 @@ export default function OrdersPage({ refreshKey, onLogged, initialFilter }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [paymentStatus, fulfillmentStatus, orderStatus, refreshKey]);
 
+  // Debounced server query when typing search
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      load(search);
+    }, 250);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [search]);
+
   function handleChanged() {
     load();
     refreshSummary();
   }
+
+  // Instant local filtering so typing feels 0ms instantaneous
+  const filteredOrders = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return orders;
+    return orders.filter((o) => {
+      const num = (o.order_number || '').toLowerCase();
+      const name = (o.name || '').toLowerCase();
+      const phone = (o.phone || '').toLowerCase();
+      const city = (o.city || '').toLowerCase();
+      const notes = (o.notes || '').toLowerCase();
+      const itemsMatch = (o.items || []).some((item) =>
+        (item.product_name || '').toLowerCase().includes(q)
+      );
+      return (
+        num.includes(q) ||
+        name.includes(q) ||
+        phone.includes(q) ||
+        city.includes(q) ||
+        notes.includes(q) ||
+        itemsMatch
+      );
+    });
+  }, [orders, search]);
 
   return (
     <div className="page">
@@ -72,8 +107,46 @@ export default function OrdersPage({ refreshKey, onLogged, initialFilter }) {
 
       <div className="card">
         <div className="card-header">
-          <h2>Orders</h2>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+            <h2>Orders &amp; Invoices</h2>
+            <span className="badge info" style={{ fontSize: '0.75rem' }}>
+              {filteredOrders.length}
+            </span>
+          </div>
           <div className="filters">
+            <div style={{ position: 'relative', display: 'inline-flex', alignItems: 'center' }}>
+              <input
+                type="search"
+                placeholder="Search invoice #, customer, phone, item…"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                style={{
+                  minWidth: '250px',
+                  paddingRight: search ? '2rem' : '0.6rem',
+                }}
+              />
+              {search && (
+                <button
+                  type="button"
+                  onClick={() => setSearch('')}
+                  style={{
+                    position: 'absolute',
+                    right: '6px',
+                    top: '50%',
+                    transform: 'translateY(-50%)',
+                    background: 'none',
+                    border: 'none',
+                    color: 'var(--muted)',
+                    cursor: 'pointer',
+                    padding: '2px 4px',
+                    fontSize: '0.85rem',
+                  }}
+                  title="Clear search"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
             <select value={paymentStatus} onChange={(e) => setPaymentStatus(e.target.value)}>
               <option value="">All payment</option>
               {PAYMENT_OPTIONS.map((s) => (
@@ -94,7 +167,12 @@ export default function OrdersPage({ refreshKey, onLogged, initialFilter }) {
             </select>
           </div>
         </div>
-        <OrdersTable orders={orders} loading={loading} onChanged={handleChanged} />
+        <OrdersTable
+          orders={filteredOrders}
+          loading={loading}
+          onChanged={handleChanged}
+          emptyText={search.trim() ? `No orders matching "${search.trim()}".` : 'No orders yet.'}
+        />
       </div>
     </div>
   );

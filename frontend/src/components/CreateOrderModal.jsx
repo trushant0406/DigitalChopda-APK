@@ -6,6 +6,8 @@ import BusinessDetailsFields from './BusinessDetailsFields';
 import { emptyItem, itemsTotal, itemsTax, itemsToPayload } from '../orderItems';
 
 export default function CreateOrderModal({ contact, callId, onClose, onCreated }) {
+  const [orderNumber, setOrderNumber] = useState('');
+  const [invoiceDate, setInvoiceDate] = useState(() => new Date().toISOString().split('T')[0]);
   const [items, setItems] = useState([emptyItem()]);
   const [notes, setNotes] = useState('');
   const [paidNow, setPaidNow] = useState(false);
@@ -16,6 +18,12 @@ export default function CreateOrderModal({ contact, callId, onClose, onCreated }
   const [error, setError] = useState(null);
 
   useEffect(() => {
+    api.getNextInvoiceNumber()
+      .then((res) => {
+        if (res?.suggestedNumber) setOrderNumber(res.suggestedNumber);
+      })
+      .catch(() => {});
+
     api.listContacts(contact.phone).then((matches) => {
       const exact = matches.find((c) => c.phone === contact.phone);
       if (exact) {
@@ -38,6 +46,8 @@ export default function CreateOrderModal({ contact, callId, onClose, onCreated }
     setError(null);
     try {
       await api.createOrder({
+        order_number: orderNumber.trim() || undefined,
+        invoice_date: invoiceDate,
         phone: contact.phone,
         name: contact.name || undefined,
         city: contact.city || undefined,
@@ -71,6 +81,26 @@ export default function CreateOrderModal({ contact, callId, onClose, onCreated }
         </div>
 
         <form onSubmit={handleSubmit}>
+          <div className="grid" style={{ marginBottom: '1rem' }}>
+            <label>
+              Invoice / Bill #
+              <input
+                value={orderNumber}
+                onChange={(e) => setOrderNumber(e.target.value)}
+                placeholder="Auto-generated (edit to override)"
+              />
+            </label>
+            <label>
+              Invoice Date
+              <input
+                type="date"
+                required
+                value={invoiceDate}
+                onChange={(e) => setInvoiceDate(e.target.value)}
+              />
+            </label>
+          </div>
+
           <fieldset>
             <legend>Items</legend>
             <OrderItemsEditor items={items} onChange={setItems} />

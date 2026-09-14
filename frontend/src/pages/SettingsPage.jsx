@@ -6,6 +6,9 @@ const emptyProfile = {
   name: '', address: '', gstin: '', pan: '', mobile: '', state: '',
   bank_name: '', bank_account_no: '', bank_ifsc: '', bank_branch: '', terms_and_conditions: 'Thanks',
   signature_image: '',
+  invoice_prefix: 'INV-',
+  invoice_next_number: 1,
+  invoice_padding: 0,
 };
 
 function readFileAsDataUrl(file) {
@@ -142,6 +145,41 @@ export default function SettingsPage() {
               <input value={profile.bank_branch} onChange={updateProfile('bank_branch')} />
             </label>
           </div>
+        </fieldset>
+
+        <fieldset>
+          <legend>Invoice Numbering &amp; Sequences</legend>
+          <div className="grid">
+            <label>
+              Invoice Prefix
+              <input
+                value={profile.invoice_prefix || ''}
+                onChange={updateProfile('invoice_prefix')}
+                placeholder="e.g. INV-, BILL/, CI/"
+              />
+            </label>
+            <label>
+              Next Sequence Number
+              <input
+                type="number"
+                min="1"
+                value={profile.invoice_next_number ?? 1}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setProfile((prev) => ({
+                    ...prev,
+                    invoice_next_number: parseInt(val, 10) || 1,
+                    invoice_padding: 0,
+                  }));
+                  setProfileSaved(false);
+                }}
+                placeholder="e.g. 1 or 1001"
+              />
+            </label>
+          </div>
+          <p className="hint" style={{ marginTop: '0.4rem' }}>
+            Preview of next invoice: <strong>{(profile.invoice_prefix || 'INV-') + (profile.invoice_padding > 1 ? String(profile.invoice_next_number ?? 1).padStart(profile.invoice_padding, '0') : String(profile.invoice_next_number ?? 1))}</strong>
+          </p>
         </fieldset>
 
         <label>

@@ -28,7 +28,7 @@ function FulfillmentCell({ order }) {
   return <span className={`badge ${tone}`}>{FULFILLMENT_LABEL[order.fulfillment_status]}</span>;
 }
 
-export default function OrdersTable({ orders, loading, onChanged, showCustomer = true }) {
+export default function OrdersTable({ orders, loading, onChanged, showCustomer = true, emptyText = 'No orders yet.' }) {
   async function advanceFulfillment(order) {
     const next = NEXT_FULFILLMENT[order.fulfillment_status];
     if (!next) return;
@@ -43,7 +43,18 @@ export default function OrdersTable({ orders, loading, onChanged, showCustomer =
   }
 
   const columns = [
-    { key: 'order_number', label: 'Order #' },
+    {
+      key: 'order_number',
+      label: 'Invoice / Order #',
+      render: (r) => (
+        <>
+          <strong>{r.order_number}</strong>
+          <div className="cell-secondary">
+            {r.invoice_date ? new Date(r.invoice_date).toLocaleDateString('en-IN') : new Date(r.created_at).toLocaleDateString('en-IN')}
+          </div>
+        </>
+      ),
+    },
     ...(showCustomer
       ? [
           {
@@ -104,5 +115,5 @@ export default function OrdersTable({ orders, loading, onChanged, showCustomer =
     },
   ];
 
-  return <DataTable columns={columns} rows={orders} loading={loading} emptyText="No orders yet." />;
+  return <DataTable columns={columns} rows={orders} loading={loading} emptyText={emptyText} />;
 }
