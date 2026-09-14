@@ -10,9 +10,10 @@
   --hover-bg: #f0f1f4;
   --row-overdue-bg: #fdecec;
   --row-today-bg: #fdf6e3;
-  color-scheme: light dark;
+  color-scheme: light;
 }
 
+/* Dark theme disabled - forcing clean light theme
 @media (prefers-color-scheme: dark) {
   :root {
     --bg: #17181c;
@@ -28,6 +29,7 @@
     --row-today-bg: #3a3420;
   }
 }
+*/
 
 * {
   box-sizing: border-box;
@@ -40,8 +42,10 @@ body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 }
 
+/*
 @media (prefers-color-scheme: dark) {
   body {
     color: #e6e7ea;
   }
 }
+*/
