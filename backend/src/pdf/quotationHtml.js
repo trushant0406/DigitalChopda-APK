@@ -175,7 +175,7 @@ export function buildQuotationHtml({ business, quotation, items }) {
       <tr class="subtotal-row">
         <td colspan="3">SUBTOTAL</td>
         <td class="center">${totalQty}</td>
-        <td class="right">₹ ${formatINR(subtotal / (totalQty || 1))}</td>
+        <td class="center muted">—</td>
         <td class="right">₹ ${formatINR(taxAmount)}</td>
         <td class="right">₹ ${formatINR(total)}</td>
       </tr>

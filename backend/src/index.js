@@ -21,6 +21,13 @@ import { initWhatsAppWebClient } from './notify/whatsappWebClient.js';
 
 dotenv.config();
 
+process.on('uncaughtException', (err) => {
+  console.error('[uncaughtException]', err?.message || err);
+});
+process.on('unhandledRejection', (reason) => {
+  console.error('[unhandledRejection]', reason?.message || reason);
+});
+
 const app = express();
 app.disable('x-powered-by');
 const uploadsDir = path.join(process.cwd(), 'uploads');

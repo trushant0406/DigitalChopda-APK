@@ -43,6 +43,7 @@ export default function OrderItemsEditor({ items, onChange }) {
           ? {
               ...item,
               product_name: value,
+              quantity: !item.quantity || Number(item.quantity) <= 0 ? '1' : item.quantity,
               unit_price: product ? String(product.default_price) : item.unit_price,
               gst_rate: product ? Number(product.gst_rate) : item.gst_rate,
             }

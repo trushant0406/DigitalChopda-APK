@@ -1,4 +1,4 @@
-export const emptyItem = () => ({ product_name: '', quantity: '', unit_price: '', gst_rate: null });
+export const emptyItem = () => ({ product_name: '', quantity: '1', unit_price: '', gst_rate: null });
 
 export function itemsTotal(items) {
   return items.reduce((sum, i) => sum + (Number(i.quantity) || 0) * (Number(i.unit_price) || 0), 0);

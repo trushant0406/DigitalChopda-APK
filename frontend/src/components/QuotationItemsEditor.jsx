@@ -48,6 +48,7 @@ export default function QuotationItemsEditor({ items, onChange }) {
               ...item,
               product_name: value,
               hsn_code: product?.hsn_code || item.hsn_code,
+              quantity: !item.quantity || Number(item.quantity) <= 0 ? '1' : item.quantity,
               rate: product ? String(product.default_price) : item.rate,
               gst_rate: product ? Number(product.gst_rate) : item.gst_rate,
             }

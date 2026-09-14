@@ -1,4 +1,4 @@
-export const emptyQuotationItem = () => ({ product_name: '', hsn_code: '', unit: 'PCS', quantity: '', rate: '', gst_rate: 18 });
+export const emptyQuotationItem = () => ({ product_name: '', hsn_code: '', unit: 'PCS', quantity: '1', rate: '', gst_rate: 18 });
 
 export function quotationTotals(items) {
   const subtotal = items.reduce((sum, i) => sum + (Number(i.quantity) || 0) * (Number(i.rate) || 0), 0);

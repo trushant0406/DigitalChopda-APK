@@ -33,8 +33,8 @@ router.post('/', async (req, res) => {
     return res.status(400).json({ error: 'At least one item is required' });
   }
   for (const item of items) {
-    if (!item.product_name || !item.quantity || item.unit_price === undefined || item.unit_price === '') {
-      return res.status(400).json({ error: 'Each item needs product_name, quantity, and unit_price' });
+    if (!item.product_name || item.quantity === undefined || item.quantity === '' || Number(item.quantity) <= 0 || item.unit_price === undefined || item.unit_price === '') {
+      return res.status(400).json({ error: 'Each item needs a valid product_name, a quantity greater than 0, and a unit_price' });
     }
   }
 

@@ -190,7 +190,9 @@ export default function SettingsPage() {
               ? 'Connected ✓ (Ready to send PDF attachments)'
               : status?.whatsappWebStatus === 'QR_READY'
               ? 'Scan QR Code Below'
-              : 'Initializing WhatsApp Web Client…'}
+              : status?.whatsappWebStatus === 'INITIALIZING'
+              ? 'Initializing WhatsApp Web Client…'
+              : 'Disconnected (Click Reset Session or Refresh below)'}
           </span>
         </p>
         {status?.whatsappWebQr && (
