@@ -65,7 +65,8 @@ export const api = {
   },
   updateOrder: (id, body) => request(`/orders/${id}`, { ...json(body), method: 'PATCH' }),
   ordersSummary: () => request('/orders/summary'),
-  orderPdfUrl: (id) => `${BASE}/orders/${id}/pdf`,
+  orderPdfUrl: (id, withPayments = false) =>
+    `${BASE}/orders/${id}/pdf${withPayments ? '?payment_details=true' : ''}`,
   sendOrderWhatsApp: (id) => request(`/orders/${id}/send-whatsapp`, json({})),
 
   listProducts: () => request('/products'),
@@ -89,6 +90,13 @@ export const api = {
     return request(`/credit/customers${qs ? `?${qs}` : ''}`);
   },
   listCreditOrders: (contactId) => request(`/credit/customers/${contactId}/orders`),
+  getCustomerLedger: (contactId) => request(`/credit/customers/${contactId}/ledger`),
+  getUnpaidInvoices: (contactId) => request(`/credit/customers/${contactId}/unpaid-invoices`),
+  getNextReceiptNumber: () => request('/credit/next-receipt-number'),
+  recordPaymentIn: (body) => request('/credit/payment-in', json(body)),
+  customerStatementPdfUrl: (contactId) => `${BASE}/credit/customers/${contactId}/statement/pdf`,
+  sendCustomerStatementWhatsApp: (contactId) => request(`/credit/customers/${contactId}/statement/whatsapp`, json({})),
+  sendCustomerReminderWhatsApp: (contactId) => request(`/credit/customers/${contactId}/reminder`, json({})),
   collectCreditPayment: (body) => request('/credit/collect', json(body)),
 
   vapidPublicKey: () => request('/push/vapid-public-key'),

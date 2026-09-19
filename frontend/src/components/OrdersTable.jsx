@@ -2,18 +2,23 @@ import { useState } from 'react';
 import { api } from '../api';
 import DataTable from './DataTable';
 import PhoneLink from './PhoneLink';
-import PaymentActionMenu from './PaymentActionMenu';
+import OrderRowActions from './OrderRowActions';
 import { PAYMENT_METHOD_LABEL } from '../paymentMethods';
 import { FULFILLMENT_LABEL, NEXT_FULFILLMENT, NEXT_FULFILLMENT_LABEL } from '../orderStatus';
+import { formatDate, formatTime } from '../dateFormat';
 
 function PaymentCell({ order }) {
   if (order.status === 'cancelled') {
     return <span className="cell-muted">{order.payment_status}</span>;
   }
+  const isPaid = order.payment_status === 'paid';
+  const isPartial = order.payment_status === 'partially_paid';
+  const badgeClass = isPaid ? 'badge ok' : (isPartial ? 'badge info' : 'badge warn');
+  const label = isPaid ? 'Paid' : (isPartial ? 'Partially Paid' : 'Pending');
   return (
-    <span className={order.payment_status === 'paid' ? 'badge ok' : 'badge warn'}>
-      {order.payment_status}
-      {order.payment_method ? ` · ${PAYMENT_METHOD_LABEL[order.payment_method]}` : ''}
+    <span className={badgeClass}>
+      {label}
+      {order.payment_method ? ` · ${PAYMENT_METHOD_LABEL[order.payment_method] || order.payment_method}` : ''}
     </span>
   );
 }
@@ -29,7 +34,7 @@ function FulfillmentCell({ order }) {
   return <span className={`badge ${tone}`}>{FULFILLMENT_LABEL[order.fulfillment_status]}</span>;
 }
 
-export default function OrdersTable({ orders, loading, onChanged, showCustomer = true, emptyText = 'No orders yet.' }) {
+export default function OrdersTable({ orders, loading, onChanged, onSettle, showCustomer = true, emptyText = 'No orders yet.' }) {
   const [sendingWhatsappId, setSendingWhatsappId] = useState(null);
   const [whatsappToast, setWhatsappToast] = useState(null);
 
@@ -67,43 +72,78 @@ export default function OrdersTable({ orders, loading, onChanged, showCustomer =
     {
       key: 'order_number',
       label: 'Invoice / Order #',
-      render: (r) => (
-        <>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap' }}>
-            <strong>{r.order_number}</strong>
-            {r.invoice_number && (
-              <span
-                className="badge ok"
-                style={{ fontSize: '0.72rem', padding: '1px 6px', fontWeight: 600 }}
-                title={`Tax Invoice: ${r.invoice_number}`}
-              >
-                🧾 {r.invoice_number}
-              </span>
-            )}
-            {r.order_ref && (
-              <span
-                className="badge neutral"
-                style={{ fontSize: '0.72rem', padding: '1px 5px', fontWeight: 500 }}
-                title={`Order Reference: ${r.order_ref}`}
-              >
-                {r.order_ref}
-              </span>
-            )}
-            {!r.order_ref && r.quotation_id && (
-              <span
-                className="badge neutral"
-                style={{ fontSize: '0.72rem', padding: '1px 5px', fontWeight: 500 }}
-                title={`Converted from Quotation #${r.quotation_id}`}
-              >
-                Quote #{r.quotation_id}
-              </span>
-            )}
+      render: (r) => {
+        const primaryDoc = r.invoice_number || r.order_number;
+        const secondaryDoc = r.invoice_number ? r.order_number : null;
+        const quoteRef = r.quotation_id ? `Q#${r.quotation_id}` : null;
+        const customRef = r.order_ref ? `Ref: ${r.order_ref}` : null;
+        const timeStr = formatTime(r.created_at || r.invoice_date);
+
+        return (
+          <div style={{ lineHeight: 1.35 }}>
+            {/* Primary doc # with compact secondary tags */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '5px', flexWrap: 'nowrap' }}>
+              <strong style={{ fontSize: '0.9rem', color: r.invoice_number ? 'var(--color-primary, #1d4ed8)' : 'inherit', whiteSpace: 'nowrap' }}>
+                {primaryDoc}
+              </strong>
+              {secondaryDoc && (
+                <span
+                  style={{
+                    fontSize: '0.72rem',
+                    color: 'var(--muted)',
+                    background: 'var(--hover-bg, #f1f5f9)',
+                    border: '1px solid var(--border, #e2e8f0)',
+                    padding: '0 4px',
+                    borderRadius: '4px',
+                    whiteSpace: 'nowrap',
+                  }}
+                  title={`Internal Order: ${secondaryDoc}`}
+                >
+                  {secondaryDoc}
+                </span>
+              )}
+              {quoteRef && (
+                <span
+                  style={{
+                    fontSize: '0.7rem',
+                    color: '#4f46e5',
+                    background: '#eef2ff',
+                    border: '1px solid #e0e7ff',
+                    padding: '0 4px',
+                    borderRadius: '4px',
+                    fontWeight: 600,
+                    whiteSpace: 'nowrap',
+                  }}
+                  title={`Converted from Quotation #${r.quotation_id}`}
+                >
+                  {quoteRef}
+                </span>
+              )}
+              {customRef && (
+                <span
+                  style={{
+                    fontSize: '0.7rem',
+                    color: 'var(--muted)',
+                    background: 'var(--hover-bg, #f1f5f9)',
+                    padding: '0 4px',
+                    borderRadius: '4px',
+                    whiteSpace: 'nowrap',
+                  }}
+                  title={`Order Reference / Buyer PO: ${r.order_ref}`}
+                >
+                  {customRef}
+                </span>
+              )}
+            </div>
+
+            {/* Single-line compact Date & Time */}
+            <div style={{ fontSize: '0.75rem', color: 'var(--muted)', marginTop: '2px', whiteSpace: 'nowrap' }}>
+              {formatDate(r.invoice_date || r.created_at)}
+              {timeStr && <span> · {timeStr}</span>}
+            </div>
           </div>
-          <div className="cell-secondary">
-            {r.invoice_date ? new Date(r.invoice_date).toLocaleDateString('en-IN') : new Date(r.created_at).toLocaleDateString('en-IN')}
-          </div>
-        </>
-      ),
+        );
+      },
     },
     ...(showCustomer
       ? [
@@ -145,41 +185,20 @@ export default function OrdersTable({ orders, loading, onChanged, showCustomer =
     { key: 'fulfillment_status', label: 'Fulfillment', render: (r) => <FulfillmentCell order={r} /> },
     {
       key: 'action',
-      label: '',
-      render: (r) =>
-        r.status === 'cancelled' ? (
-          <span className="badge neutral">Cancelled</span>
-        ) : (
-          <div className="row-actions">
-            <a
-              className="button-link"
-              href={api.orderPdfUrl(r.id)}
-              target="_blank"
-              rel="noreferrer"
-              title="Download Tax Invoice PDF"
-            >
-              PDF
-            </a>
-            <button
-              type="button"
-              className="secondary-action"
-              onClick={() => handleSendWhatsApp(r)}
-              disabled={sendingWhatsappId === r.id}
-              title="Send Tax Invoice PDF via WhatsApp"
-            >
-              {sendingWhatsappId === r.id ? '…' : 'WhatsApp 💬'}
-            </button>
-            {r.payment_status === 'pending' && <PaymentActionMenu order={r} onDone={onChanged} />}
-            {NEXT_FULFILLMENT[r.fulfillment_status] && (
-              <button type="button" className="advance-action" onClick={() => advanceFulfillment(r)}>
-                {NEXT_FULFILLMENT_LABEL[r.fulfillment_status]}
-              </button>
-            )}
-            <button type="button" className="danger-action" onClick={() => cancelOrder(r)}>
-              Cancel
-            </button>
-          </div>
-        ),
+      label: 'Actions',
+      align: 'right',
+      sticky: 'right',
+      render: (r) => (
+        <OrderRowActions
+          order={r}
+          onSettle={onSettle}
+          onChanged={onChanged}
+          handleSendWhatsApp={handleSendWhatsApp}
+          sendingWhatsappId={sendingWhatsappId}
+          advanceFulfillment={advanceFulfillment}
+          cancelOrder={cancelOrder}
+        />
+      ),
     },
   ];
 

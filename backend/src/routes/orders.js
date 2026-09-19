@@ -3,6 +3,7 @@ import { pool } from '../db.js';
 import { findOrCreateContact } from '../lib/contacts.js';
 import { buildInvoiceHtml } from '../pdf/invoiceHtml.js';
 import { renderHtmlToPdf } from '../pdf/renderPdf.js';
+import { getNextReceiptNumber } from './credit.js';
 
 const router = Router();
 
@@ -11,6 +12,18 @@ const ORDER_SELECT = `
          contacts.gstin, contacts.pan, contacts.billing_address, contacts.shipping_address, contacts.state,
          COALESCE(item_totals.total_amount, 0) AS total_amount,
          COALESCE(item_totals.tax_amount, 0) AS tax_amount,
+         COALESCE(item_totals.total_amount, 0) + COALESCE(item_totals.tax_amount, 0) AS grand_total,
+         COALESCE(
+           CASE 
+             WHEN orders.payment_status = 'paid' THEN (COALESCE(item_totals.total_amount, 0) + COALESCE(item_totals.tax_amount, 0))
+             ELSE COALESCE(pay_totals.received_amount, 0)
+           END, 0
+         ) AS received_amount,
+         CASE
+           WHEN orders.payment_status = 'paid' THEN 0
+           ELSE GREATEST(0, (COALESCE(item_totals.total_amount, 0) + COALESCE(item_totals.tax_amount, 0)) - COALESCE(pay_totals.received_amount, 0))
+         END AS balance_due,
+         COALESCE(pay_totals.payments_list, '[]'::json) AS payments_list,
          COALESCE(item_totals.items, '[]') AS items
   FROM orders
   JOIN contacts ON contacts.id = orders.contact_id
@@ -30,6 +43,21 @@ const ORDER_SELECT = `
     LEFT JOIN products p ON p.name = oi.product_name
     GROUP BY oi.order_id
   ) item_totals ON item_totals.order_id = orders.id
+  LEFT JOIN (
+    SELECT order_id, SUM(amount) AS received_amount,
+           json_agg(json_build_object(
+             'id', id,
+             'amount', amount,
+             'payment_mode', payment_mode,
+             'method', method,
+             'receipt_number', receipt_number,
+             'reference_no', reference_no,
+             'paid_at', paid_at
+           ) ORDER BY paid_at ASC, id ASC) AS payments_list
+    FROM payments
+    WHERE order_id IS NOT NULL
+    GROUP BY order_id
+  ) pay_totals ON pay_totals.order_id = orders.id
 `;
 
 // Helper to calculate the next invoice number strictly from (latest existing invoice number + 1)
@@ -186,8 +214,50 @@ router.post('/', async (req, res) => {
       );
     }
 
-    // Payment pending at creation → auto-remind the owner to collect it
-    if (!paidNow) {
+    // If paid now, record the payment in payments table so the party ledger accurately reflects the credit
+    if (paidNow) {
+      const totalRes = await client.query(
+        `SELECT SUM(quantity * unit_price) + SUM(quantity * unit_price * COALESCE(gst_rate, 0) / 100) AS grand_total
+         FROM order_items WHERE order_id = $1`,
+        [order.id]
+      );
+      const grandTotal = Number(totalRes.rows[0]?.grand_total || 0);
+      if (grandTotal > 0) {
+        const seqRes = await client.query(
+          `SELECT COALESCE(MAX(NULLIF(regexp_replace(receipt_number, '\\D', '', 'g'), '')::INT), 0) + 1 AS next_seq
+           FROM payments WHERE receipt_number IS NOT NULL`
+        );
+        const receiptNum = `REC-${String(seqRes.rows[0]?.next_seq || 1).padStart(4, '0')}`;
+        const pMode = (payment_method && ['cash', 'upi', 'bank_transfer', 'card', 'cheque'].includes(payment_method))
+          ? payment_method
+          : 'cash';
+
+        let initialPayAt = new Date();
+        if (effectiveInvoiceDate) {
+          const parts = String(effectiveInvoiceDate).split('-').map(Number);
+          if (parts.length === 3 && !parts.some(isNaN)) {
+            const [y, m, d] = parts;
+            const now = new Date();
+            initialPayAt = new Date(y, m - 1, d, now.getHours(), now.getMinutes(), now.getSeconds(), now.getMilliseconds());
+          }
+        }
+
+        await client.query(
+          `INSERT INTO payments (order_id, contact_id, amount, payment_mode, method, paid_at, notes, receipt_number)
+           VALUES ($1, $2, $3, $4, $4, $5, $6, $7)`,
+          [
+            order.id,
+            contact.id,
+            grandTotal,
+            pMode,
+            initialPayAt.toISOString(),
+            finalInvoiceNumber ? `Paid at invoice ${finalInvoiceNumber}` : `Paid at order ${generatedOrderNumber}`,
+            receiptNum,
+          ]
+        );
+      }
+    } else {
+      // Payment pending at creation → auto-remind the owner to collect it
       const dueAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
       await client.query(
         `INSERT INTO followups (contact_id, order_id, due_at, reason, channel)
@@ -348,7 +418,52 @@ router.patch('/:id', async (req, res) => {
     }
 
     // Paid, or cancelled outright → the "collect payment" reminder is no longer needed.
-    if (payment_status === 'paid' || status === 'cancelled') {
+    if (payment_status === 'paid') {
+      const orderData = await client.query(
+        `SELECT o.id, o.contact_id, o.payment_method,
+                COALESCE(item_totals.grand_total, 0) AS grand_total,
+                COALESCE(pay_totals.total_paid, 0) AS total_paid
+         FROM orders o
+         JOIN (
+           SELECT order_id,
+                  SUM(quantity * unit_price) + SUM(quantity * unit_price * COALESCE(gst_rate, 0) / 100) AS grand_total
+           FROM order_items GROUP BY order_id
+         ) item_totals ON item_totals.order_id = o.id
+         LEFT JOIN (
+           SELECT order_id, SUM(amount) AS total_paid FROM payments WHERE order_id IS NOT NULL GROUP BY order_id
+         ) pay_totals ON pay_totals.order_id = o.id
+         WHERE o.id = $1`,
+        [req.params.id]
+      );
+
+      if (orderData.rows.length > 0) {
+        const row = orderData.rows[0];
+        const unpaid = Math.max(0, Number(row.grand_total) - Number(row.total_paid));
+        if (unpaid > 0.01) {
+          const recNum = await getNextReceiptNumber(client);
+          await client.query(
+            `INSERT INTO payments (order_id, contact_id, amount, method, payment_mode, receipt_number, paid_at, notes)
+             VALUES ($1, $2, $3, $4, $4, $5, now(), 'Settled on mark paid')`,
+            [
+              req.params.id,
+              row.contact_id,
+              unpaid,
+              payment_method || row.payment_method || 'cash',
+              recNum,
+            ]
+          );
+        }
+      }
+
+      await client.query(
+        `UPDATE orders SET paid_at = COALESCE(paid_at, now()) WHERE id = $1`,
+        [req.params.id]
+      );
+      await client.query(
+        `UPDATE followups SET status = 'cancelled' WHERE order_id = $1 AND status = 'pending'`,
+        [req.params.id]
+      );
+    } else if (status === 'cancelled') {
       await client.query(
         `UPDATE followups SET status = 'cancelled' WHERE order_id = $1 AND status = 'pending'`,
         [req.params.id]
@@ -384,8 +499,8 @@ router.get('/:id/pdf', async (req, res) => {
     const order = await loadFullOrder(req.params.id);
     if (!order) return res.status(404).json({ error: 'Invoice not found' });
     const business = await loadBusinessProfile();
-
-    const html = buildInvoiceHtml({ business, order, items: order.items });
+    const showPaymentDetails = req.query.payment_details === 'true' || req.query.show_payments === 'true';
+    const html = buildInvoiceHtml({ business, order, items: order.items, showPaymentDetails });
     const pdf = await renderHtmlToPdf(html);
 
     res.setHeader('Content-Type', 'application/pdf');
@@ -414,11 +529,13 @@ router.post('/:id/send-whatsapp', async (req, res) => {
     const cleanPhone = (order.phone || '').replace(/\D/g, '');
     const formattedPhone = cleanPhone.length === 10 ? `91${cleanPhone}` : cleanPhone;
 
-    const invDate = order.invoice_date ? new Date(order.invoice_date).toLocaleDateString('en-IN') : '';
+    const dateObj = order.created_at ? new Date(order.created_at) : (order.invoice_date ? new Date(order.invoice_date) : new Date());
+    const invDate = order.invoice_date ? new Date(order.invoice_date).toLocaleDateString('en-IN') : dateObj.toLocaleDateString('en-IN');
+    const invTime = dateObj.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true }).toUpperCase();
     const grandTotal = Number(order.total_amount) + Number(order.tax_amount || 0);
     const formattedAmount = grandTotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-    const pdfCaption = `📄 *Tax Invoice ${order.order_number}*\n\nDear *${order.name || 'Customer'}*,\n\nThank you for doing business with *${business?.name || 'us'}*! Please find your official Tax Invoice PDF attached above.\n\n💰 *Total Amount:* ₹${formattedAmount}\n📅 *Invoice Date:* ${invDate}\n📊 *Status:* ${order.payment_status === 'paid' ? 'Paid ✓' : 'Payment Pending'}\n\nBest regards,\n*${business?.name || 'Customer Support Team'}*`;
+    const pdfCaption = `📄 *Tax Invoice ${order.invoice_number || order.order_number}*\n\nDear *${order.name || 'Customer'}*,\n\nThank you for doing business with *${business?.name || 'us'}*! Please find your official Tax Invoice PDF attached above.\n\n💰 *Total Amount:* ₹${formattedAmount}\n📅 *Invoice Date & Time:* ${invDate} at ${invTime}\n📊 *Status:* ${order.payment_status === 'paid' ? 'Paid ✓' : 'Payment Pending'}\n\nBest regards,\n*${business?.name || 'Customer Support Team'}*`;
 
     const message = `Hello *${order.name || 'Customer'}*,\n\nPlease find attached your Tax Invoice *${order.order_number}* for *₹${formattedAmount}* from *${business?.name || 'us'}*.\n\nView or download PDF:\n${pdfUrl}\n\nThank you for your business!`;
     const whatsappUrl = `https://wa.me/${formattedPhone}?text=${encodeURIComponent(message)}`;

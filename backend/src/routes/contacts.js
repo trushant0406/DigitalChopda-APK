@@ -118,6 +118,18 @@ router.patch('/:id', async (req, res) => {
     fields.push(`credit_limit = $${i++}`);
     values.push(credit_limit === '' ? 0 : Number(credit_limit));
   }
+  if (req.body.opening_balance !== undefined) {
+    fields.push(`opening_balance = $${i++}`);
+    values.push(req.body.opening_balance === '' ? 0 : Number(req.body.opening_balance));
+  }
+  if (req.body.opening_balance_type !== undefined) {
+    fields.push(`opening_balance_type = $${i++}`);
+    values.push(req.body.opening_balance_type || 'to_receive');
+  }
+  if (req.body.opening_balance_date !== undefined) {
+    fields.push(`opening_balance_date = $${i++}`);
+    values.push(req.body.opening_balance_date || null);
+  }
 
   if (fields.length === 0) return res.status(400).json({ error: 'Nothing to update' });
 

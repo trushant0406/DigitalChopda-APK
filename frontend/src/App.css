@@ -308,6 +308,27 @@ button:disabled {
 
 .table-scroll {
   overflow-x: auto;
+  position: relative;
+  scrollbar-width: thin;
+  scrollbar-color: #cbd5e1 transparent;
+  -webkit-overflow-scrolling: touch;
+}
+
+.table-scroll::-webkit-scrollbar {
+  height: 6px;
+}
+
+.table-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.table-scroll::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 4px;
+}
+
+.table-scroll::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
 }
 
 .phone-link {
@@ -351,7 +372,9 @@ tr.row-today {
 
 table {
   width: 100%;
-  border-collapse: collapse;
+  min-width: 960px;
+  border-collapse: separate;
+  border-spacing: 0;
   font-size: 0.88rem;
 }
 
@@ -369,6 +392,7 @@ th {
   text-transform: uppercase;
   letter-spacing: 0.03em;
   font-weight: 600;
+  background: var(--card-bg, #ffffff);
 }
 
 tbody tr:hover {
@@ -385,6 +409,38 @@ td.truncate {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* Sticky right column for tables (Actions) */
+th.sticky-col-right,
+td.sticky-col-right {
+  position: sticky;
+  right: 0;
+  background: var(--card-bg, #ffffff);
+  z-index: 5;
+  border-left: 1px solid var(--border, #dde1e6);
+  box-shadow: -6px 0 12px -3px rgba(0, 0, 0, 0.12);
+  width: 136px;
+  min-width: 136px;
+  max-width: 136px;
+  box-sizing: border-box;
+}
+
+th.sticky-col-right {
+  z-index: 6;
+  background: var(--card-bg, #ffffff);
+}
+
+tbody tr:hover td.sticky-col-right {
+  background: var(--hover-bg, #f0f1f4);
+}
+
+tbody tr.row-overdue td.sticky-col-right {
+  background: var(--row-overdue-bg, #fdecec);
+}
+
+tbody tr.row-today td.sticky-col-right {
+  background: var(--row-today-bg, #fdf6e3);
 }
 
 .cell-secondary {
@@ -534,14 +590,21 @@ td.truncate {
   color: inherit;
   border: none;
   text-align: left;
-  padding: 0.5rem 0.6rem;
+  padding: 0.48rem 0.65rem;
   border-radius: 6px;
-  font-size: 0.85rem;
+  font-size: 0.84rem;
   cursor: pointer;
+  text-decoration: none;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  transition: background 0.15s ease, color 0.15s ease;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .payment-menu-item:hover {
-  background: var(--hover-bg);
+  background: var(--hover-bg, #f1f5f9);
 }
 
 .payment-menu-item-credit {

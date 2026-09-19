@@ -2,10 +2,15 @@ import { useEffect, useState, useMemo } from 'react';
 import { api } from '../api';
 import OrderForm from '../components/OrderForm';
 import OrdersTable from '../components/OrdersTable';
+import RecordPaymentInModal from '../components/RecordPaymentInModal';
 import StatCard from '../components/StatCard';
 import { FULFILLMENT_LABEL } from '../orderStatus';
 
-const PAYMENT_OPTIONS = ['pending', 'paid'];
+const PAYMENT_OPTIONS = [
+  { value: 'pending', label: 'Unpaid / Pending' },
+  { value: 'partially_paid', label: 'Partially Paid' },
+  { value: 'paid', label: 'Paid' },
+];
 const FULFILLMENT_OPTIONS = ['not_ready', 'ready', 'dispatched', 'delivered'];
 const STATUS_OPTIONS = [
   { value: 'active', label: 'Active' },
@@ -20,6 +25,7 @@ export default function OrdersPage({ refreshKey, onLogged, initialFilter }) {
   const [orders, setOrders] = useState([]);
   const [summary, setSummary] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [settlingOrder, setSettlingOrder] = useState(null);
 
   async function load(queryText = search) {
     setLoading(true);
@@ -164,7 +170,7 @@ export default function OrdersPage({ refreshKey, onLogged, initialFilter }) {
             >
               <option value="">All Payment</option>
               {PAYMENT_OPTIONS.map((s) => (
-                <option key={s} value={s}>{s}</option>
+                <option key={s.value} value={s.value}>{s.label}</option>
               ))}
             </select>
 
@@ -196,9 +202,29 @@ export default function OrdersPage({ refreshKey, onLogged, initialFilter }) {
           orders={filteredOrders}
           loading={loading}
           onChanged={handleChanged}
+          onSettle={(order) => setSettlingOrder(order)}
           emptyText={search.trim() ? `No orders matching "${search.trim()}".` : 'No orders yet.'}
         />
       </div>
+
+      {/* QUICK SETTLE PAYMENT IN MODAL */}
+      {settlingOrder && (
+        <RecordPaymentInModal
+          customer={{
+            id: settlingOrder.contact_id,
+            name: settlingOrder.name,
+            phone: settlingOrder.phone,
+            city: settlingOrder.city,
+          }}
+          currentBalance={Number(settlingOrder.balance_due || (Number(settlingOrder.total_amount || 0) + Number(settlingOrder.tax_amount || 0)))}
+          initialOrderId={settlingOrder.id}
+          onClose={() => setSettlingOrder(null)}
+          onSuccess={() => {
+            setSettlingOrder(null);
+            handleChanged();
+          }}
+        />
+      )}
     </div>
   );
 }

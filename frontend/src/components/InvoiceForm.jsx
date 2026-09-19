@@ -5,7 +5,7 @@ import PaymentField from './PaymentField';
 import BusinessDetailsFields from './BusinessDetailsFields';
 import { emptyItem, itemsTotal, itemsTax, itemsToPayload } from '../orderItems';
 
-export default function InvoiceForm({ onCreated, onCancel }) {
+export default function InvoiceForm({ initialContact, onCreated, onCancel }) {
   const [contacts, setContacts] = useState([]);
   const [loadingContacts, setLoadingContacts] = useState(true);
   const [selectedContact, setSelectedContact] = useState(null);
@@ -36,6 +36,10 @@ export default function InvoiceForm({ onCreated, onCancel }) {
     try {
       const list = await api.listContacts();
       setContacts(list || []);
+      if (initialContact) {
+        const match = list.find((c) => c.id === initialContact.id) || initialContact;
+        handleSelectContact(match);
+      }
     } catch (e) {
       console.error('Failed to load contacts for invoice:', e);
     } finally {

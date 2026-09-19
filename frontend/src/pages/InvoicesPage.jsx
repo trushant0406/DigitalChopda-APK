@@ -2,10 +2,15 @@ import { useEffect, useState, useMemo } from 'react';
 import { api } from '../api';
 import InvoiceForm from '../components/InvoiceForm';
 import OrdersTable from '../components/OrdersTable';
+import RecordPaymentInModal from '../components/RecordPaymentInModal';
 import StatCard from '../components/StatCard';
 import { FULFILLMENT_LABEL } from '../orderStatus';
 
-const PAYMENT_OPTIONS = ['pending', 'paid'];
+const PAYMENT_OPTIONS = [
+  { value: 'pending', label: 'Unpaid / Pending' },
+  { value: 'partially_paid', label: 'Partially Paid' },
+  { value: 'paid', label: 'Paid' },
+];
 const FULFILLMENT_OPTIONS = ['not_ready', 'ready', 'dispatched', 'delivered'];
 
 export default function InvoicesPage({ refreshKey }) {
@@ -15,6 +20,7 @@ export default function InvoicesPage({ refreshKey }) {
   const [invoices, setInvoices] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
+  const [settlingOrder, setSettlingOrder] = useState(null);
   const [toast, setToast] = useState(null);
 
   async function load(queryText = search) {
@@ -55,11 +61,12 @@ export default function InvoicesPage({ refreshKey }) {
     for (const inv of invoices) {
       const total = Number(inv.total_amount || 0) + Number(inv.tax_amount || 0);
       totalRevenue += total;
-      if (inv.payment_status === 'paid') {
-        paidAmount += total;
-      } else {
+      const rec = inv.payment_status === 'paid' ? total : Number(inv.received_amount || 0);
+      const due = inv.payment_status === 'paid' ? 0 : (inv.balance_due !== undefined ? Number(inv.balance_due) : Math.max(0, total - rec));
+      paidAmount += rec;
+      if (due > 0.01) {
         pendingCount++;
-        pendingAmount += total;
+        pendingAmount += due;
       }
     }
 
@@ -206,7 +213,7 @@ export default function InvoicesPage({ refreshKey }) {
             >
               <option value="">All Payment</option>
               {PAYMENT_OPTIONS.map((s) => (
-                <option key={s} value={s}>{s}</option>
+                <option key={s.value} value={s.value}>{s.label}</option>
               ))}
             </select>
 
@@ -227,9 +234,31 @@ export default function InvoicesPage({ refreshKey }) {
           orders={filteredInvoices}
           loading={loading}
           onChanged={load}
+          onSettle={(order) => setSettlingOrder(order)}
           emptyText={search.trim() ? `No invoices matching "${search.trim()}".` : 'No invoices created yet.'}
         />
       </div>
+
+      {/* QUICK SETTLE PAYMENT IN MODAL */}
+      {settlingOrder && (
+        <RecordPaymentInModal
+          customer={{
+            id: settlingOrder.contact_id,
+            name: settlingOrder.name,
+            phone: settlingOrder.phone,
+            city: settlingOrder.city,
+          }}
+          currentBalance={Number(settlingOrder.balance_due || (Number(settlingOrder.total_amount || 0) + Number(settlingOrder.tax_amount || 0)))}
+          initialOrderId={settlingOrder.id}
+          onClose={() => setSettlingOrder(null)}
+          onSuccess={() => {
+            setSettlingOrder(null);
+            setToast(`Payment recorded successfully against ${settlingOrder.invoice_number || settlingOrder.order_number}!`);
+            load();
+            setTimeout(() => setToast(null), 4000);
+          }}
+        />
+      )}
     </div>
   );
 }

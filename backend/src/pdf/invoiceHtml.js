@@ -18,12 +18,41 @@ function multiline(text) {
   return escapeHtml(text).replace(/\n/g, '<br/>');
 }
 
-export function buildInvoiceHtml({ business, order, items }) {
+function formatPaymentDateTime(dateStr) {
+  if (!dateStr) return '—';
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return String(dateStr);
+  const date = d.toLocaleDateString('en-GB');
+  const time = d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true }).toUpperCase();
+  return `${date}, ${time}`;
+}
+
+function formatMode(mode) {
+  if (!mode) return '—';
+  const m = String(mode).toLowerCase();
+  if (m === 'upi') return 'UPI';
+  if (m === 'cash') return 'Cash';
+  if (m === 'bank_transfer' || m === 'bank') return 'Bank Transfer';
+  if (m === 'cheque') return 'Cheque';
+  if (m === 'card') return 'Card';
+  if (m === 'credit') return 'Credit';
+  return mode.charAt(0).toUpperCase() + mode.slice(1);
+}
+
+export function buildInvoiceHtml({ business, order, items, showPaymentDetails = false }) {
   const safeItems = Array.isArray(items) ? items : [];
   const subtotal = safeItems.reduce((sum, i) => sum + Number(i.quantity || 0) * Number(i.unit_price ?? i.rate ?? 0), 0);
   const totalQty = safeItems.reduce((sum, i) => sum + Number(i.quantity || 0), 0);
   const taxAmount = safeItems.reduce((sum, i) => sum + Number(i.quantity || 0) * Number(i.unit_price ?? i.rate ?? 0) * (Number(i.gst_rate || 0) / 100), 0);
   const total = subtotal + taxAmount;
+
+  const rawPayments = Array.isArray(order?.payments_list)
+    ? order.payments_list
+    : (typeof order?.payments_list === 'string'
+        ? JSON.parse(order.payments_list || '[]')
+        : []);
+  const payments = rawPayments.filter((p) => p && Number(p.amount) > 0);
+  const totalPaidFromReceipts = payments.reduce((sum, p) => sum + Number(p.amount || 0), 0);
 
   const sellerState = (business?.state || '').trim().toLowerCase();
   const custState = (order?.state || '').trim().toLowerCase();
@@ -63,9 +92,11 @@ export function buildInvoiceHtml({ business, order, items }) {
     ? `<img class="sig-image" src="${business.signature_image}" alt="Signature" />`
     : `<div class="sig-placeholder">Sign here</div>`;
 
+  const dateObj = order.created_at ? new Date(order.created_at) : (order.invoice_date ? new Date(order.invoice_date) : new Date());
   const formattedDate = order.invoice_date
     ? new Date(order.invoice_date).toLocaleDateString('en-GB')
-    : new Date(order.created_at || Date.now()).toLocaleDateString('en-GB');
+    : dateObj.toLocaleDateString('en-GB');
+  const formattedTime = dateObj.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true }).toUpperCase();
 
   return `<!doctype html>
 <html>
@@ -87,8 +118,9 @@ export function buildInvoiceHtml({ business, order, items }) {
     display: inline-block; padding: 3px 10px; border-radius: 4px; font-weight: 700; font-size: 10px;
     letter-spacing: 0.4px; text-transform: uppercase; margin-bottom: 8px;
   }
-  .status-paid { background: #dcfce7; color: #166534; }
-  .status-pending { background: #fef3c7; color: #92400e; }
+  .status-paid { background: #dcfce7; color: #166534; border: 1px solid #86efac; }
+  .status-partial { background: #ffedd5; color: #9a3412; border: 1px solid #fdba74; }
+  .status-pending { background: #fef3c7; color: #92400e; border: 1px solid #fcd34d; }
   .quo-meta { text-align: right; }
   .quo-meta table { margin-left: auto; }
   .quo-meta td { padding: 3px 0 3px 18px; font-size: 12px; }
@@ -123,6 +155,20 @@ export function buildInvoiceHtml({ business, order, items }) {
   .bank-details { margin-top: 18px; }
   .bank-details table td { padding: 2px 0; vertical-align: top; }
   .bank-details table td:first-child { padding-right: 10px; color: #777; }
+  .payments-history { margin-top: 16px; }
+  .payments-history-table { width: 100%; border-collapse: collapse; margin-top: 6px; }
+  .payments-history-table th {
+    background: #f8fafc; color: #475569; font-size: 9px; font-weight: 700;
+    padding: 5px 6px; border-bottom: 1.5px solid #cbd5e1; text-align: left;
+    text-transform: uppercase; letter-spacing: 0.3px;
+  }
+  .payments-history-table td {
+    padding: 5px 6px; border-bottom: 1px solid #f1f5f9; font-size: 10px; vertical-align: middle;
+  }
+  .payments-history-table .payments-total-row td {
+    background: #f0fdf4; border-top: 1.5px solid #86efac; font-weight: 700; padding: 5px 6px;
+  }
+  .payments-history-table .right { text-align: right; }
   .totals-box table { width: 100%; }
   .totals-box td { padding: 4px 0; }
   .totals-box .total-row td { border-top: 2px solid #1f2430; font-weight: 800; font-size: 13.5px; padding-top: 8px; color: ${ACCENT}; }
@@ -151,16 +197,18 @@ export function buildInvoiceHtml({ business, order, items }) {
     </div>
     <div>
       <div class="quo-title">TAX INVOICE</div>
-      <div style="text-align: right;">
-        <span class="status-badge ${order.payment_status === 'paid' ? 'status-paid' : 'status-pending'}">
-          ${order.payment_status === 'paid' ? 'Paid ✓' : 'Payment Pending'}
+      ${showPaymentDetails ? `
+      <div style="text-align: right; margin-bottom: 6px;">
+        <span class="status-badge ${order.payment_status === 'paid' ? 'status-paid' : (order.payment_status === 'partially_paid' ? 'status-partial' : 'status-pending')}">
+          ${order.payment_status === 'paid' ? 'PAID ✓' : (order.payment_status === 'partially_paid' ? 'PARTIALLY PAID' : 'PAYMENT PENDING')}
         </span>
-      </div>
+      </div>` : ''}
       <div class="quo-meta">
         <table>
           <tr><td>Invoice No.</td><td>${escapeHtml(order.invoice_number || order.order_number)}</td></tr>
           ${order.order_number && order.order_number !== order.invoice_number ? `<tr><td>Order No.</td><td>${escapeHtml(order.order_number)}</td></tr>` : ''}
           <tr><td>Date</td><td>${formattedDate}</td></tr>
+          <tr><td>Time</td><td>${formattedTime}</td></tr>
           ${order.order_ref ? `<tr><td>Order / PO Ref</td><td>${escapeHtml(order.order_ref)}</td></tr>` : ''}
           ${order.quotation_id ? `<tr><td>Quotation Ref</td><td>Quote #${order.quotation_id}</td></tr>` : ''}
         </table>
@@ -180,9 +228,7 @@ export function buildInvoiceHtml({ business, order, items }) {
     </div>
     <div class="party">
       <span class="tag">SHIP TO</span>
-      <h2>${escapeHtml(order.name || 'Customer')}</h2>
-      <div>${multiline(order.shipping_address || order.billing_address || order.city || '')}</div>
-      ${order.state ? `<div>Place of Supply: ${escapeHtml(order.state)}</div>` : ''}
+      <div>${multiline(order.shipping_address || order.billing_address || order.city || 'Same as Billing Address')}</div>
     </div>
   </div>
 
@@ -225,6 +271,42 @@ export function buildInvoiceHtml({ business, order, items }) {
           <tr><td>Bank:</td><td>${escapeHtml(business.bank_branch || '')}</td></tr>
         </table>
       </div>` : ''}
+
+      ${showPaymentDetails ? `
+      <div class="payments-history">
+        <div class="section-title" style="margin-top: 14px;">Payment / Receipt History</div>
+        ${payments.length > 0 ? `
+        <table class="payments-history-table">
+          <thead>
+            <tr>
+              <th>Receipt #</th>
+              <th>Date &amp; Time</th>
+              <th>Mode</th>
+              <th class="right">Amount</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${payments.map((p) => `
+              <tr>
+                <td><strong>${escapeHtml(p.receipt_number || ('REC-' + String(p.id).padStart(4, '0')))}</strong></td>
+                <td>${formatPaymentDateTime(p.paid_at)}</td>
+                <td>${formatMode(p.payment_mode || p.method)}${p.reference_no ? `<div class="muted" style="font-size: 8.5px;">Ref: ${escapeHtml(p.reference_no)}</div>` : ''}</td>
+                <td class="right strong" style="color: #166534;">₹ ${formatINR(p.amount)}</td>
+              </tr>
+            `).join('')}
+            <tr class="payments-total-row">
+              <td colspan="3"><strong>Total Received</strong></td>
+              <td class="right strong" style="color: #166534;">₹ ${formatINR(totalPaidFromReceipts)}</td>
+            </tr>
+          </tbody>
+        </table>
+        ` : `
+        <div style="background: #f8fafc; border: 1px dashed #cbd5e1; border-radius: 4px; padding: 6px 10px; color: #64748b; font-size: 10.5px; margin-top: 4px;">
+          ${order.payment_status === 'paid' ? 'Marked as Paid in Full ✓' : 'No payment receipts recorded yet.'}
+        </div>
+        `}
+      </div>
+      ` : ''}
     </div>
     <div class="bottom-right">
       <div class="totals-box">
@@ -232,6 +314,18 @@ export function buildInvoiceHtml({ business, order, items }) {
           <tr><td>Taxable Amount</td><td class="right">₹ ${formatINR(subtotal)}</td></tr>
           ${taxRows}
           <tr class="total-row"><td>Total Amount</td><td class="right">₹ ${formatINR(total)}</td></tr>
+          ${showPaymentDetails ? (() => {
+            const isPaid = order.payment_status === 'paid';
+            const recAmt = isPaid && payments.length === 0 ? total : (payments.length > 0 ? totalPaidFromReceipts : Number(order.received_amount || 0));
+            const balDue = isPaid ? 0 : Math.max(0, total - recAmt);
+            return `
+              <tr><td style="color: #16a34a; font-weight: 600;">Received Amount</td><td class="right" style="color: #16a34a; font-weight: 600;">₹ ${formatINR(recAmt)}</td></tr>
+              <tr style="border-top: 1.5px solid #cbd5e1; font-weight: 700;">
+                <td>Balance Due</td>
+                <td class="right" style="color: ${balDue > 0 ? '#dc2626' : '#16a34a'};">₹ ${formatINR(balDue)}</td>
+              </tr>
+            `;
+          })() : ''}
         </table>
       </div>
       <div class="words">

@@ -22,11 +22,20 @@ export default function DataTable({
                 />
               </th>
             )}
-            {columns.map((col) => (
-              <th key={col.key} className={col.align === 'right' ? 'align-right' : undefined}>
-                {col.label}
-              </th>
-            ))}
+            {columns.map((col) => {
+              const classNames = [
+                col.align === 'right' ? 'align-right' : null,
+                col.sticky === 'right' ? 'sticky-col-right' : null,
+                col.className,
+              ]
+                .filter(Boolean)
+                .join(' ');
+              return (
+                <th key={col.key} className={classNames || undefined}>
+                  {col.label}
+                </th>
+              );
+            })}
           </tr>
         </thead>
         <tbody>
@@ -43,7 +52,11 @@ export default function DataTable({
                 </td>
               )}
               {columns.map((col) => {
-                const classNames = [col.align === 'right' ? 'align-right' : null, col.className]
+                const classNames = [
+                  col.align === 'right' ? 'align-right' : null,
+                  col.sticky === 'right' ? 'sticky-col-right' : null,
+                  col.className,
+                ]
                   .filter(Boolean)
                   .join(' ');
                 return (

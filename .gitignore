@@ -8,3 +8,4 @@ backend/.wwebjs_cache/
 .wwebjs_cache/
 dist/
 .DS_Store
+scratch/

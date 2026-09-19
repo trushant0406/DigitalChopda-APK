@@ -4,6 +4,8 @@ import { api } from '../api';
 import DataTable from '../components/DataTable';
 import QuotationForm from '../components/QuotationForm';
 import ConvertQuotationModal from '../components/ConvertQuotationModal';
+import { formatDate, formatTime } from '../dateFormat';
+import { FileTextIcon, WhatsAppIcon, ZapIcon, InvoiceCheckIcon } from '../components/Icons';
 
 export default function QuotationsPage({ presetContact }) {
   const navigate = useNavigate();
@@ -94,7 +96,20 @@ export default function QuotationsPage({ presetContact }) {
   const columns = [
     { key: 'id', label: 'Quotation #' },
     { key: 'bill_to_name', label: 'Customer' },
-    { key: 'quotation_date', label: 'Date', render: (q) => new Date(q.quotation_date).toLocaleDateString('en-IN') },
+    {
+      key: 'quotation_date',
+      label: 'Date & Time',
+      render: (q) => (
+        <div style={{ lineHeight: 1.3 }}>
+          <div>{formatDate(q.quotation_date || q.created_at)}</div>
+          {(q.created_at || q.quotation_date) && formatTime(q.created_at || q.quotation_date) && (
+            <div style={{ fontSize: '0.74rem', color: 'var(--muted)', fontWeight: 500 }}>
+              🕒 {formatTime(q.created_at || q.quotation_date)}
+            </div>
+          )}
+        </div>
+      ),
+    },
     { key: 'total_amount', label: 'Total', align: 'right', render: (q) => `₹${Number(q.total_amount).toFixed(2)}` },
     { key: 'tax_mode', label: 'Tax', render: (q) => (q.tax_mode === 'split' ? 'CGST+SGST' : 'IGST') },
     {
@@ -113,36 +128,108 @@ export default function QuotationsPage({ presetContact }) {
     },
     {
       key: 'action',
-      label: '',
+      label: 'Actions',
+      align: 'right',
+      sticky: 'right',
       render: (q) => (
-        <div className="row-actions">
+        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', justifyContent: 'flex-end', whiteSpace: 'nowrap' }}>
+          {/* 1. QUOTATION PDF ICON LINK */}
+          <a
+            href={api.quotationPdfUrl(q.id)}
+            target="_blank"
+            rel="noreferrer"
+            title="Download Quotation PDF"
+            style={{
+              width: '28px',
+              height: '26px',
+              borderRadius: '5px',
+              padding: 0,
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              background: 'transparent',
+              border: '1px solid var(--border, #cbd5e1)',
+              textDecoration: 'none',
+              cursor: 'pointer',
+            }}
+          >
+            <FileTextIcon size={14} color="#2563eb" />
+          </a>
+
+          {/* 2. SEND VIA WHATSAPP ICON BUTTON */}
+          <button
+            type="button"
+            onClick={() => sendWhatsApp(q.id)}
+            disabled={sendingId === q.id}
+            title="Send Quotation PDF via WhatsApp"
+            style={{
+              width: '28px',
+              height: '26px',
+              borderRadius: '5px',
+              padding: 0,
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              background: '#f0fdf4',
+              border: '1px solid #bbf7d0',
+              cursor: 'pointer',
+            }}
+          >
+            {sendingId === q.id ? (
+              <span style={{ fontSize: '11px', color: '#16a34a' }}>…</span>
+            ) : (
+              <WhatsAppIcon size={14} color="#16a34a" />
+            )}
+          </button>
+
+          {/* 3. CONVERT TO INVOICE (OR OPEN INVOICE IF CONVERTED) */}
           {q.status === 'converted' ? (
             <a
-              className="button-link"
               href={q.converted_order_id ? api.orderPdfUrl(q.converted_order_id) : '#'}
               target="_blank"
               rel="noreferrer"
-              title="Open Tax Invoice PDF directly in a new tab"
-              style={{ fontWeight: 600, color: 'var(--accent)' }}
+              title={`Converted to Invoice ${q.converted_order_invoice_number || q.converted_order_number || (`#` + q.converted_order_id)} (Click to view Tax Invoice PDF)`}
+              style={{
+                width: '28px',
+                height: '26px',
+                borderRadius: '5px',
+                padding: 0,
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                background: '#f0fdf4',
+                border: '1px solid #86efac',
+                color: '#15803d',
+                fontSize: '13px',
+                fontWeight: 700,
+                textDecoration: 'none',
+                cursor: 'pointer',
+              }}
             >
-              📄 Invoice: {q.converted_order_invoice_number || q.converted_order_number || `#${q.converted_order_id}`} ↗
+              <InvoiceCheckIcon size={14} color="#15803d" />
             </a>
           ) : (
             <button
               type="button"
-              className="advance-action"
-              style={{ fontWeight: 600 }}
               onClick={() => setConvertingQuotation(q)}
+              title="Convert to Sales Invoice"
+              style={{
+                width: '28px',
+                height: '26px',
+                borderRadius: '5px',
+                padding: 0,
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                background: '#fff7ed',
+                border: '1px solid #fed7aa',
+                color: '#ea580c',
+                cursor: 'pointer',
+              }}
             >
-              ⚡ Convert to Invoice
+              <ZapIcon size={14} color="#ea580c" />
             </button>
           )}
-          <a className="button-link" href={api.quotationPdfUrl(q.id)} target="_blank" rel="noreferrer" title="Download Quotation PDF">
-            Quote PDF
-          </a>
-          <button type="button" onClick={() => sendWhatsApp(q.id)} disabled={sendingId === q.id}>
-            {sendingId === q.id ? 'Sending…' : 'Send via WhatsApp'}
-          </button>
         </div>
       ),
     },
