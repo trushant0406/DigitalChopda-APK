@@ -6,8 +6,9 @@ const NAV = [
   { key: 'contacts', label: 'Contacts', icon: '☺' },
   { key: 'followups', label: 'Follow-ups', icon: '◷' },
   { key: 'orders', label: 'Orders', icon: '▣' },
-  { key: 'products', label: 'Products', icon: '▤' },
+  { key: 'invoices', label: 'Invoices', icon: '🧾' },
   { key: 'quotations', label: 'Quotations', icon: '▦' },
+  { key: 'products', label: 'Products', icon: '▤' },
   { key: 'credit', label: 'Credit (Khata)', icon: '₹' },
   { key: 'settings', label: 'Settings', icon: '⚙' },
 ];

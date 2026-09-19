@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { api } from '../api';
 import DataTable from './DataTable';
 import PhoneLink from './PhoneLink';
@@ -29,6 +30,26 @@ function FulfillmentCell({ order }) {
 }
 
 export default function OrdersTable({ orders, loading, onChanged, showCustomer = true, emptyText = 'No orders yet.' }) {
+  const [sendingWhatsappId, setSendingWhatsappId] = useState(null);
+  const [whatsappToast, setWhatsappToast] = useState(null);
+
+  async function handleSendWhatsApp(order) {
+    setSendingWhatsappId(order.id);
+    setWhatsappToast(null);
+    try {
+      const res = await api.sendOrderWhatsApp(order.id);
+      if (!res?.sentViaWeb && res?.whatsappUrl) {
+        window.open(res.whatsappUrl, '_blank');
+      }
+      setWhatsappToast(`Invoice ${order.order_number} sent to ${order.phone}!`);
+      setTimeout(() => setWhatsappToast(null), 4000);
+    } catch (err) {
+      alert('Failed to send invoice via WhatsApp: ' + err.message);
+    } finally {
+      setSendingWhatsappId(null);
+    }
+  }
+
   async function advanceFulfillment(order) {
     const next = NEXT_FULFILLMENT[order.fulfillment_status];
     if (!next) return;
@@ -48,7 +69,36 @@ export default function OrdersTable({ orders, loading, onChanged, showCustomer =
       label: 'Invoice / Order #',
       render: (r) => (
         <>
-          <strong>{r.order_number}</strong>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap' }}>
+            <strong>{r.order_number}</strong>
+            {r.invoice_number && (
+              <span
+                className="badge ok"
+                style={{ fontSize: '0.72rem', padding: '1px 6px', fontWeight: 600 }}
+                title={`Tax Invoice: ${r.invoice_number}`}
+              >
+                🧾 {r.invoice_number}
+              </span>
+            )}
+            {r.order_ref && (
+              <span
+                className="badge neutral"
+                style={{ fontSize: '0.72rem', padding: '1px 5px', fontWeight: 500 }}
+                title={`Order Reference: ${r.order_ref}`}
+              >
+                {r.order_ref}
+              </span>
+            )}
+            {!r.order_ref && r.quotation_id && (
+              <span
+                className="badge neutral"
+                style={{ fontSize: '0.72rem', padding: '1px 5px', fontWeight: 500 }}
+                title={`Converted from Quotation #${r.quotation_id}`}
+              >
+                Quote #{r.quotation_id}
+              </span>
+            )}
+          </div>
           <div className="cell-secondary">
             {r.invoice_date ? new Date(r.invoice_date).toLocaleDateString('en-IN') : new Date(r.created_at).toLocaleDateString('en-IN')}
           </div>
@@ -101,6 +151,24 @@ export default function OrdersTable({ orders, loading, onChanged, showCustomer =
           <span className="badge neutral">Cancelled</span>
         ) : (
           <div className="row-actions">
+            <a
+              className="button-link"
+              href={api.orderPdfUrl(r.id)}
+              target="_blank"
+              rel="noreferrer"
+              title="Download Tax Invoice PDF"
+            >
+              PDF
+            </a>
+            <button
+              type="button"
+              className="secondary-action"
+              onClick={() => handleSendWhatsApp(r)}
+              disabled={sendingWhatsappId === r.id}
+              title="Send Tax Invoice PDF via WhatsApp"
+            >
+              {sendingWhatsappId === r.id ? '…' : 'WhatsApp 💬'}
+            </button>
             {r.payment_status === 'pending' && <PaymentActionMenu order={r} onDone={onChanged} />}
             {NEXT_FULFILLMENT[r.fulfillment_status] && (
               <button type="button" className="advance-action" onClick={() => advanceFulfillment(r)}>
@@ -115,5 +183,14 @@ export default function OrdersTable({ orders, loading, onChanged, showCustomer =
     },
   ];
 
-  return <DataTable columns={columns} rows={orders} loading={loading} emptyText={emptyText} />;
+  return (
+    <>
+      {whatsappToast && (
+        <div className="bulk-bar" style={{ background: '#e6f7ec', color: '#166534', border: '1px solid #bbf7d0', marginBottom: '0.75rem' }}>
+          ✓ {whatsappToast}
+        </div>
+      )}
+      <DataTable columns={columns} rows={orders} loading={loading} emptyText={emptyText} />
+    </>
+  );
 }

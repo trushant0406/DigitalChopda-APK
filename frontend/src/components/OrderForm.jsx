@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { api } from '../api';
 import OrderItemsEditor from './OrderItemsEditor';
 import PaymentField from './PaymentField';
@@ -6,8 +6,6 @@ import BusinessDetailsFields from './BusinessDetailsFields';
 import { emptyItem, itemsTotal, itemsTax, itemsToPayload } from '../orderItems';
 
 export default function OrderForm({ onCreated }) {
-  const [orderNumber, setOrderNumber] = useState('');
-  const [invoiceDate, setInvoiceDate] = useState(() => new Date().toISOString().split('T')[0]);
   const [phone, setPhone] = useState('');
   const [name, setName] = useState('');
   const [city, setCity] = useState('');
@@ -19,18 +17,6 @@ export default function OrderForm({ onCreated }) {
   const [businessOnFile, setBusinessOnFile] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
-
-  function loadNextNumber() {
-    api.getNextInvoiceNumber()
-      .then((res) => {
-        if (res?.suggestedNumber) setOrderNumber(res.suggestedNumber);
-      })
-      .catch(() => {});
-  }
-
-  useEffect(() => {
-    loadNextNumber();
-  }, []);
 
   async function lookupByPhone() {
     if (!phone) return;
@@ -55,8 +41,6 @@ export default function OrderForm({ onCreated }) {
     setError(null);
     try {
       await api.createOrder({
-        order_number: orderNumber.trim() || undefined,
-        invoice_date: invoiceDate,
         phone,
         name: name || undefined,
         city: city || undefined,
@@ -75,7 +59,6 @@ export default function OrderForm({ onCreated }) {
       setMethod('cash');
       setBusiness({});
       setBusinessOnFile(false);
-      loadNextNumber();
       onCreated();
     } catch (err) {
       setError(err.message);
@@ -86,26 +69,7 @@ export default function OrderForm({ onCreated }) {
 
   return (
     <form className="card call-form" onSubmit={handleSubmit}>
-      <h2>New sales invoice / order</h2>
-      <div className="grid">
-        <label>
-          Invoice / Bill #
-          <input
-            value={orderNumber}
-            onChange={(e) => setOrderNumber(e.target.value)}
-            placeholder="Auto-generated (edit to override)"
-          />
-        </label>
-        <label>
-          Invoice Date
-          <input
-            type="date"
-            required
-            value={invoiceDate}
-            onChange={(e) => setInvoiceDate(e.target.value)}
-          />
-        </label>
-      </div>
+      <h2>New order</h2>
       <div className="grid">
         <label>
           Phone *

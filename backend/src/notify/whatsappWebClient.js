@@ -18,12 +18,34 @@ const CHROME_PATHS = [
 
 let qrCodeDataUrl = null;
 let clientStatus = 'DISCONNECTED'; // 'DISCONNECTED' | 'INITIALIZING' | 'QR_READY' | 'CONNECTED'
-let client = null;
+let client = null; // WhatsApp Web Client with MobX media model patch
 
 export function getWhatsAppWebStatus() {
   return {
     status: clientStatus,
     qrCodeDataUrl,
+  };
+}
+
+export async function getWhatsAppWebDiagnostics() {
+  let state = null;
+  if (client) {
+    try {
+      state = await client.getState();
+    } catch (e) {
+      state = `getState error: ${e.message}`;
+    }
+  }
+  return {
+    clientStatus,
+    hasClient: Boolean(client),
+    hasQr: Boolean(qrCodeDataUrl),
+    state,
+    info: client?.info ? {
+      wid: client.info.wid,
+      pushname: client.info.pushname,
+      platform: client.info.platform,
+    } : null,
   };
 }
 
@@ -37,8 +59,6 @@ export function initWhatsAppWebClient() {
   }
 
   const executablePath = process.env.CHROME_PATH || CHROME_PATHS.find((p) => existsSync(p));
-
-  console.log('[whatsapp-web] Initializing WhatsApp Web Client...');
   clientStatus = 'INITIALIZING';
 
   try {
@@ -52,9 +72,6 @@ export function initWhatsAppWebClient() {
     });
 
     client.on('qr', async (qr) => {
-      console.log('\n======================================================');
-      console.log('📱 SCAN THIS QR CODE WITH YOUR WHATSAPP PHONE TO LOG IN:');
-      console.log('======================================================\n');
       try {
         qrcodeTerm.generate(qr, { small: true });
       } catch (e) {}
@@ -63,14 +80,12 @@ export function initWhatsAppWebClient() {
         qrCodeDataUrl = await QRCode.toDataURL(qr);
         clientStatus = 'QR_READY';
       } catch (err) {
-        console.error('Failed to generate QR data URL:', err);
+        console.error('[whatsapp-web] Failed to generate QR data URL:', err.message);
       }
     });
 
     client.on('ready', () => {
-      console.log('\n======================================================');
-      console.log('✅ WHATSAPP WEB CLIENT IS READY AND CONNECTED!');
-      console.log('======================================================\n');
+      console.log('✅ WhatsApp Web Client is ready and connected!');
       clientStatus = 'CONNECTED';
       qrCodeDataUrl = null;
     });
@@ -110,7 +125,7 @@ export function initWhatsAppWebClient() {
 }
 
 export async function reconnectWhatsAppWeb(forceReset = false) {
-  console.log(`[whatsapp-web] Reconnecting client (forceReset=${forceReset})...`);
+  console.log('[whatsapp-web] reconnectWhatsAppWeb called:', JSON.stringify({ forceReset, currentStatus: clientStatus }));
   if (client) {
     try { await client.destroy().catch(() => {}); } catch (e) {}
     client = null;
@@ -136,9 +151,8 @@ export async function reconnectWhatsAppWeb(forceReset = false) {
 
 export async function sendWhatsAppWebDocument(phone, { pdfBuffer, filename, caption }) {
   if (clientStatus !== 'CONNECTED' || !client) {
-    // Attempt auto-recovery init if disconnected
     initWhatsAppWebClient();
-    throw new Error('WhatsApp Web client is not connected yet. Please scan the QR code in Settings.');
+    throw new Error(`WhatsApp Web client is not connected yet (status=${clientStatus}). Please scan the QR code in Settings.`);
   }
 
   const cleanPhone = (phone || '').replace(/\D/g, '');
@@ -147,20 +161,30 @@ export async function sendWhatsAppWebDocument(phone, { pdfBuffer, filename, capt
 
   const media = new MessageMedia('application/pdf', pdfBuffer.toString('base64'), filename);
 
-  await client.sendMessage(chatId, media, { sendMediaAsDocument: true, caption });
-  return { sent: true, method: 'whatsapp-web' };
+  try {
+    const sendResult = await client.sendMessage(chatId, media, { sendMediaAsDocument: true, caption });
+    return { sent: true, method: 'whatsapp-web', messageId: sendResult?.id?._serialized };
+  } catch (sendErr) {
+    console.error(`[whatsapp-web] Document send failed to ${chatId}:`, sendErr.message);
+    throw sendErr;
+  }
 }
 
 export async function sendWhatsAppWebText(phone, text) {
   if (clientStatus !== 'CONNECTED' || !client) {
     initWhatsAppWebClient();
-    throw new Error('WhatsApp Web client is not connected yet. Please scan the QR code in Settings.');
+    throw new Error(`WhatsApp Web client is not connected yet (status=${clientStatus}). Please scan the QR code in Settings.`);
   }
 
   const cleanPhone = (phone || '').replace(/\D/g, '');
   const formattedPhone = cleanPhone.length === 10 ? `91${cleanPhone}` : cleanPhone;
   const chatId = `${formattedPhone}@c.us`;
 
-  await client.sendMessage(chatId, text);
-  return { sent: true, method: 'whatsapp-web' };
+  try {
+    const sendResult = await client.sendMessage(chatId, text);
+    return { sent: true, method: 'whatsapp-web', messageId: sendResult?.id?._serialized };
+  } catch (sendErr) {
+    console.error(`[whatsapp-web] Text send failed to ${chatId}:`, sendErr.message);
+    throw sendErr;
+  }
 }

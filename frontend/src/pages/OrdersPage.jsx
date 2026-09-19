@@ -29,7 +29,8 @@ export default function OrdersPage({ refreshKey, onLogged, initialFilter }) {
       if (fulfillmentStatus) params.fulfillment_status = fulfillmentStatus;
       if (orderStatus) params.status = orderStatus;
       if (queryText && queryText.trim()) params.q = queryText.trim();
-      setOrders(await api.listOrders(params));
+      const list = await api.listOrders(params);
+      setOrders(list || []);
     } finally {
       setLoading(false);
     }
@@ -68,6 +69,8 @@ export default function OrdersPage({ refreshKey, onLogged, initialFilter }) {
     if (!q) return orders;
     return orders.filter((o) => {
       const num = (o.order_number || '').toLowerCase();
+      const inv = (o.invoice_number || '').toLowerCase();
+      const ref = (o.order_ref || '').toLowerCase();
       const name = (o.name || '').toLowerCase();
       const phone = (o.phone || '').toLowerCase();
       const city = (o.city || '').toLowerCase();
@@ -77,6 +80,8 @@ export default function OrdersPage({ refreshKey, onLogged, initialFilter }) {
       );
       return (
         num.includes(q) ||
+        inv.includes(q) ||
+        ref.includes(q) ||
         name.includes(q) ||
         phone.includes(q) ||
         city.includes(q) ||
@@ -88,6 +93,7 @@ export default function OrdersPage({ refreshKey, onLogged, initialFilter }) {
 
   return (
     <div className="page">
+      {/* SUMMARY STATS */}
       <div className="stat-grid">
         <StatCard label="Payment pending" value={summary?.paymentPending} tone="danger" />
         <StatCard label="₹ pending" value={summary ? `₹${summary.pendingAmount.toFixed(0)}` : undefined} tone="danger" />
@@ -97,6 +103,7 @@ export default function OrdersPage({ refreshKey, onLogged, initialFilter }) {
         <StatCard label="Total orders" value={summary?.totalOrders} />
       </div>
 
+      {/* ORIGINAL ORDER CREATION FORM */}
       <OrderForm
         onCreated={() => {
           load();
@@ -105,23 +112,25 @@ export default function OrdersPage({ refreshKey, onLogged, initialFilter }) {
         }}
       />
 
+      {/* ORDERS DATA TABLE */}
       <div className="card">
-        <div className="card-header">
+        <div className="card-header" style={{ flexWrap: 'wrap', gap: '0.8rem' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-            <h2>Orders &amp; Invoices</h2>
+            <h2 style={{ margin: 0 }}>Orders</h2>
             <span className="badge info" style={{ fontSize: '0.75rem' }}>
               {filteredOrders.length}
             </span>
           </div>
-          <div className="filters">
+
+          <div className="filters" style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', alignItems: 'center' }}>
             <div style={{ position: 'relative', display: 'inline-flex', alignItems: 'center' }}>
               <input
                 type="search"
-                placeholder="Search invoice #, customer, phone, item…"
+                placeholder="Search order #, invoice #, customer, phone, item…"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 style={{
-                  minWidth: '250px',
+                  minWidth: '260px',
                   paddingRight: search ? '2rem' : '0.6rem',
                 }}
               />
@@ -147,26 +156,42 @@ export default function OrdersPage({ refreshKey, onLogged, initialFilter }) {
                 </button>
               )}
             </div>
-            <select value={paymentStatus} onChange={(e) => setPaymentStatus(e.target.value)}>
-              <option value="">All payment</option>
+
+            <select
+              value={paymentStatus}
+              onChange={(e) => setPaymentStatus(e.target.value)}
+              aria-label="Filter by payment status"
+            >
+              <option value="">All Payment</option>
               {PAYMENT_OPTIONS.map((s) => (
                 <option key={s} value={s}>{s}</option>
               ))}
             </select>
-            <select value={fulfillmentStatus} onChange={(e) => setFulfillmentStatus(e.target.value)}>
-              <option value="">All fulfillment</option>
+
+            <select
+              value={fulfillmentStatus}
+              onChange={(e) => setFulfillmentStatus(e.target.value)}
+              aria-label="Filter by fulfillment status"
+            >
+              <option value="">All Fulfillment</option>
               {FULFILLMENT_OPTIONS.map((s) => (
                 <option key={s} value={s}>{FULFILLMENT_LABEL[s]}</option>
               ))}
             </select>
-            <select value={orderStatus} onChange={(e) => setOrderStatus(e.target.value)}>
-              <option value="">Active + cancelled</option>
+
+            <select
+              value={orderStatus}
+              onChange={(e) => setOrderStatus(e.target.value)}
+              aria-label="Filter by active or cancelled status"
+            >
+              <option value="">Active + Cancelled</option>
               {STATUS_OPTIONS.map((s) => (
                 <option key={s.value} value={s.value}>{s.label}</option>
               ))}
             </select>
           </div>
         </div>
+
         <OrdersTable
           orders={filteredOrders}
           loading={loading}

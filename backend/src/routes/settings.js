@@ -1,7 +1,12 @@
 import { Router } from 'express';
 import { isPushConfigured } from '../notify/push.js';
 import { isWhatsAppConfigured } from '../notify/whatsapp.js';
-import { getWhatsAppWebStatus, initWhatsAppWebClient, reconnectWhatsAppWeb } from '../notify/whatsappWebClient.js';
+import {
+  getWhatsAppWebStatus,
+  getWhatsAppWebDiagnostics,
+  initWhatsAppWebClient,
+  reconnectWhatsAppWeb,
+} from '../notify/whatsappWebClient.js';
 
 const router = Router();
 
@@ -14,6 +19,11 @@ router.get('/status', (req, res) => {
     whatsappWebQr: webStatus.qrCodeDataUrl,
     reminderPollSeconds: Number(process.env.REMINDER_POLL_SECONDS) || 60,
   });
+});
+
+router.get('/whatsapp-web/diagnostics', async (req, res) => {
+  const diag = await getWhatsAppWebDiagnostics();
+  res.json(diag);
 });
 
 router.post('/whatsapp-web/connect', (req, res) => {

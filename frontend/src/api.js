@@ -65,6 +65,8 @@ export const api = {
   },
   updateOrder: (id, body) => request(`/orders/${id}`, { ...json(body), method: 'PATCH' }),
   ordersSummary: () => request('/orders/summary'),
+  orderPdfUrl: (id) => `${BASE}/orders/${id}/pdf`,
+  sendOrderWhatsApp: (id) => request(`/orders/${id}/send-whatsapp`, json({})),
 
   listProducts: () => request('/products'),
   createProduct: (body) => request('/products', json(body)),
@@ -79,6 +81,7 @@ export const api = {
   getQuotation: (id) => request(`/quotations/${id}`),
   quotationPdfUrl: (id) => `${BASE}/quotations/${id}/pdf`,
   sendQuotationWhatsApp: (id) => request(`/quotations/${id}/send-whatsapp`, json({})),
+  convertQuotationToInvoice: (id, body = {}) => request(`/quotations/${id}/convert-to-invoice`, { ...json(body), method: 'POST' }),
 
   creditSummary: () => request('/credit/summary'),
   listCreditCustomers: (params = {}) => {
