@@ -37,12 +37,13 @@ export default function SettingsPage() {
     checkStatus();
     api.getBusinessProfile().then((p) => p && setProfile({ ...emptyProfile, ...p })).catch(() => {});
 
-    const interval = setInterval(checkStatus, 3000);
+    const interval = setInterval(checkStatus, 2000);
     return () => clearInterval(interval);
   }, []);
 
   async function handleReconnect(forceReset = false) {
     setReconnecting(true);
+    setError(null);
     try {
       const res = await api.reconnectWhatsAppWeb(forceReset);
       setStatus((prev) => ({ ...prev, ...res }));
@@ -233,10 +234,25 @@ export default function SettingsPage() {
               : 'Disconnected (Click Reset Session or Refresh below)'}
           </span>
         </p>
+
+        {status?.whatsappWebStatus === 'INITIALIZING' && (
+          <div style={{ marginTop: '12px', padding: '10px 14px', background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: '6px', color: '#1e40af', fontSize: '0.88rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span>⏳</span>
+            <span>Starting clean WhatsApp Web session. Generating new QR code (takes ~4–6 seconds), please wait…</span>
+          </div>
+        )}
+
+        {status?.whatsappWebStatus === 'DISCONNECTED' && (
+          <div style={{ marginTop: '12px', padding: '10px 14px', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: '6px', color: '#92400e', fontSize: '0.88rem' }}>
+            ℹ WhatsApp is disconnected. Click <strong>🔑 Reset Session &amp; Get New QR</strong> below to generate a new QR code immediately.
+          </div>
+        )}
+
         {status?.whatsappWebQr && (
           <div style={{ marginTop: '16px', textAlign: 'center' }}>
             <p><strong>Scan with WhatsApp (Linked Devices):</strong></p>
-            <img src={status.whatsappWebQr} alt="WhatsApp Web QR Code" style={{ width: '220px', borderRadius: '8px', border: '1px solid #ccc', margin: '8px 0' }} />
+            <img src={status.whatsappWebQr} alt="WhatsApp Web QR Code" style={{ width: '220px', borderRadius: '8px', border: '1px solid #cbd5e1', margin: '8px 0', background: '#fff', padding: '8px' }} />
+            <p className="hint" style={{ fontSize: '0.82rem', marginTop: '4px' }}>Open WhatsApp on your phone → Settings / ⋮ → Linked Devices → Link a Device</p>
           </div>
         )}
         <div style={{ marginTop: '16px', display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
@@ -244,7 +260,7 @@ export default function SettingsPage() {
             {reconnecting ? 'Syncing…' : '🔄 Refresh / Sync Connection'}
           </button>
           <button type="button" className="remove-item" onClick={() => handleReconnect(true)} disabled={reconnecting}>
-            {reconnecting ? 'Resetting…' : '🔑 Reset Session & Get New QR'}
+            {reconnecting ? 'Generating QR…' : '🔑 Reset Session & Get New QR'}
           </button>
         </div>
       </div>
