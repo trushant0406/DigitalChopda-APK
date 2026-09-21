@@ -11,15 +11,60 @@ function PaymentCell({ order }) {
   if (order.status === 'cancelled') {
     return <span className="cell-muted">{order.payment_status}</span>;
   }
+
+  const rawCns = Array.isArray(order.credit_notes_list)
+    ? order.credit_notes_list
+    : (typeof order.credit_notes_list === 'string'
+        ? JSON.parse(order.credit_notes_list || '[]')
+        : []);
+  const creditedAmt = Number(order.credited_amount || rawCns.reduce((sum, c) => sum + Number(c.total_amount || 0), 0) || 0);
+  const hasReturns = creditedAmt > 0.01;
+  const receivedAmt = Number(order.received_amount || 0);
+  const balDue = Number(order.balance_due ?? 0);
+  const is100PercentReturned = hasReturns && balDue <= 0.01 && receivedAmt <= 0.01;
+  const cnTooltip = rawCns.map((c) => `${c.credit_note_number || 'CN'}: ₹${Number(c.total_amount || 0).toFixed(2)} (${c.reason || 'Return'})`).join('\n');
+
+  if (is100PercentReturned) {
+    return (
+      <span
+        className="badge"
+        style={{ background: '#f3e8ff', color: '#7e22ce', border: '1px solid #d8b4fe', fontWeight: 600 }}
+        title={cnTooltip || `Credited ₹${creditedAmt.toFixed(2)} via Sales Return`}
+      >
+        ↩ Fully Returned
+      </span>
+    );
+  }
+
   const isPaid = order.payment_status === 'paid';
   const isPartial = order.payment_status === 'partially_paid';
   const badgeClass = isPaid ? 'badge ok' : (isPartial ? 'badge info' : 'badge warn');
   const label = isPaid ? 'Paid' : (isPartial ? 'Partially Paid' : 'Pending');
+
   return (
-    <span className={badgeClass}>
-      {label}
-      {order.payment_method ? ` · ${PAYMENT_METHOD_LABEL[order.payment_method] || order.payment_method}` : ''}
-    </span>
+    <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', flexWrap: 'wrap' }}>
+      <span className={badgeClass}>
+        {label}
+        {order.payment_method ? ` · ${PAYMENT_METHOD_LABEL[order.payment_method] || order.payment_method}` : ''}
+      </span>
+      {hasReturns && (
+        <span
+          style={{
+            fontSize: '0.72rem',
+            padding: '1px 5px',
+            borderRadius: '4px',
+            background: '#f5f3ff',
+            color: '#6d28d9',
+            border: '1px solid #ddd6fe',
+            fontWeight: 600,
+            whiteSpace: 'nowrap',
+          }}
+          title={cnTooltip || `Credited ₹${creditedAmt.toFixed(2)} via Sales Return`}
+        >
+          ↩ Ret. ₹{Math.round(creditedAmt)}
+        </span>
+      )}
+    </div>
   );
 }
 
@@ -34,7 +79,15 @@ function FulfillmentCell({ order }) {
   return <span className={`badge ${tone}`}>{FULFILLMENT_LABEL[order.fulfillment_status]}</span>;
 }
 
-export default function OrdersTable({ orders, loading, onChanged, onSettle, showCustomer = true, emptyText = 'No orders yet.' }) {
+export default function OrdersTable({
+  orders,
+  loading,
+  onChanged,
+  onSettle,
+  onIssueCreditNote,
+  showCustomer = true,
+  emptyText = 'No orders yet.',
+}) {
   const [sendingWhatsappId, setSendingWhatsappId] = useState(null);
   const [whatsappToast, setWhatsappToast] = useState(null);
 
@@ -193,6 +246,7 @@ export default function OrdersTable({ orders, loading, onChanged, onSettle, show
           order={r}
           onSettle={onSettle}
           onChanged={onChanged}
+          onIssueCreditNote={onIssueCreditNote}
           handleSendWhatsApp={handleSendWhatsApp}
           sendingWhatsappId={sendingWhatsappId}
           advanceFulfillment={advanceFulfillment}

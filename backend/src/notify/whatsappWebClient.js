@@ -149,10 +149,28 @@ export async function reconnectWhatsAppWeb(forceReset = false) {
   return getWhatsAppWebStatus();
 }
 
-export async function sendWhatsAppWebDocument(phone, { pdfBuffer, filename, caption }) {
+export async function sendWhatsAppWebDocument(phone, docOptions, filenameArg, captionArg) {
   if (clientStatus !== 'CONNECTED' || !client) {
     initWhatsAppWebClient();
     throw new Error(`WhatsApp Web client is not connected yet (status=${clientStatus}). Please scan the QR code in Settings.`);
+  }
+
+  let pdfBuffer;
+  let filename = 'document.pdf';
+  let caption = '';
+
+  if (Buffer.isBuffer(docOptions)) {
+    pdfBuffer = docOptions;
+    if (filenameArg) filename = filenameArg;
+    if (captionArg) caption = captionArg;
+  } else if (docOptions && typeof docOptions === 'object') {
+    pdfBuffer = docOptions.pdfBuffer;
+    filename = docOptions.filename || docOptions.fileName || filename;
+    caption = docOptions.caption || '';
+  }
+
+  if (!pdfBuffer) {
+    throw new Error('Missing pdfBuffer in sendWhatsAppWebDocument');
   }
 
   const cleanPhone = (phone || '').replace(/\D/g, '');

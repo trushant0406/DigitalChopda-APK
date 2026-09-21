@@ -138,8 +138,44 @@ export default function RecordPaymentInModal({ customer, currentBalance, initial
       : 'Reference (optional)';
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal card" style={{ maxWidth: '520px', width: '100%' }} onClick={(e) => e.stopPropagation()}>
+    <div
+      className="modal-backdrop"
+      onClick={onClose}
+      style={{
+        position: 'fixed',
+        inset: 0,
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        width: '100vw',
+        height: '100vh',
+        background: 'rgba(15, 23, 42, 0.65)',
+        backdropFilter: 'blur(4px)',
+        WebkitBackdropFilter: 'blur(4px)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        zIndex: 99999,
+        padding: '16px',
+        overflowY: 'auto',
+        boxSizing: 'border-box',
+      }}
+    >
+      <div
+        className="modal card"
+        style={{
+          maxWidth: '520px',
+          width: '100%',
+          maxHeight: '90vh',
+          overflowY: 'auto',
+          margin: 'auto',
+          background: '#ffffff',
+          borderRadius: '12px',
+          boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
+        }}
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className="card-header" style={{ borderBottom: '1px solid var(--color-border)', paddingBottom: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div>
             <h2 style={{ margin: 0, fontSize: '18px' }}>📥 Record Payment In</h2>

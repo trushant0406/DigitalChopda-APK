@@ -3,6 +3,7 @@ import { api } from '../api';
 import InvoiceForm from '../components/InvoiceForm';
 import OrdersTable from '../components/OrdersTable';
 import RecordPaymentInModal from '../components/RecordPaymentInModal';
+import CreateCreditNoteModal from '../components/CreateCreditNoteModal';
 import StatCard from '../components/StatCard';
 import { FULFILLMENT_LABEL } from '../orderStatus';
 
@@ -21,6 +22,7 @@ export default function InvoicesPage({ refreshKey }) {
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [settlingOrder, setSettlingOrder] = useState(null);
+  const [creditNoteOrder, setCreditNoteOrder] = useState(null);
   const [toast, setToast] = useState(null);
 
   async function load(queryText = search) {
@@ -235,6 +237,7 @@ export default function InvoicesPage({ refreshKey }) {
           loading={loading}
           onChanged={load}
           onSettle={(order) => setSettlingOrder(order)}
+          onIssueCreditNote={(order) => setCreditNoteOrder(order)}
           emptyText={search.trim() ? `No invoices matching "${search.trim()}".` : 'No invoices created yet.'}
         />
       </div>
@@ -254,6 +257,27 @@ export default function InvoicesPage({ refreshKey }) {
           onSuccess={() => {
             setSettlingOrder(null);
             setToast(`Payment recorded successfully against ${settlingOrder.invoice_number || settlingOrder.order_number}!`);
+            load();
+            setTimeout(() => setToast(null), 4000);
+          }}
+        />
+      )}
+
+      {/* ISSUE CREDIT NOTE (SALES RETURN) MODAL */}
+      {creditNoteOrder && (
+        <CreateCreditNoteModal
+          customer={{
+            id: creditNoteOrder.contact_id,
+            name: creditNoteOrder.name,
+            phone: creditNoteOrder.phone,
+            city: creditNoteOrder.city,
+            gstin: creditNoteOrder.gstin,
+          }}
+          initialOrder={creditNoteOrder}
+          onClose={() => setCreditNoteOrder(null)}
+          onSuccess={(cn) => {
+            setCreditNoteOrder(null);
+            setToast(`Credit Note ${cn.credit_note_number} issued successfully against ${creditNoteOrder.invoice_number || creditNoteOrder.order_number}!`);
             load();
             setTimeout(() => setToast(null), 4000);
           }}

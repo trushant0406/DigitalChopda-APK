@@ -54,6 +54,14 @@ export function buildInvoiceHtml({ business, order, items, showPaymentDetails = 
   const payments = rawPayments.filter((p) => p && Number(p.amount) > 0);
   const totalPaidFromReceipts = payments.reduce((sum, p) => sum + Number(p.amount || 0), 0);
 
+  const rawCreditNotes = Array.isArray(order?.credit_notes_list)
+    ? order.credit_notes_list
+    : (typeof order?.credit_notes_list === 'string'
+        ? JSON.parse(order.credit_notes_list || '[]')
+        : []);
+  const creditNotes = rawCreditNotes.filter((cn) => cn && Number(cn.total_amount) > 0);
+  const totalCreditedFromReturns = creditNotes.reduce((sum, cn) => sum + Number(cn.total_amount || 0), 0);
+
   const sellerState = (business?.state || '').trim().toLowerCase();
   const custState = (order?.state || '').trim().toLowerCase();
   const isSplit = order.tax_mode === 'split' ||
@@ -169,6 +177,26 @@ export function buildInvoiceHtml({ business, order, items, showPaymentDetails = 
     background: #f0fdf4; border-top: 1.5px solid #86efac; font-weight: 700; padding: 5px 6px;
   }
   .payments-history-table .right { text-align: right; }
+  .returns-history { margin-top: 14px; }
+  .returns-history-table { width: 100%; border-collapse: collapse; margin-top: 6px; }
+  .returns-history-table th {
+    background: #faf5ff; color: #6b21a8; font-size: 9px; font-weight: 700;
+    padding: 5px 6px; border-bottom: 1.5px solid #d8b4fe; text-align: left;
+    text-transform: uppercase; letter-spacing: 0.3px;
+  }
+  .returns-history-table td {
+    padding: 5px 6px; border-bottom: 1px solid #f3e8ff; font-size: 10px; vertical-align: middle;
+  }
+  .returns-history-table .returns-total-row td {
+    background: #f5f3ff; border-top: 1.5px solid #c084fc; font-weight: 700; padding: 5px 6px;
+  }
+  .returns-history-table .right { text-align: right; }
+  .status-returned {
+    background: #f3e8ff; color: #7e22ce; border: 1px solid #d8b4fe;
+  }
+  .status-partial-return {
+    background: #fef3c7; color: #92400e; border: 1px solid #fde68a;
+  }
   .totals-box table { width: 100%; }
   .totals-box td { padding: 4px 0; }
   .totals-box .total-row td { border-top: 2px solid #1f2430; font-weight: 800; font-size: 13.5px; padding-top: 8px; color: ${ACCENT}; }
@@ -197,12 +225,34 @@ export function buildInvoiceHtml({ business, order, items, showPaymentDetails = 
     </div>
     <div>
       <div class="quo-title">TAX INVOICE</div>
-      ${showPaymentDetails ? `
-      <div style="text-align: right; margin-bottom: 6px;">
-        <span class="status-badge ${order.payment_status === 'paid' ? 'status-paid' : (order.payment_status === 'partially_paid' ? 'status-partial' : 'status-pending')}">
-          ${order.payment_status === 'paid' ? 'PAID ✓' : (order.payment_status === 'partially_paid' ? 'PARTIALLY PAID' : 'PAYMENT PENDING')}
-        </span>
-      </div>` : ''}
+      ${showPaymentDetails ? (() => {
+        let badgeClass = 'status-pending';
+        let badgeText = 'PAYMENT PENDING';
+        const isPaid = order.payment_status === 'paid';
+        const isPartial = order.payment_status === 'partially_paid';
+
+        if (totalCreditedFromReturns >= total - 0.01 && total > 0) {
+          badgeClass = 'status-returned';
+          badgeText = '100% RETURNED (CREDITED)';
+        } else if (totalCreditedFromReturns > 0 && isPaid) {
+          badgeClass = 'status-paid';
+          badgeText = 'PAID (WITH SALES RETURN)';
+        } else if (totalCreditedFromReturns > 0) {
+          badgeClass = 'status-partial-return';
+          badgeText = 'PARTIALLY RETURNED';
+        } else if (isPaid) {
+          badgeClass = 'status-paid';
+          badgeText = 'PAID ✓';
+        } else if (isPartial) {
+          badgeClass = 'status-partial';
+          badgeText = 'PARTIALLY PAID';
+        }
+
+        return `
+        <div style="text-align: right; margin-bottom: 6px;">
+          <span class="status-badge ${badgeClass}">${badgeText}</span>
+        </div>`;
+      })() : ''}
       <div class="quo-meta">
         <table>
           <tr><td>Invoice No.</td><td>${escapeHtml(order.invoice_number || order.order_number)}</td></tr>
@@ -302,10 +352,40 @@ export function buildInvoiceHtml({ business, order, items, showPaymentDetails = 
         </table>
         ` : `
         <div style="background: #f8fafc; border: 1px dashed #cbd5e1; border-radius: 4px; padding: 6px 10px; color: #64748b; font-size: 10.5px; margin-top: 4px;">
-          ${order.payment_status === 'paid' ? 'Marked as Paid in Full ✓' : 'No payment receipts recorded yet.'}
+          ${order.payment_status === 'paid' && totalCreditedFromReturns === 0 ? 'Marked as Paid in Full ✓' : (totalCreditedFromReturns > 0 ? 'Settled via Sales Return' : 'No payment receipts recorded yet.')}
         </div>
         `}
       </div>
+
+      ${creditNotes.length > 0 ? `
+      <div class="returns-history">
+        <div class="section-title" style="margin-top: 14px; color: #7e22ce;">Sales Returns / Credit Notes</div>
+        <table class="returns-history-table">
+          <thead>
+            <tr>
+              <th>Credit Note #</th>
+              <th>Date</th>
+              <th>Reason</th>
+              <th class="right">Credited</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${creditNotes.map((cn) => `
+              <tr>
+                <td><strong style="color: #7e22ce;">${escapeHtml(cn.credit_note_number || ('CN-' + String(cn.id)))}</strong></td>
+                <td>${cn.credit_note_date ? new Date(cn.credit_note_date).toLocaleDateString('en-GB') : '—'}</td>
+                <td>${escapeHtml(cn.reason || 'Sales Return')}</td>
+                <td class="right strong" style="color: #7e22ce;">₹ ${formatINR(cn.total_amount)}</td>
+              </tr>
+            `).join('')}
+            <tr class="returns-total-row">
+              <td colspan="3"><strong style="color: #7e22ce;">Total Credited (Returns)</strong></td>
+              <td class="right strong" style="color: #7e22ce;">₹ ${formatINR(totalCreditedFromReturns)}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      ` : ''}
       ` : ''}
     </div>
     <div class="bottom-right">
@@ -316,10 +396,17 @@ export function buildInvoiceHtml({ business, order, items, showPaymentDetails = 
           <tr class="total-row"><td>Total Amount</td><td class="right">₹ ${formatINR(total)}</td></tr>
           ${showPaymentDetails ? (() => {
             const isPaid = order.payment_status === 'paid';
-            const recAmt = isPaid && payments.length === 0 ? total : (payments.length > 0 ? totalPaidFromReceipts : Number(order.received_amount || 0));
-            const balDue = isPaid ? 0 : Math.max(0, total - recAmt);
+            const totalPaid = payments.length > 0
+              ? totalPaidFromReceipts
+              : (isPaid && totalCreditedFromReturns === 0 ? total : Number(order.received_amount || 0));
+            const totalCredited = totalCreditedFromReturns;
+            const balDue = (isPaid && totalPaid + totalCredited >= total - 0.01)
+              ? 0
+              : Math.max(0, total - totalPaid - totalCredited);
+
             return `
-              <tr><td style="color: #16a34a; font-weight: 600;">Received Amount</td><td class="right" style="color: #16a34a; font-weight: 600;">₹ ${formatINR(recAmt)}</td></tr>
+              ${totalPaid > 0 ? `<tr><td style="color: #16a34a; font-weight: 600;">Received Amount (Paid)</td><td class="right" style="color: #16a34a; font-weight: 600;">₹ ${formatINR(totalPaid)}</td></tr>` : ''}
+              ${totalCredited > 0 ? `<tr><td style="color: #7e22ce; font-weight: 600;">Sales Return (Credited)</td><td class="right" style="color: #7e22ce; font-weight: 600;">₹ ${formatINR(totalCredited)}</td></tr>` : ''}
               <tr style="border-top: 1.5px solid #cbd5e1; font-weight: 700;">
                 <td>Balance Due</td>
                 <td class="right" style="color: ${balDue > 0 ? '#dc2626' : '#16a34a'};">₹ ${formatINR(balDue)}</td>

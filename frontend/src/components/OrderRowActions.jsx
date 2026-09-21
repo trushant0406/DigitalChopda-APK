@@ -12,6 +12,7 @@ export default function OrderRowActions({
   sendingWhatsappId,
   advanceFulfillment,
   cancelOrder,
+  onIssueCreditNote,
 }) {
   const [open, setOpen] = useState(false);
   const [style, setStyle] = useState({});
@@ -298,6 +299,25 @@ export default function OrderRowActions({
                   style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
                 >
                   <span>🚚</span> {NEXT_FULFILLMENT_LABEL[order.fulfillment_status]}
+                </button>
+              </>
+            )}
+
+            {/* SALES RETURN & CREDIT NOTE */}
+            {onIssueCreditNote && (
+              <>
+                <div className="payment-menu-divider" />
+                <div className="payment-menu-label">Returns &amp; Credit Note</div>
+                <button
+                  type="button"
+                  className="payment-menu-item"
+                  style={{ color: '#7c3aed', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '8px' }}
+                  onClick={() => {
+                    setOpen(false);
+                    onIssueCreditNote(order);
+                  }}
+                >
+                  <span>↩</span> Issue Credit Note / Return
                 </button>
               </>
             )}

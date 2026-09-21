@@ -13,18 +13,20 @@ const ORDER_SELECT = `
          COALESCE(item_totals.total_amount, 0) AS total_amount,
          COALESCE(item_totals.tax_amount, 0) AS tax_amount,
          COALESCE(item_totals.total_amount, 0) + COALESCE(item_totals.tax_amount, 0) AS grand_total,
-         COALESCE(
-           CASE 
-             WHEN orders.payment_status = 'paid' THEN (COALESCE(item_totals.total_amount, 0) + COALESCE(item_totals.tax_amount, 0))
-             ELSE COALESCE(pay_totals.received_amount, 0)
-           END, 0
-         ) AS received_amount,
-         CASE
-           WHEN orders.payment_status = 'paid' THEN 0
-           ELSE GREATEST(0, (COALESCE(item_totals.total_amount, 0) + COALESCE(item_totals.tax_amount, 0)) - COALESCE(pay_totals.received_amount, 0))
-         END AS balance_due,
-         COALESCE(pay_totals.payments_list, '[]'::json) AS payments_list,
-         COALESCE(item_totals.items, '[]') AS items
+          COALESCE(
+            CASE 
+              WHEN orders.payment_status = 'paid' THEN (COALESCE(item_totals.total_amount, 0) + COALESCE(item_totals.tax_amount, 0))
+              ELSE COALESCE(pay_totals.received_amount, 0)
+            END, 0
+          ) AS received_amount,
+          COALESCE(cn_totals.credited_amount, 0) AS credited_amount,
+          CASE
+            WHEN orders.payment_status = 'paid' THEN 0
+            ELSE GREATEST(0, (COALESCE(item_totals.total_amount, 0) + COALESCE(item_totals.tax_amount, 0)) - COALESCE(pay_totals.received_amount, 0) - COALESCE(cn_totals.credited_amount, 0))
+          END AS balance_due,
+          COALESCE(pay_totals.payments_list, '[]'::json) AS payments_list,
+          COALESCE(cn_totals.credit_notes_list, '[]'::json) AS credit_notes_list,
+          COALESCE(item_totals.items, '[]') AS items
   FROM orders
   JOIN contacts ON contacts.id = orders.contact_id
   LEFT JOIN (
@@ -58,6 +60,19 @@ const ORDER_SELECT = `
     WHERE order_id IS NOT NULL
     GROUP BY order_id
   ) pay_totals ON pay_totals.order_id = orders.id
+  LEFT JOIN (
+    SELECT order_id, SUM(total_amount) AS credited_amount,
+           json_agg(json_build_object(
+             'id', id,
+             'credit_note_number', credit_note_number,
+             'total_amount', total_amount,
+             'credit_note_date', credit_note_date,
+             'reason', reason
+           ) ORDER BY credit_note_date ASC, id ASC) AS credit_notes_list
+    FROM credit_notes
+    WHERE order_id IS NOT NULL
+    GROUP BY order_id
+  ) cn_totals ON cn_totals.order_id = orders.id
 `;
 
 // Helper to calculate the next invoice number strictly from (latest existing invoice number + 1)

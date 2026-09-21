@@ -3,6 +3,7 @@ import { api } from '../api';
 import OrderForm from '../components/OrderForm';
 import OrdersTable from '../components/OrdersTable';
 import RecordPaymentInModal from '../components/RecordPaymentInModal';
+import CreateCreditNoteModal from '../components/CreateCreditNoteModal';
 import StatCard from '../components/StatCard';
 import { FULFILLMENT_LABEL } from '../orderStatus';
 
@@ -25,7 +26,9 @@ export default function OrdersPage({ refreshKey, onLogged, initialFilter }) {
   const [orders, setOrders] = useState([]);
   const [summary, setSummary] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [showForm, setShowForm] = useState(false);
   const [settlingOrder, setSettlingOrder] = useState(null);
+  const [creditNoteOrder, setCreditNoteOrder] = useState(null);
 
   async function load(queryText = search) {
     setLoading(true);
@@ -203,6 +206,7 @@ export default function OrdersPage({ refreshKey, onLogged, initialFilter }) {
           loading={loading}
           onChanged={handleChanged}
           onSettle={(order) => setSettlingOrder(order)}
+          onIssueCreditNote={(order) => setCreditNoteOrder(order)}
           emptyText={search.trim() ? `No orders matching "${search.trim()}".` : 'No orders yet.'}
         />
       </div>
@@ -221,6 +225,25 @@ export default function OrdersPage({ refreshKey, onLogged, initialFilter }) {
           onClose={() => setSettlingOrder(null)}
           onSuccess={() => {
             setSettlingOrder(null);
+            handleChanged();
+          }}
+        />
+      )}
+
+      {/* ISSUE CREDIT NOTE (SALES RETURN) MODAL */}
+      {creditNoteOrder && (
+        <CreateCreditNoteModal
+          customer={{
+            id: creditNoteOrder.contact_id,
+            name: creditNoteOrder.name,
+            phone: creditNoteOrder.phone,
+            city: creditNoteOrder.city,
+            gstin: creditNoteOrder.gstin,
+          }}
+          initialOrder={creditNoteOrder}
+          onClose={() => setCreditNoteOrder(null)}
+          onSuccess={() => {
+            setCreditNoteOrder(null);
             handleChanged();
           }}
         />

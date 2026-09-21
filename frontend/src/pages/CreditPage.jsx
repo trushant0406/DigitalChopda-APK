@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { api } from '../api';
 import PhoneLink from '../components/PhoneLink';
 import RecordPaymentInModal from '../components/RecordPaymentInModal';
+import CreateCreditNoteModal from '../components/CreateCreditNoteModal';
 import InvoiceForm from '../components/InvoiceForm';
 import { formatDate, formatTime, formatDateTime } from '../dateFormat';
 import {
@@ -47,11 +48,13 @@ export default function CreditPage({ refreshKey }) {
   // Tab & Filters
   const [activeTab, setActiveTab] = useState('ledger'); // 'ledger' | 'profile' | 'transactions'
   const [dateFilter, setDateFilter] = useState('all');
+  const [voucherFilter, setVoucherFilter] = useState('ALL'); // 'ALL' | 'Sales Invoices' | 'Payment In' | 'Credit Note'
   const [sortOrder, setSortOrder] = useState('desc'); // 'desc' (newest first) | 'asc' (oldest first)
 
   // Modals & Actions
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [showInvoiceModal, setShowInvoiceModal] = useState(false);
+  const [showCreditNoteModal, setShowCreditNoteModal] = useState(false);
   const [sendingReminder, setSendingReminder] = useState(false);
   const [sharingWa, setSharingWa] = useState(false);
   const [toast, setToast] = useState(null);
@@ -228,7 +231,13 @@ export default function CreditPage({ refreshKey }) {
 
   const nowTs = Date.now();
   const filterDays = dateFilter === '365' ? 365 : dateFilter === '90' ? 90 : dateFilter === '30' ? 30 : null;
+  const allCount = (ledger?.entries || []).length;
+  const invoiceCount = (ledger?.entries || []).filter((e) => e.voucher === 'Sales Invoices').length;
+  const paymentCount = (ledger?.entries || []).filter((e) => e.voucher === 'Payment In').length;
+  const returnCount = (ledger?.entries || []).filter((e) => e.voucher === 'Credit Note').length;
+
   const filteredEntries = (ledger?.entries || []).filter((e) => {
+    if (voucherFilter !== 'ALL' && e.voucher !== voucherFilter) return false;
     if (!filterDays) return true;
     if (e.voucher === 'Opening Balance') return true;
     const t = new Date(e.date).getTime();
@@ -457,6 +466,29 @@ export default function CreditPage({ refreshKey }) {
                 >
                   <PaymentInIcon size={15} color="#fff" />
                   <span>Payment In</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setShowCreditNoteModal(true)}
+                  style={{
+                    background: '#7c3aed',
+                    color: '#fff',
+                    border: 'none',
+                    padding: '8px 16px',
+                    borderRadius: '7px',
+                    fontWeight: 600,
+                    fontSize: '13px',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '7px',
+                    cursor: 'pointer',
+                    boxShadow: '0 1px 3px rgba(124,58,237,0.25)'
+                  }}
+                  title="Issue Credit Note / Sales Return against invoice"
+                >
+                  <span>↩</span>
+                  <span>+ Credit Note</span>
                 </button>
               </div>
             </div>
@@ -767,6 +799,147 @@ export default function CreditPage({ refreshKey }) {
                   </div>
                 </div>
 
+                {/* Quick Voucher Filter Pills */}
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  padding: '10px 18px',
+                  background: '#f8fafc',
+                  borderBottom: '1px solid #e2e8f0',
+                  flexWrap: 'wrap',
+                }}>
+                  <span style={{ fontSize: '11.5px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.4px', marginRight: '4px' }}>
+                    Filter By:
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setVoucherFilter('ALL')}
+                    style={{
+                      padding: '5px 12px',
+                      borderRadius: '20px',
+                      fontSize: '12px',
+                      fontWeight: voucherFilter === 'ALL' ? 700 : 500,
+                      border: voucherFilter === 'ALL' ? '1px solid #2563eb' : '1px solid #cbd5e1',
+                      background: voucherFilter === 'ALL' ? '#eff6ff' : '#ffffff',
+                      color: voucherFilter === 'ALL' ? '#1d4ed8' : '#475569',
+                      cursor: 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      transition: 'all 0.15s ease',
+                    }}
+                  >
+                    <span>All Vouchers</span>
+                    <span style={{
+                      fontSize: '11px',
+                      padding: '1px 6px',
+                      borderRadius: '10px',
+                      background: voucherFilter === 'ALL' ? '#2563eb' : '#e2e8f0',
+                      color: voucherFilter === 'ALL' ? '#ffffff' : '#475569',
+                      fontWeight: 700,
+                    }}>
+                      {allCount}
+                    </span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setVoucherFilter('Sales Invoices')}
+                    style={{
+                      padding: '5px 12px',
+                      borderRadius: '20px',
+                      fontSize: '12px',
+                      fontWeight: voucherFilter === 'Sales Invoices' ? 700 : 500,
+                      border: voucherFilter === 'Sales Invoices' ? '1px solid #2563eb' : '1px solid #cbd5e1',
+                      background: voucherFilter === 'Sales Invoices' ? '#eff6ff' : '#ffffff',
+                      color: voucherFilter === 'Sales Invoices' ? '#1d4ed8' : '#475569',
+                      cursor: 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      transition: 'all 0.15s ease',
+                    }}
+                  >
+                    <FileInvoiceIcon size={13} color={voucherFilter === 'Sales Invoices' ? '#2563eb' : '#64748b'} />
+                    <span>Invoices</span>
+                    <span style={{
+                      fontSize: '11px',
+                      padding: '1px 6px',
+                      borderRadius: '10px',
+                      background: voucherFilter === 'Sales Invoices' ? '#2563eb' : '#e2e8f0',
+                      color: voucherFilter === 'Sales Invoices' ? '#ffffff' : '#475569',
+                      fontWeight: 700,
+                    }}>
+                      {invoiceCount}
+                    </span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setVoucherFilter('Payment In')}
+                    style={{
+                      padding: '5px 12px',
+                      borderRadius: '20px',
+                      fontSize: '12px',
+                      fontWeight: voucherFilter === 'Payment In' ? 700 : 500,
+                      border: voucherFilter === 'Payment In' ? '1px solid #16a34a' : '1px solid #cbd5e1',
+                      background: voucherFilter === 'Payment In' ? '#f0fdf4' : '#ffffff',
+                      color: voucherFilter === 'Payment In' ? '#15803d' : '#475569',
+                      cursor: 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      transition: 'all 0.15s ease',
+                    }}
+                  >
+                    <PaymentInIcon size={13} color={voucherFilter === 'Payment In' ? '#16a34a' : '#64748b'} />
+                    <span>Payments</span>
+                    <span style={{
+                      fontSize: '11px',
+                      padding: '1px 6px',
+                      borderRadius: '10px',
+                      background: voucherFilter === 'Payment In' ? '#16a34a' : '#e2e8f0',
+                      color: voucherFilter === 'Payment In' ? '#ffffff' : '#475569',
+                      fontWeight: 700,
+                    }}>
+                      {paymentCount}
+                    </span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setVoucherFilter('Credit Note')}
+                    style={{
+                      padding: '5px 12px',
+                      borderRadius: '20px',
+                      fontSize: '12px',
+                      fontWeight: voucherFilter === 'Credit Note' ? 700 : 500,
+                      border: voucherFilter === 'Credit Note' ? '1px solid #7c3aed' : '1px solid #cbd5e1',
+                      background: voucherFilter === 'Credit Note' ? '#f5f3ff' : '#ffffff',
+                      color: voucherFilter === 'Credit Note' ? '#6d28d9' : '#475569',
+                      cursor: 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      transition: 'all 0.15s ease',
+                    }}
+                  >
+                    <span style={{ fontSize: '13px' }}>↩</span>
+                    <span>Returns</span>
+                    <span style={{
+                      fontSize: '11px',
+                      padding: '1px 6px',
+                      borderRadius: '10px',
+                      background: voucherFilter === 'Credit Note' ? '#7c3aed' : '#e2e8f0',
+                      color: voucherFilter === 'Credit Note' ? '#ffffff' : '#475569',
+                      fontWeight: 700,
+                    }}>
+                      {returnCount}
+                    </span>
+                  </button>
+                </div>
+
                 {loadingLedger && <div style={{ padding: '30px', textAlign: 'center', color: '#94a3b8' }}>Loading ledger…</div>}
 
                 {!loadingLedger && sortedEntries.length === 0 && (
@@ -850,6 +1023,32 @@ export default function CreditPage({ refreshKey }) {
                                         +Status
                                       </a>
                                     )}
+                                  </div>
+                                ) : row.voucher === 'Credit Note' && row.ref_id ? (
+                                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                                    <a
+                                      href={api.creditNotePdfUrl(row.ref_id)}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                      style={{ color: '#7c3aed', textDecoration: 'none', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '3px' }}
+                                      title="View / Download Official GST Credit Note PDF"
+                                    >
+                                      <span>{row.sr_no}</span>
+                                      <span style={{ fontSize: '11px' }}>↗</span>
+                                    </a>
+                                  </div>
+                                ) : row.voucher === 'Payment In' && row.ref_id ? (
+                                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                                    <a
+                                      href={api.paymentReceiptPdfUrl(row.ref_id)}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                      style={{ color: '#059669', textDecoration: 'none', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '3px' }}
+                                      title="View / Download Official Payment Receipt PDF"
+                                    >
+                                      <span>{row.sr_no}</span>
+                                      <span style={{ fontSize: '11px' }}>↗</span>
+                                    </a>
                                   </div>
                                 ) : (
                                   row.sr_no || '—'
@@ -1001,7 +1200,22 @@ export default function CreditPage({ refreshKey }) {
                     }}>
                       <div>
                         <div style={{ fontWeight: 700, fontSize: '13.5px', color: '#0f172a' }}>
-                          {e.voucher}: <strong>{e.sr_no}</strong>
+                          {e.voucher}:{' '}
+                          {e.voucher === 'Sales Invoices' && e.ref_id ? (
+                            <a href={api.orderPdfUrl(e.ref_id)} target="_blank" rel="noreferrer" style={{ color: '#2563eb', textDecoration: 'none' }} title="View Clean Tax Invoice">
+                              <strong>{e.sr_no}</strong> ↗
+                            </a>
+                          ) : e.voucher === 'Credit Note' && e.ref_id ? (
+                            <a href={api.creditNotePdfUrl(e.ref_id)} target="_blank" rel="noreferrer" style={{ color: '#7c3aed', textDecoration: 'none' }} title="View Credit Note PDF">
+                              <strong>{e.sr_no}</strong> ↗
+                            </a>
+                          ) : e.voucher === 'Payment In' && e.ref_id ? (
+                            <a href={api.paymentReceiptPdfUrl(e.ref_id)} target="_blank" rel="noreferrer" style={{ color: '#059669', textDecoration: 'none' }} title="View Payment Receipt PDF">
+                              <strong>{e.sr_no}</strong> ↗
+                            </a>
+                          ) : (
+                            <strong>{e.sr_no}</strong>
+                          )}
                         </div>
                         <div style={{ color: '#64748b', fontSize: '12px', marginTop: '2px' }}>
                           {e.date ? formatDateTime(e.date) : '—'} · {e.particulars}
@@ -1056,6 +1270,24 @@ export default function CreditPage({ refreshKey }) {
             />
           </div>
         </div>
+      )}
+
+      {/* MODAL: Issue Sales Return / Credit Note */}
+      {showCreditNoteModal && selectedCustomer && (
+        <CreateCreditNoteModal
+          customer={ledger?.customer || selectedCustomer}
+          onClose={() => setShowCreditNoteModal(false)}
+          onSuccess={(res) => {
+            setShowCreditNoteModal(false);
+            setToast({
+              type: 'success',
+              msg: `Credit Note ${res.credit_note_number} created successfully! Ledger balance updated.`,
+            });
+            loadCustomers();
+            loadCustomerLedger(selectedCustomer.id);
+            setTimeout(() => setToast(null), 4500);
+          }}
+        />
       )}
     </div>
   );

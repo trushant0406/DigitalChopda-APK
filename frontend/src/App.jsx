@@ -9,6 +9,7 @@ import ContactsPage from './pages/ContactsPage';
 import FollowupsPage from './pages/FollowupsPage';
 import OrdersPage from './pages/OrdersPage';
 import InvoicesPage from './pages/InvoicesPage';
+import SalesReturnsPage from './pages/SalesReturnsPage';
 import ProductsPage from './pages/ProductsPage';
 import QuotationsPage from './pages/QuotationsPage';
 import CreditPage from './pages/CreditPage';
@@ -55,6 +56,7 @@ function MainLayout() {
           <Route path="/followups" element={<FollowupsPage refreshKey={refreshKey} />} />
           <Route path="/orders" element={<OrdersPage refreshKey={refreshKey} onLogged={bump} initialFilter={ordersFilter} />} />
           <Route path="/invoices" element={<InvoicesPage refreshKey={refreshKey} />} />
+          <Route path="/sales-returns" element={<SalesReturnsPage refreshKey={refreshKey} />} />
           <Route path="/products" element={<ProductsPage />} />
           <Route path="/quotations" element={<QuotationsPage presetContact={quotationPresetContact} />} />
           <Route path="/credit" element={<CreditPage refreshKey={refreshKey} />} />

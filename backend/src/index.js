@@ -15,6 +15,7 @@ import productsRouter from './routes/products.js';
 import quotationsRouter from './routes/quotations.js';
 import businessProfileRouter from './routes/businessProfile.js';
 import creditRouter from './routes/credit.js';
+import creditNotesRouter from './routes/creditNotes.js';
 import authRouter from './routes/auth.js';
 import { startScheduler } from './scheduler.js';
 import { initWhatsAppWebClient } from './notify/whatsappWebClient.js';
@@ -48,6 +49,7 @@ app.use('/api/products', productsRouter);
 app.use('/api/quotations', quotationsRouter);
 app.use('/api/business-profile', businessProfileRouter);
 app.use('/api/credit', creditRouter);
+app.use('/api/credit-notes', creditNotesRouter);
 app.use('/api/auth', authRouter);
 
 app.get('/api/health', (req, res) => res.json({ ok: true }));

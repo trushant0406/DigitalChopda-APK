@@ -95,9 +95,23 @@ export const api = {
   getNextReceiptNumber: () => request('/credit/next-receipt-number'),
   recordPaymentIn: (body) => request('/credit/payment-in', json(body)),
   customerStatementPdfUrl: (contactId) => `${BASE}/credit/customers/${contactId}/statement/pdf`,
+  paymentReceiptPdfUrl: (paymentId) => `${BASE}/credit/payments/${paymentId}/receipt/pdf`,
   sendCustomerStatementWhatsApp: (contactId) => request(`/credit/customers/${contactId}/statement/whatsapp`, json({})),
   sendCustomerReminderWhatsApp: (contactId) => request(`/credit/customers/${contactId}/reminder`, json({})),
   collectCreditPayment: (body) => request('/credit/collect', json(body)),
+
+  // Credit Notes (Sales Return)
+  listCreditNotes: (params = {}) => {
+    const qs = new URLSearchParams(params).toString();
+    return request(`/credit-notes${qs ? `?${qs}` : ''}`);
+  },
+  getCreditNote: (id) => request(`/credit-notes/${id}`),
+  getNextCreditNoteNumber: () => request('/credit-notes/next-number'),
+  createCreditNote: (body) => request('/credit-notes', json(body)),
+  getReturnableOrderItems: (orderId) => request(`/credit-notes/orders/${orderId}/returnable-items`),
+  creditNotePdfUrl: (id) => `${BASE}/credit-notes/${id}/pdf`,
+  sendCreditNoteWhatsApp: (id) => request(`/credit-notes/${id}/whatsapp`, json({})),
+  voidCreditNote: (id) => request(`/credit-notes/${id}`, { method: 'DELETE' }),
 
   vapidPublicKey: () => request('/push/vapid-public-key'),
   subscribePush: (subscription) => request('/push/subscribe', json(subscription)),
