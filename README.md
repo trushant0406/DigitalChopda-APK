@@ -1,6 +1,6 @@
-# Call Intelligence — Enterprise Platform
+# DigitalChopda.in — Smart Invoicing, GST Billing & Khata Platform
 
-Call Intelligence is an enterprise call journal, quotation, order, and credit (khata) management application built with Node/Express, PostgreSQL, and React (Vite).
+DigitalChopda.in is an enterprise-grade GST billing, quotation, order, sales return, call journal, and credit (khata) management platform built with Node/Express, PostgreSQL, and React (Vite).
 
 ---
 

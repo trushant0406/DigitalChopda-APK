@@ -56,7 +56,7 @@ app.get('/api/health', (req, res) => res.json({ ok: true }));
 
 const port = process.env.PORT || 4000;
 app.listen(port, () => {
-  console.log(`Call Intelligence backend on :${port}`);
+  console.log(`DigitalChopda.in backend on :${port}`);
   startScheduler();
   initWhatsAppWebClient();
 });

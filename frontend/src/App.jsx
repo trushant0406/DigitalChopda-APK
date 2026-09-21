@@ -73,8 +73,8 @@ function AppContent() {
   if (loading) {
     return (
       <div className="app-loading-screen">
-        <div className="brand-mark">CI</div>
-        <p>Loading Call Intelligence…</p>
+        <div className="brand-mark">DC</div>
+        <p>Loading DigitalChopda.in…</p>
       </div>
     );
   }

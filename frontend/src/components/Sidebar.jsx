@@ -21,8 +21,8 @@ export default function Sidebar({ active, onNavigate }) {
     <nav className="sidebar">
       <div className="sidebar-nav-top">
         <div className="brand">
-          <span className="brand-mark">CI</span>
-          <span className="brand-name">Call Intelligence</span>
+          <span className="brand-mark">DC</span>
+          <span className="brand-name">DigitalChopda.in</span>
         </div>
         <ul>
           {NAV.map((item) => (

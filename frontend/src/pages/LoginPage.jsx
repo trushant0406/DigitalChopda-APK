@@ -26,9 +26,9 @@ export default function LoginPage() {
     <div className="login-wrapper">
       <div className="login-card">
         <div className="login-header">
-          <div className="login-logo">CI</div>
-          <h1>Call Intelligence</h1>
-          <p className="login-subtitle">Sign in to your enterprise workspace</p>
+          <div className="login-logo">DC</div>
+          <h1>DigitalChopda.in</h1>
+          <p className="login-subtitle">Smart Billing, Invoicing &amp; Khata</p>
         </div>
 
         <form onSubmit={handleSubmit} className="login-form">
