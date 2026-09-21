@@ -1,4 +1,5 @@
 import { amountToWords } from '../lib/numberToWords.js';
+import { formatPlaceOfSupply } from '../lib/gst.js';
 
 const ACCENT = '#2952e3';
 
@@ -64,10 +65,17 @@ export function buildInvoiceHtml({ business, order, items, showPaymentDetails = 
 
   const sellerState = (business?.state || '').trim().toLowerCase();
   const custState = (order?.state || '').trim().toLowerCase();
-  const isSplit = order.tax_mode === 'split' ||
-    (Boolean(sellerState && custState) && sellerState === custState) ||
-    (!order?.state && true);
-  const taxRatePct = subtotal > 0 ? (taxAmount / subtotal) * 100 : 0;
+  const isSplit = order?.tax_mode
+    ? order.tax_mode === 'split'
+    : (Boolean(sellerState && custState) ? sellerState === custState : true);
+
+  const roundOff = Number(
+    order?.round_off !== undefined && order?.round_off !== null
+      ? order.round_off
+      : (Math.round(total) - total)
+  );
+  const finalGrandTotal = total + roundOff;
+  const formattedPlaceOfSupply = formatPlaceOfSupply(order?.place_of_supply || order?.state);
 
   const itemRows = safeItems
     .map((item, index) => {
@@ -90,11 +98,71 @@ export function buildInvoiceHtml({ business, order, items, showPaymentDetails = 
     })
     .join('');
 
-  const taxRows = isSplit
-    ? `
-      <tr><td>CGST @${(taxRatePct / 2).toFixed(1)}%</td><td class="right">₹ ${formatINR(taxAmount / 2)}</td></tr>
-      <tr><td>SGST @${(taxRatePct / 2).toFixed(1)}%</td><td class="right">₹ ${formatINR(taxAmount / 2)}</td></tr>`
-    : `<tr><td>IGST @${taxRatePct.toFixed(1)}%</td><td class="right">₹ ${formatINR(taxAmount)}</td></tr>`;
+  // Multi-rate GST grouping
+  const rateMap = new Map();
+  for (const item of safeItems) {
+    const rate = Number(item.unit_price ?? item.rate ?? 0);
+    const qty = Number(item.quantity ?? 0);
+    const gstRate = Number(item.gst_rate ?? 0);
+    const taxable = qty * rate;
+    const tax = taxable * (gstRate / 100);
+
+    if (!rateMap.has(gstRate)) {
+      rateMap.set(gstRate, { gstRate, taxable: 0, tax: 0 });
+    }
+    const entry = rateMap.get(gstRate);
+    entry.taxable += taxable;
+    entry.tax += tax;
+  }
+
+  const sortedRates = Array.from(rateMap.values()).sort((a, b) => b.gstRate - a.gstRate);
+
+  let taxRows = '';
+  if (sortedRates.length === 0 || sortedRates.every((r) => r.tax === 0)) {
+    if (isSplit) {
+      taxRows = `
+        <tr><td>CGST (0%)</td><td class="right">₹ 0.00</td></tr>
+        <tr><td>SGST (0%)</td><td class="right">₹ 0.00</td></tr>`;
+    } else {
+      taxRows = `<tr><td>IGST (0%)</td><td class="right">₹ 0.00</td></tr>`;
+    }
+  } else {
+    taxRows = sortedRates
+      .filter((r) => r.tax > 0)
+      .map((r) => {
+        if (isSplit) {
+          const halfRate = (r.gstRate / 2).toFixed(Number.isInteger(r.gstRate / 2) ? 0 : 1);
+          const halfTax = r.tax / 2;
+          return `
+            <tr><td>CGST @${halfRate}%</td><td class="right">₹ ${formatINR(halfTax)}</td></tr>
+            <tr><td>SGST @${halfRate}%</td><td class="right">₹ ${formatINR(halfTax)}</td></tr>`;
+        } else {
+          const fullRate = Number.isInteger(r.gstRate) ? r.gstRate : r.gstRate.toFixed(1);
+          return `<tr><td>IGST @${fullRate}%</td><td class="right">₹ ${formatINR(r.tax)}</td></tr>`;
+        }
+      })
+      .join('');
+  }
+
+  // HSN Tax Breakdown
+  const hsnMap = new Map();
+  for (const item of safeItems) {
+    const hsn = (item.hsn_code || '—').trim();
+    const rate = Number(item.unit_price ?? item.rate ?? 0);
+    const qty = Number(item.quantity ?? 0);
+    const gstRate = Number(item.gst_rate ?? 0);
+    const taxable = qty * rate;
+    const tax = taxable * (gstRate / 100);
+
+    const key = `${hsn}_${gstRate}`;
+    if (!hsnMap.has(key)) {
+      hsnMap.set(key, { hsn, gstRate, taxable: 0, tax: 0 });
+    }
+    const entry = hsnMap.get(key);
+    entry.taxable += taxable;
+    entry.tax += tax;
+  }
+  const hsnRows = Array.from(hsnMap.values());
 
   const signatureBlock = business?.signature_image
     ? `<img class="sig-image" src="${business.signature_image}" alt="Signature" />`
@@ -197,6 +265,19 @@ export function buildInvoiceHtml({ business, order, items, showPaymentDetails = 
   .status-partial-return {
     background: #fef3c7; color: #92400e; border: 1px solid #fde68a;
   }
+  .tax-summary-table { width: 100%; border-collapse: collapse; margin-top: 5px; font-size: 9.5px; }
+  .tax-summary-table th {
+    background: #f8fafc; color: #475569; font-size: 8.5px; font-weight: 700;
+    padding: 4px 6px; border-bottom: 1.5px solid #cbd5e1; text-align: left;
+    text-transform: uppercase; letter-spacing: 0.3px;
+  }
+  .tax-summary-table td {
+    padding: 4px 6px; border-bottom: 1px solid #f1f5f9; vertical-align: middle;
+  }
+  .tax-summary-table .right { text-align: right; }
+  .tax-summary-table .summary-total-row td {
+    background: #f1f5f9; border-top: 1.5px solid #94a3b8; font-weight: 700;
+  }
   .totals-box table { width: 100%; }
   .totals-box td { padding: 4px 0; }
   .totals-box .total-row td { border-top: 2px solid #1f2430; font-weight: 800; font-size: 13.5px; padding-top: 8px; color: ${ACCENT}; }
@@ -231,7 +312,7 @@ export function buildInvoiceHtml({ business, order, items, showPaymentDetails = 
         const isPaid = order.payment_status === 'paid';
         const isPartial = order.payment_status === 'partially_paid';
 
-        if (totalCreditedFromReturns >= total - 0.01 && total > 0) {
+        if (totalCreditedFromReturns >= finalGrandTotal - 0.01 && finalGrandTotal > 0) {
           badgeClass = 'status-returned';
           badgeText = '100% RETURNED (CREDITED)';
         } else if (totalCreditedFromReturns > 0 && isPaid) {
@@ -259,6 +340,7 @@ export function buildInvoiceHtml({ business, order, items, showPaymentDetails = 
           ${order.order_number && order.order_number !== order.invoice_number ? `<tr><td>Order No.</td><td>${escapeHtml(order.order_number)}</td></tr>` : ''}
           <tr><td>Date</td><td>${formattedDate}</td></tr>
           <tr><td>Time</td><td>${formattedTime}</td></tr>
+          ${formattedPlaceOfSupply ? `<tr><td>Place of Supply</td><td>${escapeHtml(formattedPlaceOfSupply)}</td></tr>` : ''}
           ${order.order_ref ? `<tr><td>Order / PO Ref</td><td>${escapeHtml(order.order_ref)}</td></tr>` : ''}
           ${order.quotation_id ? `<tr><td>Quotation Ref</td><td>Quote #${order.quotation_id}</td></tr>` : ''}
         </table>
@@ -274,7 +356,7 @@ export function buildInvoiceHtml({ business, order, items, showPaymentDetails = 
       ${order.phone ? `<div>Mobile: ${escapeHtml(order.phone)}</div>` : ''}
       ${order.gstin ? `<div>GSTIN: ${escapeHtml(order.gstin)}</div>` : ''}
       ${order.pan ? `<div>PAN: ${escapeHtml(order.pan)}</div>` : ''}
-      ${order.state ? `<div>Place of Supply: ${escapeHtml(order.state)}</div>` : ''}
+      ${formattedPlaceOfSupply ? `<div><strong>Place of Supply:</strong> ${escapeHtml(formattedPlaceOfSupply)}</div>` : ''}
     </div>
     <div class="party">
       <span class="tag">SHIP TO</span>
@@ -308,6 +390,58 @@ export function buildInvoiceHtml({ business, order, items, showPaymentDetails = 
 
   <div class="bottom">
     <div class="bottom-left">
+      ${hsnRows.length > 0 ? `
+      <div class="tax-summary-section" style="margin-bottom: 14px;">
+        <div class="section-title">HSN / GST Tax Summary</div>
+        <table class="tax-summary-table">
+          <thead>
+            <tr>
+              <th>HSN/SAC</th>
+              <th class="right">Taxable Val</th>
+              ${isSplit ? `
+                <th class="right">CGST</th>
+                <th class="right">SGST</th>
+              ` : `
+                <th class="right">IGST</th>
+              `}
+              <th class="right">Total Tax</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${hsnRows.map((r) => {
+              const halfTax = r.tax / 2;
+              const halfRate = (r.gstRate / 2).toFixed(Number.isInteger(r.gstRate / 2) ? 0 : 1);
+              const fullRate = Number.isInteger(r.gstRate) ? r.gstRate : r.gstRate.toFixed(1);
+              return `
+                <tr>
+                  <td>${escapeHtml(r.hsn)}</td>
+                  <td class="right">₹ ${formatINR(r.taxable)}</td>
+                  ${isSplit ? `
+                    <td class="right">${halfRate}% (₹${formatINR(halfTax)})</td>
+                    <td class="right">${halfRate}% (₹${formatINR(halfTax)})</td>
+                  ` : `
+                    <td class="right">${fullRate}% (₹${formatINR(r.tax)})</td>
+                  `}
+                  <td class="right strong">₹ ${formatINR(r.tax)}</td>
+                </tr>
+              `;
+            }).join('')}
+            <tr class="summary-total-row">
+              <td><strong>Total</strong></td>
+              <td class="right strong">₹ ${formatINR(subtotal)}</td>
+              ${isSplit ? `
+                <td class="right strong">₹ ${formatINR(taxAmount / 2)}</td>
+                <td class="right strong">₹ ${formatINR(taxAmount / 2)}</td>
+              ` : `
+                <td class="right strong">₹ ${formatINR(taxAmount)}</td>
+              `}
+              <td class="right strong">₹ ${formatINR(taxAmount)}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      ` : ''}
+
       <div class="section-title">Terms &amp; Conditions</div>
       <div>${multiline(order.notes || business?.terms_and_conditions || '')}</div>
 
@@ -393,16 +527,22 @@ export function buildInvoiceHtml({ business, order, items, showPaymentDetails = 
         <table>
           <tr><td>Taxable Amount</td><td class="right">₹ ${formatINR(subtotal)}</td></tr>
           ${taxRows}
-          <tr class="total-row"><td>Total Amount</td><td class="right">₹ ${formatINR(total)}</td></tr>
+          ${Math.abs(roundOff) >= 0.005 ? `
+          <tr>
+            <td style="color: #64748b;">Round Off</td>
+            <td class="right" style="color: #64748b;">${roundOff >= 0 ? '+' : ''}₹ ${formatINR(roundOff)}</td>
+          </tr>
+          ` : ''}
+          <tr class="total-row"><td>Total Amount</td><td class="right">₹ ${formatINR(finalGrandTotal)}</td></tr>
           ${showPaymentDetails ? (() => {
             const isPaid = order.payment_status === 'paid';
             const totalPaid = payments.length > 0
               ? totalPaidFromReceipts
-              : (isPaid && totalCreditedFromReturns === 0 ? total : Number(order.received_amount || 0));
+              : (isPaid && totalCreditedFromReturns === 0 ? finalGrandTotal : Number(order.received_amount || 0));
             const totalCredited = totalCreditedFromReturns;
-            const balDue = (isPaid && totalPaid + totalCredited >= total - 0.01)
+            const balDue = (isPaid && totalPaid + totalCredited >= finalGrandTotal - 0.01)
               ? 0
-              : Math.max(0, total - totalPaid - totalCredited);
+              : Math.max(0, finalGrandTotal - totalPaid - totalCredited);
 
             return `
               ${totalPaid > 0 ? `<tr><td style="color: #16a34a; font-weight: 600;">Received Amount (Paid)</td><td class="right" style="color: #16a34a; font-weight: 600;">₹ ${formatINR(totalPaid)}</td></tr>` : ''}
@@ -417,7 +557,7 @@ export function buildInvoiceHtml({ business, order, items, showPaymentDetails = 
       </div>
       <div class="words">
         <div class="label">Total Amount (in words)</div>
-        <div>${amountToWords(total)}</div>
+        <div>${amountToWords(finalGrandTotal)}</div>
       </div>
       <div class="signature">
         ${signatureBlock}

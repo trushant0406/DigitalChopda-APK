@@ -1,4 +1,5 @@
 import { amountToWords } from '../lib/numberToWords.js';
+import { formatPlaceOfSupply } from '../lib/gst.js';
 
 const ACCENT = '#2952e3';
 
@@ -23,8 +24,10 @@ export function buildQuotationHtml({ business, quotation, items }) {
   const totalQty = items.reduce((sum, i) => sum + Number(i.quantity), 0);
   const taxAmount = items.reduce((sum, i) => sum + Number(i.quantity) * Number(i.rate) * (Number(i.gst_rate) / 100), 0);
   const total = subtotal + taxAmount;
+  const roundOff = Math.round(total) - total;
+  const finalGrandTotal = total + roundOff;
   const isSplit = quotation.tax_mode === 'split';
-  const taxRatePct = subtotal > 0 ? (taxAmount / subtotal) * 100 : 0;
+  const formattedPlaceOfSupply = formatPlaceOfSupply(quotation.place_of_supply);
 
   const itemRows = items
     .map((item, index) => {
@@ -44,11 +47,71 @@ export function buildQuotationHtml({ business, quotation, items }) {
     })
     .join('');
 
-  const taxRows = isSplit
-    ? `
-      <tr><td>CGST @${(taxRatePct / 2).toFixed(1)}%</td><td class="right">₹ ${formatINR(taxAmount / 2)}</td></tr>
-      <tr><td>SGST @${(taxRatePct / 2).toFixed(1)}%</td><td class="right">₹ ${formatINR(taxAmount / 2)}</td></tr>`
-    : `<tr><td>IGST @${taxRatePct.toFixed(1)}%</td><td class="right">₹ ${formatINR(taxAmount)}</td></tr>`;
+  // Multi-rate GST grouping
+  const rateMap = new Map();
+  for (const item of items) {
+    const rate = Number(item.rate ?? 0);
+    const qty = Number(item.quantity ?? 0);
+    const gstRate = Number(item.gst_rate ?? 0);
+    const taxable = qty * rate;
+    const tax = taxable * (gstRate / 100);
+
+    if (!rateMap.has(gstRate)) {
+      rateMap.set(gstRate, { gstRate, taxable: 0, tax: 0 });
+    }
+    const entry = rateMap.get(gstRate);
+    entry.taxable += taxable;
+    entry.tax += tax;
+  }
+
+  const sortedRates = Array.from(rateMap.values()).sort((a, b) => b.gstRate - a.gstRate);
+
+  let taxRows = '';
+  if (sortedRates.length === 0 || sortedRates.every((r) => r.tax === 0)) {
+    if (isSplit) {
+      taxRows = `
+        <tr><td>CGST (0%)</td><td class="right">₹ 0.00</td></tr>
+        <tr><td>SGST (0%)</td><td class="right">₹ 0.00</td></tr>`;
+    } else {
+      taxRows = `<tr><td>IGST (0%)</td><td class="right">₹ 0.00</td></tr>`;
+    }
+  } else {
+    taxRows = sortedRates
+      .filter((r) => r.tax > 0)
+      .map((r) => {
+        if (isSplit) {
+          const halfRate = (r.gstRate / 2).toFixed(Number.isInteger(r.gstRate / 2) ? 0 : 1);
+          const halfTax = r.tax / 2;
+          return `
+            <tr><td>CGST @${halfRate}%</td><td class="right">₹ ${formatINR(halfTax)}</td></tr>
+            <tr><td>SGST @${halfRate}%</td><td class="right">₹ ${formatINR(halfTax)}</td></tr>`;
+        } else {
+          const fullRate = Number.isInteger(r.gstRate) ? r.gstRate : r.gstRate.toFixed(1);
+          return `<tr><td>IGST @${fullRate}%</td><td class="right">₹ ${formatINR(r.tax)}</td></tr>`;
+        }
+      })
+      .join('');
+  }
+
+  // HSN Tax Breakdown
+  const hsnMap = new Map();
+  for (const item of items) {
+    const hsn = (item.hsn_code || '—').trim();
+    const rate = Number(item.rate ?? 0);
+    const qty = Number(item.quantity ?? 0);
+    const gstRate = Number(item.gst_rate ?? 0);
+    const taxable = qty * rate;
+    const tax = taxable * (gstRate / 100);
+
+    const key = `${hsn}_${gstRate}`;
+    if (!hsnMap.has(key)) {
+      hsnMap.set(key, { hsn, gstRate, taxable: 0, tax: 0 });
+    }
+    const entry = hsnMap.get(key);
+    entry.taxable += taxable;
+    entry.tax += tax;
+  }
+  const hsnRows = Array.from(hsnMap.values());
 
   const signatureBlock = business?.signature_image
     ? `<img class="sig-image" src="${business.signature_image}" alt="Signature" />`
@@ -104,6 +167,19 @@ export function buildQuotationHtml({ business, quotation, items }) {
   .bank-details { margin-top: 18px; }
   .bank-details table td { padding: 2px 0; vertical-align: top; }
   .bank-details table td:first-child { padding-right: 10px; color: #777; }
+  .tax-summary-table { width: 100%; border-collapse: collapse; margin-top: 5px; font-size: 9.5px; }
+  .tax-summary-table th {
+    background: #f8fafc; color: #475569; font-size: 8.5px; font-weight: 700;
+    padding: 4px 6px; border-bottom: 1.5px solid #cbd5e1; text-align: left;
+    text-transform: uppercase; letter-spacing: 0.3px;
+  }
+  .tax-summary-table td {
+    padding: 4px 6px; border-bottom: 1px solid #f1f5f9; vertical-align: middle;
+  }
+  .tax-summary-table .right { text-align: right; }
+  .tax-summary-table .summary-total-row td {
+    background: #f1f5f9; border-top: 1.5px solid #94a3b8; font-weight: 700;
+  }
   .totals-box table { width: 100%; }
   .totals-box td { padding: 4px 0; }
   .totals-box .total-row td { border-top: 2px solid #1f2430; font-weight: 800; font-size: 13.5px; padding-top: 8px; color: ${ACCENT}; }
@@ -136,6 +212,7 @@ export function buildQuotationHtml({ business, quotation, items }) {
         <table>
           <tr><td>Quotation No.</td><td>${quotation.id}</td></tr>
           <tr><td>Date</td><td>${new Date(quotation.quotation_date).toLocaleDateString('en-GB')}</td></tr>
+          ${formattedPlaceOfSupply ? `<tr><td>Place of Supply</td><td>${escapeHtml(formattedPlaceOfSupply)}</td></tr>` : ''}
         </table>
       </div>
     </div>
@@ -149,7 +226,7 @@ export function buildQuotationHtml({ business, quotation, items }) {
       ${quotation.bill_to_mobile ? `<div>Mobile: ${escapeHtml(quotation.bill_to_mobile)}</div>` : ''}
       ${quotation.bill_to_gstin ? `<div>GSTIN: ${escapeHtml(quotation.bill_to_gstin)}</div>` : ''}
       ${quotation.bill_to_pan ? `<div>PAN: ${escapeHtml(quotation.bill_to_pan)}</div>` : ''}
-      ${quotation.place_of_supply ? `<div>Place of Supply: ${escapeHtml(quotation.place_of_supply)}</div>` : ''}
+      ${formattedPlaceOfSupply ? `<div><strong>Place of Supply:</strong> ${escapeHtml(formattedPlaceOfSupply)}</div>` : ''}
     </div>
     <div class="party">
       <span class="tag">SHIP TO</span>
@@ -184,6 +261,58 @@ export function buildQuotationHtml({ business, quotation, items }) {
 
   <div class="bottom">
     <div class="bottom-left">
+      ${hsnRows.length > 0 ? `
+      <div class="tax-summary-section" style="margin-bottom: 14px;">
+        <div class="section-title">HSN / GST Tax Summary</div>
+        <table class="tax-summary-table">
+          <thead>
+            <tr>
+              <th>HSN/SAC</th>
+              <th class="right">Taxable Val</th>
+              ${isSplit ? `
+                <th class="right">CGST</th>
+                <th class="right">SGST</th>
+              ` : `
+                <th class="right">IGST</th>
+              `}
+              <th class="right">Total Tax</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${hsnRows.map((r) => {
+              const halfTax = r.tax / 2;
+              const halfRate = (r.gstRate / 2).toFixed(Number.isInteger(r.gstRate / 2) ? 0 : 1);
+              const fullRate = Number.isInteger(r.gstRate) ? r.gstRate : r.gstRate.toFixed(1);
+              return `
+                <tr>
+                  <td>${escapeHtml(r.hsn)}</td>
+                  <td class="right">₹ ${formatINR(r.taxable)}</td>
+                  ${isSplit ? `
+                    <td class="right">${halfRate}% (₹${formatINR(halfTax)})</td>
+                    <td class="right">${halfRate}% (₹${formatINR(halfTax)})</td>
+                  ` : `
+                    <td class="right">${fullRate}% (₹${formatINR(r.tax)})</td>
+                  `}
+                  <td class="right strong">₹ ${formatINR(r.tax)}</td>
+                </tr>
+              `;
+            }).join('')}
+            <tr class="summary-total-row">
+              <td><strong>Total</strong></td>
+              <td class="right strong">₹ ${formatINR(subtotal)}</td>
+              ${isSplit ? `
+                <td class="right strong">₹ ${formatINR(taxAmount / 2)}</td>
+                <td class="right strong">₹ ${formatINR(taxAmount / 2)}</td>
+              ` : `
+                <td class="right strong">₹ ${formatINR(taxAmount)}</td>
+              `}
+              <td class="right strong">₹ ${formatINR(taxAmount)}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      ` : ''}
+
       <div class="section-title">Terms &amp; Conditions</div>
       <div>${multiline(quotation.terms_and_conditions || '')}</div>
 
@@ -203,12 +332,18 @@ export function buildQuotationHtml({ business, quotation, items }) {
         <table>
           <tr><td>Taxable Amount</td><td class="right">₹ ${formatINR(subtotal)}</td></tr>
           ${taxRows}
-          <tr class="total-row"><td>Total Amount</td><td class="right">₹ ${formatINR(total)}</td></tr>
+          ${Math.abs(roundOff) >= 0.005 ? `
+          <tr>
+            <td style="color: #64748b;">Round Off</td>
+            <td class="right" style="color: #64748b;">${roundOff >= 0 ? '+' : ''}₹ ${formatINR(roundOff)}</td>
+          </tr>
+          ` : ''}
+          <tr class="total-row"><td>Total Amount</td><td class="right">₹ ${formatINR(finalGrandTotal)}</td></tr>
         </table>
       </div>
       <div class="words">
         <div class="label">Total Amount (in words)</div>
-        <div>${amountToWords(total)}</div>
+        <div>${amountToWords(finalGrandTotal)}</div>
       </div>
       <div class="signature">
         ${signatureBlock}

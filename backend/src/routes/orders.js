@@ -10,19 +10,20 @@ const router = Router();
 const ORDER_SELECT = `
   SELECT orders.*, contacts.name, contacts.phone, contacts.city,
          contacts.gstin, contacts.pan, contacts.billing_address, contacts.shipping_address, contacts.state,
-         COALESCE(item_totals.total_amount, 0) AS total_amount,
-         COALESCE(item_totals.tax_amount, 0) AS tax_amount,
-         COALESCE(item_totals.total_amount, 0) + COALESCE(item_totals.tax_amount, 0) AS grand_total,
+         orders.place_of_supply, orders.tax_mode, orders.round_off,
+         ROUND(COALESCE(item_totals.total_amount, 0)::numeric, 2) AS total_amount,
+         ROUND(COALESCE(item_totals.tax_amount, 0)::numeric, 2) AS tax_amount,
+         ROUND((COALESCE(item_totals.total_amount, 0) + COALESCE(item_totals.tax_amount, 0) + COALESCE(orders.round_off, 0))::numeric, 2) AS grand_total,
           COALESCE(
             CASE 
-              WHEN orders.payment_status = 'paid' THEN (COALESCE(item_totals.total_amount, 0) + COALESCE(item_totals.tax_amount, 0))
+              WHEN orders.payment_status = 'paid' THEN ROUND((COALESCE(item_totals.total_amount, 0) + COALESCE(item_totals.tax_amount, 0) + COALESCE(orders.round_off, 0))::numeric, 2)
               ELSE COALESCE(pay_totals.received_amount, 0)
             END, 0
           ) AS received_amount,
           COALESCE(cn_totals.credited_amount, 0) AS credited_amount,
           CASE
             WHEN orders.payment_status = 'paid' THEN 0
-            ELSE GREATEST(0, (COALESCE(item_totals.total_amount, 0) + COALESCE(item_totals.tax_amount, 0)) - COALESCE(pay_totals.received_amount, 0) - COALESCE(cn_totals.credited_amount, 0))
+            ELSE GREATEST(0, ROUND((COALESCE(item_totals.total_amount, 0) + COALESCE(item_totals.tax_amount, 0) + COALESCE(orders.round_off, 0))::numeric, 2) - COALESCE(pay_totals.received_amount, 0) - COALESCE(cn_totals.credited_amount, 0))
           END AS balance_due,
           COALESCE(pay_totals.payments_list, '[]'::json) AS payments_list,
           COALESCE(cn_totals.credit_notes_list, '[]'::json) AS credit_notes_list,
@@ -31,8 +32,8 @@ const ORDER_SELECT = `
   JOIN contacts ON contacts.id = orders.contact_id
   LEFT JOIN (
     SELECT oi.order_id,
-           SUM(oi.quantity * oi.unit_price) AS total_amount,
-           SUM(oi.quantity * oi.unit_price * COALESCE(oi.gst_rate, 0) / 100) AS tax_amount,
+           SUM(ROUND((oi.quantity * oi.unit_price)::numeric, 2)) AS total_amount,
+           SUM(ROUND((oi.quantity * oi.unit_price * COALESCE(oi.gst_rate, 0) / 100.0)::numeric, 2)) AS tax_amount,
            json_agg(json_build_object(
              'product_name', oi.product_name,
              'quantity', oi.quantity,
@@ -140,6 +141,7 @@ router.post('/', async (req, res) => {
     phone, name, city, call_id, notes, items, payment_status, payment_method,
     gstin, pan, billing_address, shipping_address, state,
     create_invoice, invoice_number, invoice_date, order_ref,
+    place_of_supply, tax_mode,
   } = req.body;
 
   if (!phone) return res.status(400).json({ error: 'phone is required' });
@@ -159,6 +161,32 @@ router.post('/', async (req, res) => {
     const contact = await findOrCreateContact(client, {
       phone, name, city, gstin, pan, billing_address, shipping_address, state,
     });
+
+    const bpRes = await client.query('SELECT state FROM business_profile WHERE id = 1');
+    const sellerState = (bpRes.rows[0]?.state || 'Gujarat').trim();
+    const effectivePlaceOfSupply = (place_of_supply || state || contact.state || sellerState).trim();
+    const effectiveTaxMode = tax_mode || (
+      effectivePlaceOfSupply.toLowerCase() === sellerState.toLowerCase() ? 'split' : 'igst'
+    );
+
+    // Calculate subtotal, tax amount, and automatic cash round-off
+    let calculatedSubtotal = 0;
+    let calculatedTax = 0;
+    for (const item of items) {
+      const q = Number(item.quantity || 0);
+      const p = Number(item.unit_price || 0);
+      const g = Number(item.gst_rate || 0);
+      const lineBase = Math.round(q * p * 100) / 100;
+      const lineTax = Math.round(lineBase * (g / 100) * 100) / 100;
+      calculatedSubtotal += lineBase;
+      calculatedTax += lineTax;
+    }
+    const rawTotal = calculatedSubtotal + calculatedTax;
+    const roundedTotal = Math.round(rawTotal);
+    const calculatedRoundOff = Number((roundedTotal - rawTotal).toFixed(2));
+    const effectiveRoundOff = (req.body.round_off !== undefined && req.body.round_off !== null)
+      ? Number(req.body.round_off)
+      : calculatedRoundOff;
 
     const paidNow = payment_status === 'paid';
     const effectiveInvoiceDate = invoice_date || new Date().toISOString().split('T')[0];
@@ -200,10 +228,13 @@ router.post('/', async (req, res) => {
       }
     }
 
-    // Insert order record (order_number initialized blank, then set to ORD-XXXXX)
+    // Insert order record with frozen place_of_supply, tax_mode, and round_off
     const orderResult = await client.query(
-      `INSERT INTO orders (contact_id, call_id, order_number, invoice_number, invoice_date, order_ref, notes, payment_status, payment_method)
-       VALUES ($1, $2, '', $3, $4, $5, $6, $7, $8) RETURNING *`,
+      `INSERT INTO orders (
+         contact_id, call_id, order_number, invoice_number, invoice_date, order_ref, notes,
+         payment_status, payment_method, place_of_supply, tax_mode, round_off
+       )
+       VALUES ($1, $2, '', $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING *`,
       [
         contact.id,
         call_id || null,
@@ -213,6 +244,9 @@ router.post('/', async (req, res) => {
         notes || null,
         paidNow ? 'paid' : 'pending',
         payment_method || (paidNow ? 'other' : null),
+        effectivePlaceOfSupply,
+        effectiveTaxMode,
+        effectiveRoundOff,
       ]
     );
     const order = orderResult.rows[0];
@@ -231,12 +265,7 @@ router.post('/', async (req, res) => {
 
     // If paid now, record the payment in payments table so the party ledger accurately reflects the credit
     if (paidNow) {
-      const totalRes = await client.query(
-        `SELECT SUM(quantity * unit_price) + SUM(quantity * unit_price * COALESCE(gst_rate, 0) / 100) AS grand_total
-         FROM order_items WHERE order_id = $1`,
-        [order.id]
-      );
-      const grandTotal = Number(totalRes.rows[0]?.grand_total || 0);
+      const grandTotal = roundedTotal;
       if (grandTotal > 0) {
         const seqRes = await client.query(
           `SELECT COALESCE(MAX(NULLIF(regexp_replace(receipt_number, '\\D', '', 'g'), '')::INT), 0) + 1 AS next_seq

@@ -375,10 +375,27 @@ router.post('/:id/convert-to-invoice', async (req, res) => {
     const effectiveInvoiceDate = invoice_date || new Date().toISOString().split('T')[0];
     const isPaid = payment_status === 'paid';
 
+    // Calculate subtotal, tax amount, and automatic cash round-off
+    let calculatedSubtotal = 0;
+    let calculatedTax = 0;
+    for (const item of finalItems) {
+      const q = Number(item.quantity || 0);
+      const p = Number(item.unit_price || 0);
+      const g = Number(item.gst_rate || 0);
+      calculatedSubtotal += q * p;
+      calculatedTax += q * p * (g / 100);
+    }
+    const rawTotal = calculatedSubtotal + calculatedTax;
+    const roundedTotal = Math.round(rawTotal);
+    const calculatedRoundOff = Number((roundedTotal - rawTotal).toFixed(2));
+
     // 4. Create Order / Invoice record linked to quotation_id and order_ref
     const orderRes = await client.query(
-      `INSERT INTO orders (contact_id, quotation_id, order_number, invoice_number, invoice_date, order_ref, notes, payment_status, payment_method)
-       VALUES ($1, $2, '', $3, $4, $5, $6, $7, $8) RETURNING *`,
+      `INSERT INTO orders (
+         contact_id, quotation_id, order_number, invoice_number, invoice_date, order_ref, notes,
+         payment_status, payment_method, place_of_supply, tax_mode, round_off
+       )
+       VALUES ($1, $2, '', $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING *`,
       [
         quotation.contact_id,
         quotationId,
@@ -388,9 +405,28 @@ router.post('/:id/convert-to-invoice', async (req, res) => {
         notes || (quotation.terms_and_conditions ? `From Quotation #${quotationId}` : null),
         isPaid ? 'paid' : 'pending',
         isPaid ? (payment_method || 'cash') : null,
+        quotation.place_of_supply || 'Gujarat',
+        quotation.tax_mode || 'split',
+        calculatedRoundOff,
       ]
     );
     const newOrder = orderRes.rows[0];
+
+    if (isPaid && roundedTotal > 0) {
+      const seqRes = await client.query(
+        `SELECT COALESCE(MAX(NULLIF(regexp_replace(receipt_number, '\\D', '', 'g'), '')::INT), 0) + 1 AS next_seq
+         FROM payments WHERE receipt_number IS NOT NULL`
+      );
+      const receiptNum = `REC-${String(seqRes.rows[0]?.next_seq || 1).padStart(4, '0')}`;
+      const pMode = (payment_method && ['cash', 'upi', 'bank_transfer', 'card', 'cheque'].includes(payment_method))
+        ? payment_method
+        : 'cash';
+      await client.query(
+        `INSERT INTO payments (contact_id, order_id, amount, payment_mode, method, receipt_number, paid_at)
+         VALUES ($1, $2, $3, $4, $4, $5, now())`,
+        [quotation.contact_id, newOrder.id, roundedTotal, pMode, receiptNum]
+      );
+    }
 
     // Standard Call Intelligence order number ORD-XXXXX
     const generatedOrderNumber = `ORD-${String(newOrder.id).padStart(5, '0')}`;

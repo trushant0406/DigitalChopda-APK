@@ -127,3 +127,20 @@ export function determineTaxMode({ businessGstin, businessState, customerGstin, 
   // Default within domestic trade is intra-state (split)
   return 'split';
 }
+
+/**
+ * Formats a state name, GSTIN, or raw code into canonical Indian GST format: "24 - Gujarat"
+ */
+export function formatPlaceOfSupply(stateOrGstin) {
+  if (!stateOrGstin) return '';
+  const str = String(stateOrGstin).trim();
+  const match = str.match(/^(\d{2})\s*[-:]\s*(.+)$/);
+  if (match && GST_STATE_CODES[match[1]]) {
+    return `${match[1]} - ${GST_STATE_CODES[match[1]]}`;
+  }
+  const code = resolveStateCode(null, str) || resolveStateCode(str, null);
+  if (code && GST_STATE_CODES[code]) {
+    return `${code} - ${GST_STATE_CODES[code]}`;
+  }
+  return str;
+}

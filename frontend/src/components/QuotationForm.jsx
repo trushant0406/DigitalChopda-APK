@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { api } from '../api';
 import QuotationItemsEditor from './QuotationItemsEditor';
-import BusinessDetailsFields from './BusinessDetailsFields';
+import BusinessDetailsFields, { resolveStateCode, formatPlaceOfSupply } from './BusinessDetailsFields';
 import { emptyQuotationItem, quotationTotals } from '../quotationItems';
 
 export default function QuotationForm({ onCreated, presetContact }) {
@@ -11,6 +11,7 @@ export default function QuotationForm({ onCreated, presetContact }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [isCreatingNew, setIsCreatingNew] = useState(false);
+  const [sellerProfile, setSellerProfile] = useState(null);
 
   const [phone, setPhone] = useState(presetContact?.phone || '');
   const [name, setName] = useState(presetContact?.name || '');
@@ -48,7 +49,10 @@ export default function QuotationForm({ onCreated, presetContact }) {
 
   useEffect(() => {
     loadContacts();
-    api.getBusinessProfile().then((p) => p?.terms_and_conditions && setTerms(p.terms_and_conditions)).catch(() => {});
+    api.getBusinessProfile().then((p) => {
+      setSellerProfile(p);
+      if (p?.terms_and_conditions) setTerms(p.terms_and_conditions);
+    }).catch(() => {});
   }, []);
 
   // Close dropdown on outside click
@@ -119,6 +123,38 @@ export default function QuotationForm({ onCreated, presetContact }) {
 
   const hasGstOnFile = Boolean(business.gstin || business.billing_address);
 
+  const customerGstin = business.gstin || selectedContact?.gstin || '';
+  const customerState = business.state || selectedContact?.state || '';
+  const sellerCode = resolveStateCode(sellerProfile?.gstin, sellerProfile?.state) || '24';
+  const buyerCode = resolveStateCode(customerGstin, customerState);
+
+  const effectivePlaceOfSupply = formatPlaceOfSupply(customerGstin, customerState) ||
+    (customerState ? customerState : '24 - Gujarat');
+
+  const isInterState = buyerCode
+    ? buyerCode !== sellerCode
+    : (customerState ? customerState.trim().toLowerCase() !== (sellerProfile?.state || 'gujarat').toLowerCase() : false);
+  const taxMode = isInterState ? 'igst' : 'split';
+
+  const rawSubtotal = totals.subtotal;
+  const rawTax = totals.taxAmount;
+  const rawTotal = totals.total;
+  const roundedTotal = Math.round(rawTotal);
+  const roundOff = Number((roundedTotal - rawTotal).toFixed(2));
+
+  const taxByRate = items.reduce((acc, item) => {
+    const qty = Number(item.quantity || 0);
+    const rate = Number(item.rate || 0);
+    const gstRate = Number(item.gst_rate || 0);
+    const taxable = qty * rate;
+    const tax = taxable * (gstRate / 100);
+    if (tax > 0) {
+      if (!acc[gstRate]) acc[gstRate] = 0;
+      acc[gstRate] += tax;
+    }
+    return acc;
+  }, {});
+
   async function handleSubmit(e) {
     e.preventDefault();
     setSaving(true);
@@ -135,6 +171,8 @@ export default function QuotationForm({ onCreated, presetContact }) {
         billing_address: business.billing_address || undefined,
         shipping_address: effectiveShipping || undefined,
         state: business.state || undefined,
+        place_of_supply: effectivePlaceOfSupply,
+        tax_mode: taxMode,
         ship_to_name: name || undefined,
         ship_to_address: effectiveShipping || undefined,
         items: items.map((i) => ({
@@ -350,13 +388,75 @@ export default function QuotationForm({ onCreated, presetContact }) {
         </label>
       )}
 
+      {/* PLACE OF SUPPLY & STATUTORY TAX MODE INDICATOR */}
+      <div className="pos-indicator-badge">
+        <div className="pos-title">
+          <span>📍</span>
+          <span>Place of Supply:</span>
+          <span className="pos-name">{effectivePlaceOfSupply}</span>
+        </div>
+        <div className={`tax-mode-tag ${isInterState ? 'tag-inter' : 'tag-intra'}`}>
+          {isInterState ? '⚡ Inter-State (IGST Applicable)' : '🏛️ Intra-State (CGST + SGST Applicable)'}
+        </div>
+      </div>
+
       {/* ITEMS EDITOR */}
       <fieldset>
         <legend>Items</legend>
         <QuotationItemsEditor items={items} onChange={setItems} />
-        <p className="order-total">
-          Subtotal ₹{totals.subtotal.toFixed(2)} + Tax ₹{totals.taxAmount.toFixed(2)} = Total ₹{totals.total.toFixed(2)}
-        </p>
+        
+        <div className="invoice-live-summary-card">
+          <div className="invoice-live-summary-title">
+            Statutory GST Quotation Summary ({taxMode === 'split' ? 'Intra-State: CGST + SGST' : 'Inter-State: IGST'})
+          </div>
+          <div className="invoice-summary-row">
+            <span>Taxable Subtotal</span>
+            <strong>₹{rawSubtotal.toFixed(2)}</strong>
+          </div>
+          {Object.entries(taxByRate).length === 0 ? (
+            <div className="invoice-summary-row muted">
+              <span>{taxMode === 'split' ? 'CGST + SGST (0%)' : 'IGST (0%)'}</span>
+              <span>₹0.00</span>
+            </div>
+          ) : (
+            Object.entries(taxByRate).map(([rateStr, tax]) => {
+              const rateNum = Number(rateStr);
+              if (taxMode === 'split') {
+                const halfRate = (rateNum / 2).toFixed(Number.isInteger(rateNum / 2) ? 0 : 1);
+                const halfTax = (tax / 2).toFixed(2);
+                return (
+                  <div key={rateStr}>
+                    <div className="invoice-summary-row">
+                      <span>CGST @ {halfRate}%</span>
+                      <span>₹{halfTax}</span>
+                    </div>
+                    <div className="invoice-summary-row">
+                      <span>SGST @ {halfRate}%</span>
+                      <span>₹{halfTax}</span>
+                    </div>
+                  </div>
+                );
+              } else {
+                return (
+                  <div key={rateStr} className="invoice-summary-row">
+                    <span>IGST @ {rateNum}%</span>
+                    <span>₹{tax.toFixed(2)}</span>
+                  </div>
+                );
+              }
+            })
+          )}
+          {Math.abs(roundOff) >= 0.005 && (
+            <div className="invoice-summary-row round-off">
+              <span>Round Off (Auto Cash)</span>
+              <span>{roundOff >= 0 ? `+₹${roundOff.toFixed(2)}` : `-₹${Math.abs(roundOff).toFixed(2)}`}</span>
+            </div>
+          )}
+          <div className="invoice-summary-total-row">
+            <span>Grand Total (Payable)</span>
+            <span className="total-val">₹{roundedTotal.toFixed(2)}</span>
+          </div>
+        </div>
       </fieldset>
 
       {/* TERMS & CONDITIONS */}

@@ -1,4 +1,4 @@
-const GST_STATE_CODES = {
+export const GST_STATE_CODES = {
   '01': 'Jammu & Kashmir', '02': 'Himachal Pradesh', '03': 'Punjab', '04': 'Chandigarh',
   '05': 'Uttarakhand', '06': 'Haryana', '07': 'Delhi', '08': 'Rajasthan',
   '09': 'Uttar Pradesh', '10': 'Bihar', '11': 'Sikkim', '12': 'Arunachal Pradesh',
@@ -9,6 +9,36 @@ const GST_STATE_CODES = {
   '30': 'Goa', '31': 'Lakshadweep', '32': 'Kerala', '33': 'Tamil Nadu',
   '34': 'Puducherry', '36': 'Telangana', '37': 'Andhra Pradesh', '38': 'Ladakh'
 };
+
+export function resolveStateCode(gstin, stateName) {
+  if (gstin) {
+    const cleaned = String(gstin).trim().toUpperCase();
+    const prefix = cleaned.slice(0, 2);
+    if (/^\d{2}$/.test(prefix) && GST_STATE_CODES[prefix]) {
+      return prefix;
+    }
+  }
+  if (stateName) {
+    const cleaned = String(stateName).trim().toLowerCase();
+    if (/^\d{2}$/.test(cleaned) && GST_STATE_CODES[cleaned]) {
+      return cleaned;
+    }
+    for (const [code, name] of Object.entries(GST_STATE_CODES)) {
+      if (name.toLowerCase() === cleaned || cleaned.includes(name.toLowerCase())) {
+        return code;
+      }
+    }
+  }
+  return null;
+}
+
+export function formatPlaceOfSupply(gstin, stateName) {
+  const code = resolveStateCode(gstin, stateName);
+  if (code && GST_STATE_CODES[code]) {
+    return `${code} - ${GST_STATE_CODES[code]}`;
+  }
+  return stateName || '';
+}
 
 export default function BusinessDetailsFields({ value, onChange }) {
   function set(field) {
