@@ -3,14 +3,54 @@ services:
     image: postgres:16-alpine
     restart: unless-stopped
     environment:
-      POSTGRES_USER: callintel
-      POSTGRES_PASSWORD: callintel
-      POSTGRES_DB: callintel
-    ports:
-      - "5432:5432"
+      POSTGRES_USER: ${POSTGRES_USER:-callintel}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-callintel}
+      POSTGRES_DB: ${POSTGRES_DB:-callintel}
     volumes:
       - pgdata:/var/lib/postgresql/data
-      - ./db/migrations:/docker-entrypoint-initdb.d
+      - ./db/migrations:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-callintel} -d ${POSTGRES_DB:-callintel}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-callintel}:${POSTGRES_PASSWORD:-callintel}@db:5432/${POSTGRES_DB:-callintel}
+      PORT: 4000
+      CHROME_PATH: /usr/bin/chromium
+      PUPPETEER_SKIP_CHROMIUM_DOWNLOAD: "true"
+      VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:-BAzn7LGy6dGVKArSZuhkP_4OTCePSwEMCZ1v1yflIRiywwIp56tfMq45W7OiNrhB4EP_T4TPpm-sA-jZ2kwwhDg}
+      VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:-XkwbRSCeiQtrF9ulQBKgb7verKDMD68N0AeUIlIAceQ}
+      VAPID_SUBJECT: ${VAPID_SUBJECT:-mailto:admin@digitalchopda.in}
+      REMINDER_POLL_SECONDS: ${REMINDER_POLL_SECONDS:-60}
+      JWT_SECRET: ${JWT_SECRET:-callintel_secret_key_2026_super_secure}
+    volumes:
+      - backend_uploads:/app/uploads
+      - backend_wwebjs:/app/.wwebjs_auth
+      - ./db/migrations:/app/db/migrations:ro
+    expose:
+      - "4000"
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "${PORT_HTTP:-3000}:80"
 
 volumes:
   pgdata:
+  backend_uploads:
+  backend_wwebjs:

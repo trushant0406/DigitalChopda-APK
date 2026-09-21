@@ -11,8 +11,10 @@ const pool = new pg.Pool({ connectionString });
 async function runMigrations() {
   const client = await pool.connect();
   try {
-    console.log('Connecting to database...');
-    const migrationsDir = path.resolve(process.cwd(), '../db/migrations');
+    const defaultDir = fs.existsSync(path.resolve(process.cwd(), 'db/migrations'))
+      ? path.resolve(process.cwd(), 'db/migrations')
+      : path.resolve(process.cwd(), '../db/migrations');
+    const migrationsDir = process.env.MIGRATIONS_DIR || defaultDir;
     
     if (!fs.existsSync(migrationsDir)) {
       console.error(`Migrations directory not found at: ${migrationsDir}`);
