@@ -13,8 +13,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-# Point Puppeteer to system Chromium
-ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true \
+# Point Puppeteer to system Chromium and prevent downloading bundled Chrome
+ENV PUPPETEER_SKIP_DOWNLOAD=true \
+    PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true \
     CHROME_PATH=/usr/bin/chromium \
     NODE_ENV=production
 
@@ -24,8 +25,8 @@ WORKDIR /app
 COPY package*.json ./
 COPY scripts/ ./scripts/
 
-# Install production dependencies
-RUN npm install --omit=dev
+# Install production dependencies and clean cache to save disk space
+RUN npm install --omit=dev && npm cache clean --force && rm -rf /root/.cache
 
 # Copy application source
 COPY src/ ./src/
