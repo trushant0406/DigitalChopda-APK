@@ -5,6 +5,7 @@ import { buildQuotationHtml } from '../pdf/quotationHtml.js';
 import { renderHtmlToPdf } from '../pdf/renderPdf.js';
 import { sendWhatsAppDocument } from '../notify/whatsapp.js';
 import { calculateNextInvoiceNumber } from './orders.js';
+import { storageService } from '../storage/storageService.js';
 
 const router = Router();
 
@@ -197,9 +198,30 @@ router.get('/:id/pdf', async (req, res) => {
     const quotation = await loadFullQuotation(req.params.id);
     if (!quotation) return res.status(404).json({ error: 'Quotation not found' });
     const business = await loadBusinessProfile();
+    const cacheKey = `quotations/Quotation-${quotation.id}.pdf`;
+
+    // 1. Return cached PDF from object storage if present
+    if (await storageService.exists(cacheKey)) {
+      try {
+        const cachedPdf = await storageService.getFileBuffer(cacheKey);
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader('Content-Disposition', `inline; filename="Quotation-${quotation.id}.pdf"`);
+        return res.send(cachedPdf);
+      } catch (cacheErr) {
+        console.warn('[Storage] Failed to read cached quotation PDF, regenerating:', cacheErr.message);
+      }
+    }
 
     const html = buildQuotationHtml({ business, quotation, items: quotation.items });
     const pdf = await renderHtmlToPdf(html);
+
+    // Asynchronously save to storage cache (GCS, S3, or Local)
+    storageService.uploadFile({
+      key: cacheKey,
+      buffer: pdf,
+      contentType: 'application/pdf',
+      isPublic: true,
+    }).catch((e) => console.warn('[Storage] Failed to cache quotation PDF in storage:', e.message));
 
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `inline; filename="Quotation-${quotation.id}.pdf"`);
@@ -235,10 +257,23 @@ router.post('/:id/send-whatsapp', async (req, res) => {
     // Try sending actual PDF file attachment via WhatsApp Web Client (tokenless)
     let webResult = null;
     let webError = null;
+    const cacheKey = `quotations/Quotation-${quotation.id}.pdf`;
+    let pdf = null;
+    if (await storageService.exists(cacheKey)) {
+      try {
+        pdf = await storageService.getFileBuffer(cacheKey);
+      } catch (e) {
+        console.warn('[Storage] Failed to read cached quotation PDF, regenerating:', e.message);
+      }
+    }
+    if (!pdf) {
+      const html = buildQuotationHtml({ business, quotation, items: quotation.items });
+      pdf = await renderHtmlToPdf(html);
+      storageService.uploadFile({ key: cacheKey, buffer: pdf, contentType: 'application/pdf', isPublic: true }).catch(() => {});
+    }
+
     try {
       const { sendWhatsAppWebDocument } = await import('../notify/whatsappWebClient.js');
-      const html = buildQuotationHtml({ business, quotation, items: quotation.items });
-      const pdf = await renderHtmlToPdf(html);
       webResult = await sendWhatsAppWebDocument(quotation.bill_to_mobile, {
         pdfBuffer: pdf,
         filename: `Quotation-${quotation.id}.pdf`,
@@ -253,8 +288,6 @@ router.post('/:id/send-whatsapp', async (req, res) => {
     try {
       const { isWhatsAppConfigured, sendWhatsAppDocument } = await import('../notify/whatsapp.js');
       if (isWhatsAppConfigured()) {
-        const html = buildQuotationHtml({ business, quotation, items: quotation.items });
-        const pdf = await renderHtmlToPdf(html);
         apiResult = await sendWhatsAppDocument(quotation.bill_to_mobile, {
           pdfBuffer: pdf,
           filename: `Quotation-${quotation.id}.pdf`,

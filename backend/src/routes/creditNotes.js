@@ -3,6 +3,7 @@ import { pool } from '../db.js';
 import { renderHtmlToPdf } from '../pdf/renderPdf.js';
 import { buildCreditNoteHtml } from '../pdf/creditNoteHtml.js';
 import { sendWhatsAppWebDocument } from '../notify/whatsappWebClient.js';
+import { storageService } from '../storage/storageService.js';
 
 const router = Router();
 
@@ -451,6 +452,20 @@ router.get('/:id/pdf', async (req, res) => {
       return res.status(404).json({ error: 'Credit note not found' });
     }
     const creditNote = cnRes.rows[0];
+    const safeNumber = (creditNote.credit_note_number || `credit_note_${creditNote.id}`).replace(/[^a-zA-Z0-9_-]/g, '_');
+    const cacheKey = `credit-notes/Credit-Note-${safeNumber}.pdf`;
+
+    // 1. Return cached PDF from object storage if present
+    if (await storageService.exists(cacheKey)) {
+      try {
+        const cachedPdf = await storageService.getFileBuffer(cacheKey);
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader('Content-Disposition', `inline; filename="${safeNumber}.pdf"`);
+        return res.end(cachedPdf);
+      } catch (cacheErr) {
+        console.warn('[Storage] Failed to read cached credit note PDF, regenerating:', cacheErr.message);
+      }
+    }
 
     const [itemsRes, contactRes, business] = await Promise.all([
       pool.query('SELECT * FROM credit_note_items WHERE credit_note_id = $1 ORDER BY id ASC', [creditNote.id]),
@@ -464,7 +479,14 @@ router.get('/:id/pdf', async (req, res) => {
     const html = buildCreditNoteHtml({ business, creditNote, items, contact });
     const pdfBuffer = await renderHtmlToPdf(html);
 
-    const safeNumber = (creditNote.credit_note_number || `credit_note_${creditNote.id}`).replace(/[^a-zA-Z0-9_-]/g, '_');
+    // Asynchronously save to storage cache (GCS, S3, or Local)
+    storageService.uploadFile({
+      key: cacheKey,
+      buffer: pdfBuffer,
+      contentType: 'application/pdf',
+      isPublic: true,
+    }).catch((e) => console.warn('[Storage] Failed to cache credit note PDF in storage:', e.message));
+
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `inline; filename="${safeNumber}.pdf"`);
     res.end(pdfBuffer);
@@ -494,11 +516,23 @@ router.post('/:id/whatsapp', async (req, res) => {
       return res.status(400).json({ error: 'Customer phone number is missing' });
     }
 
-    const items = itemsRes.rows;
-    const html = buildCreditNoteHtml({ business, creditNote, items, contact });
-    const pdfBuffer = await renderHtmlToPdf(html);
+    const safeNumber = (creditNote.credit_note_number || `credit_note_${creditNote.id}`).replace(/[^a-zA-Z0-9_-]/g, '_');
+    const cacheKey = `credit-notes/Credit-Note-${safeNumber}.pdf`;
+    let pdfBuffer = null;
+    if (await storageService.exists(cacheKey)) {
+      try {
+        pdfBuffer = await storageService.getFileBuffer(cacheKey);
+      } catch (e) {
+        console.warn('[Storage] Failed to read cached credit note PDF for WhatsApp:', e.message);
+      }
+    }
+    if (!pdfBuffer) {
+      const html = buildCreditNoteHtml({ business, creditNote, items, contact });
+      pdfBuffer = await renderHtmlToPdf(html);
+      storageService.uploadFile({ key: cacheKey, buffer: pdfBuffer, contentType: 'application/pdf', isPublic: true }).catch(() => {});
+    }
 
-    const fileName = `${(creditNote.credit_note_number || 'Credit_Note').replace(/[^a-zA-Z0-9_-]/g, '_')}.pdf`;
+    const fileName = `${safeNumber}.pdf`;
     const caption = `Dear ${contact.name || 'Customer'},\n\nPlease find attached Credit Note ${creditNote.credit_note_number} for ₹${Number(creditNote.total_amount).toFixed(2)} (${creditNote.reason || 'Sales Return'}). This amount has been credited to your account ledger.\n\nThank you!`;
 
     const cleanPhone = (contact.phone || '').replace(/\D/g, '');

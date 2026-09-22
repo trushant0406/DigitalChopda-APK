@@ -33,10 +33,13 @@ services:
       VAPID_SUBJECT: ${VAPID_SUBJECT:-mailto:admin@digitalchopda.in}
       REMINDER_POLL_SECONDS: ${REMINDER_POLL_SECONDS:-60}
       JWT_SECRET: ${JWT_SECRET:-callintel_secret_key_2026_super_secure}
+    env_file:
+      - ./backend/.env
     volumes:
       - backend_uploads:/app/uploads
       - backend_wwebjs:/app/.wwebjs_auth
       - ./db/migrations:/app/db/migrations:ro
+      - ./backend/starry-district-319705-b9a9e523a82e.json:/app/starry-district-319705-b9a9e523a82e.json:ro
     expose:
       - "4000"
 

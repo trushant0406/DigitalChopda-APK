@@ -9,3 +9,8 @@ backend/.wwebjs_cache/
 dist/
 .DS_Store
 scratch/
+*.json
+!package.json
+!package-lock.json
+!tsconfig.json
+!jsconfig.json

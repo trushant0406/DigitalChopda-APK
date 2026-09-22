@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { pool } from '../db.js';
+import { storageService } from '../storage/storageService.js';
 
 const router = Router();
 
@@ -25,7 +26,28 @@ router.put('/', async (req, res) => {
   const bank_ifsc = req.body.bank_ifsc !== undefined ? req.body.bank_ifsc : (existing.bank_ifsc || null);
   const bank_branch = req.body.bank_branch !== undefined ? req.body.bank_branch : (existing.bank_branch || null);
   const terms_and_conditions = req.body.terms_and_conditions !== undefined ? req.body.terms_and_conditions : (existing.terms_and_conditions || null);
-  const signature_image = req.body.signature_image !== undefined ? req.body.signature_image : (existing.signature_image || null);
+  let signature_image = req.body.signature_image !== undefined ? req.body.signature_image : (existing.signature_image || null);
+
+  if (signature_image && typeof signature_image === 'string' && signature_image.startsWith('data:image/')) {
+    try {
+      const matches = signature_image.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
+      if (matches && matches.length === 3) {
+        const mimeType = matches[1];
+        const buffer = Buffer.from(matches[2], 'base64');
+        const ext = mimeType.split('/')[1]?.replace('+xml', '') || 'png';
+        const key = `signatures/signature_1_${Date.now()}.${ext}`;
+        const uploadResult = await storageService.uploadFile({
+          key,
+          buffer,
+          contentType: mimeType,
+          isPublic: true,
+        });
+        signature_image = uploadResult.url;
+      }
+    } catch (uploadErr) {
+      console.warn('[BusinessProfile] Signature upload to storage failed, preserving base64:', uploadErr.message);
+    }
+  }
 
   const prefix = req.body.invoice_prefix !== undefined ? (req.body.invoice_prefix || 'INV-').trim() : (existing.invoice_prefix || 'INV-');
   const nextNumber = req.body.invoice_next_number !== undefined ? Math.max(1, parseInt(req.body.invoice_next_number, 10) || 1) : (existing.invoice_next_number || 1);

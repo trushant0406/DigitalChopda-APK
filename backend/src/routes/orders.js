@@ -4,6 +4,7 @@ import { findOrCreateContact } from '../lib/contacts.js';
 import { buildInvoiceHtml } from '../pdf/invoiceHtml.js';
 import { renderHtmlToPdf } from '../pdf/renderPdf.js';
 import { getNextReceiptNumber } from './credit.js';
+import { storageService } from '../storage/storageService.js';
 
 const router = Router();
 
@@ -524,7 +525,16 @@ router.patch('/:id', async (req, res) => {
   }
 
   const full = await pool.query(`${ORDER_SELECT} WHERE orders.id = $1`, [req.params.id]);
-  res.json(full.rows[0]);
+  const updatedOrder = full.rows[0];
+
+  // Invalidate cached PDFs in Google Cloud Storage when order is modified
+  if (updatedOrder) {
+    const invNum = updatedOrder.invoice_number || updatedOrder.order_number || updatedOrder.id;
+    storageService.deleteFile(`invoices/Tax-Invoice-${invNum}.pdf`).catch(() => {});
+    storageService.deleteFile(`invoices/Tax-Invoice-${invNum}-paid.pdf`).catch(() => {});
+  }
+
+  res.json(updatedOrder);
 });
 
 async function loadFullOrder(id) {
@@ -544,13 +554,39 @@ router.get('/:id/pdf', async (req, res) => {
     if (!order) return res.status(404).json({ error: 'Invoice not found' });
     const business = await loadBusinessProfile();
     const showPaymentDetails = req.query.payment_details === 'true' || req.query.show_payments === 'true';
+    const invoiceNum = order.invoice_number || order.order_number || order.id;
+    const cacheKey = `invoices/Tax-Invoice-${invoiceNum}${showPaymentDetails ? '-paid' : ''}.pdf`;
+
+    // 1. Return cached PDF from object storage if present
+    if (await storageService.exists(cacheKey)) {
+      try {
+        const cachedPdf = await storageService.getFileBuffer(cacheKey);
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader(
+          'Content-Disposition',
+          `inline; filename="Tax-Invoice-${invoiceNum}.pdf"`
+        );
+        return res.send(cachedPdf);
+      } catch (cacheErr) {
+        console.warn('[Storage] Failed to read cached invoice PDF, regenerating:', cacheErr.message);
+      }
+    }
+
     const html = buildInvoiceHtml({ business, order, items: order.items, showPaymentDetails });
     const pdf = await renderHtmlToPdf(html);
+
+    // Asynchronously save to storage cache (GCS, S3, or Local)
+    storageService.uploadFile({
+      key: cacheKey,
+      buffer: pdf,
+      contentType: 'application/pdf',
+      isPublic: true,
+    }).catch((e) => console.warn('[Storage] Failed to cache invoice PDF in storage:', e.message));
 
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader(
       'Content-Disposition',
-      `inline; filename="Tax-Invoice-${order.invoice_number || order.order_number || order.id}.pdf"`
+      `inline; filename="Tax-Invoice-${invoiceNum}.pdf"`
     );
     res.send(pdf);
   } catch (err) {
@@ -589,8 +625,21 @@ router.post('/:id/send-whatsapp', async (req, res) => {
     let webError = null;
     try {
       const { sendWhatsAppWebDocument } = await import('../notify/whatsappWebClient.js');
-      const html = buildInvoiceHtml({ business, order, items: order.items });
-      const pdf = await renderHtmlToPdf(html);
+      const invoiceNum = order.invoice_number || order.order_number || order.id;
+      const cacheKey = `invoices/Tax-Invoice-${invoiceNum}.pdf`;
+      let pdf = null;
+      if (await storageService.exists(cacheKey)) {
+        try {
+          pdf = await storageService.getFileBuffer(cacheKey);
+        } catch (e) {
+          console.warn('[Storage] Failed to read cached PDF for WhatsApp, regenerating:', e.message);
+        }
+      }
+      if (!pdf) {
+        const html = buildInvoiceHtml({ business, order, items: order.items });
+        pdf = await renderHtmlToPdf(html);
+        storageService.uploadFile({ key: cacheKey, buffer: pdf, contentType: 'application/pdf', isPublic: true }).catch(() => {});
+      }
       webResult = await sendWhatsAppWebDocument(order.phone, {
         pdfBuffer: pdf,
         filename: `Invoice-${order.order_number || order.id}.pdf`,

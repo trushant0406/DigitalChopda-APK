@@ -4,6 +4,7 @@ import { renderHtmlToPdf } from '../pdf/renderPdf.js';
 import { buildStatementHtml } from '../pdf/statementHtml.js';
 import { buildPaymentReceiptHtml } from '../pdf/paymentReceiptHtml.js';
 import { sendWhatsAppWebText, sendWhatsAppWebDocument } from '../notify/whatsappWebClient.js';
+import { storageService } from '../storage/storageService.js';
 
 const router = Router();
 
@@ -866,6 +867,25 @@ router.get(['/payments/:id/receipt/pdf', '/payments/:id/pdf', '/receipts/:id/pdf
       // ignore
     }
 
+    const receiptNum = (payment.receipt_number || `REC_${payment.id}`).replace(/[^a-zA-Z0-9_-]/g, '_');
+    const filename = `${receiptNum}.pdf`;
+    const cacheKey = `receipts/Payment-Receipt-${receiptNum}.pdf`;
+
+    // 1. Return cached PDF from Google Cloud Storage if present
+    if (await storageService.exists(cacheKey)) {
+      try {
+        const cachedPdf = await storageService.getFileBuffer(cacheKey);
+        res.set({
+          'Content-Type': 'application/pdf',
+          'Content-Disposition': `inline; filename="${filename}"`,
+          'Content-Length': cachedPdf.length,
+        });
+        return res.send(cachedPdf);
+      } catch (cacheErr) {
+        console.warn('[Storage] Failed to read cached receipt PDF, regenerating:', cacheErr.message);
+      }
+    }
+
     const html = buildPaymentReceiptHtml({
       business,
       payment,
@@ -875,8 +895,14 @@ router.get(['/payments/:id/receipt/pdf', '/payments/:id/pdf', '/receipts/:id/pdf
     });
 
     const pdfBuffer = await renderHtmlToPdf(html);
-    const receiptNum = (payment.receipt_number || `REC_${payment.id}`).replace(/[^a-zA-Z0-9_-]/g, '_');
-    const filename = `${receiptNum}.pdf`;
+
+    // Asynchronously save to storage cache (GCS, S3, or Local)
+    storageService.uploadFile({
+      key: cacheKey,
+      buffer: pdfBuffer,
+      contentType: 'application/pdf',
+      isPublic: true,
+    }).catch((e) => console.warn('[Storage] Failed to cache receipt PDF in storage:', e.message));
 
     res.set({
       'Content-Type': 'application/pdf',
