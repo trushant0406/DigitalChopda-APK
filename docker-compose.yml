@@ -37,7 +37,10 @@ services:
       REMINDER_POLL_SECONDS: ${REMINDER_POLL_SECONDS:-60}
       JWT_SECRET: ${JWT_SECRET:-callintel_secret_key_2026_super_secure}
     env_file:
-      - ./backend/.env
+      - path: ./backend/.env
+        required: false
+      - path: .env
+        required: false
     volumes:
       - backend_uploads:/app/uploads
       - backend_wwebjs:/app/.wwebjs_auth
