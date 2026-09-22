@@ -995,11 +995,12 @@ router.post('/collect', async (req, res) => {
 
     const receiptNumber = await getNextReceiptNumber(client);
 
-    await client.query(
+    const payInsertRes = await client.query(
       `INSERT INTO payments (order_id, contact_id, amount, payment_mode, method, notes, receipt_number)
-       VALUES ($1, $2, $3, $4, $4, $5, $6)`,
+       VALUES ($1, $2, $3, $4, $4, $5, $6) RETURNING id`,
       [order_id, order.contact_id, amount, method || 'cash', notes || null, receiptNumber]
     );
+    const newPaymentId = payInsertRes.rows[0]?.id;
 
     const totals = await client.query(
       `SELECT
@@ -1020,6 +1021,16 @@ router.post('/collect', async (req, res) => {
     }
 
     await client.query('COMMIT');
+
+    // Eager background sync to Cloud Storage (myBillBook / Zoho style)
+    if (newPaymentId) {
+      setImmediate(() => {
+        syncPaymentReceiptPdf(newPaymentId).catch(() => {});
+        import('../storage/documentSync.js').then(({ syncInvoicePdf }) => {
+          syncInvoicePdf(order_id).catch(() => {});
+        }).catch(() => {});
+      });
+    }
     res.status(201).json({ total, collected, outstanding: Math.max(total - collected, 0) });
   } catch (err) {
     try {

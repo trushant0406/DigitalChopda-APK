@@ -38,15 +38,25 @@ export async function processDueFollowups() {
   return due.length;
 }
 
+let scheduledTask = null;
+
 export function startScheduler() {
   const seconds = Number(process.env.REMINDER_POLL_SECONDS) || 60;
   // node-cron has no plain "every N seconds" primitive under a minute; build it explicitly.
   const pattern = seconds < 60 ? `*/${seconds} * * * * *` : '* * * * *';
 
-  cron.schedule(pattern, async () => {
+  scheduledTask = cron.schedule(pattern, async () => {
     const count = await processDueFollowups();
     if (count > 0) console.log(`[scheduler] dispatched ${count} due follow-up(s)`);
   });
 
   console.log(`[scheduler] polling for due follow-ups every ${seconds}s`);
+}
+
+export function stopScheduler() {
+  if (scheduledTask) {
+    scheduledTask.stop();
+    scheduledTask = null;
+    console.log('[scheduler] Stopped reminder poll scheduler.');
+  }
 }

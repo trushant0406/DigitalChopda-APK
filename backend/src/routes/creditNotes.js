@@ -503,8 +503,8 @@ router.get('/:id/pdf', async (req, res) => {
   }
 });
 
-// POST /api/credit-notes/:id/whatsapp — send Credit Note PDF directly to customer
-router.post('/:id/whatsapp', async (req, res) => {
+// POST /api/credit-notes/:id/whatsapp (and alias /send-whatsapp) — send Credit Note PDF directly to customer
+router.post(['/:id/whatsapp', '/:id/send-whatsapp'], async (req, res) => {
   try {
     const cnRes = await pool.query('SELECT * FROM credit_notes WHERE id = $1', [req.params.id]);
     if (cnRes.rows.length === 0) {
@@ -519,6 +519,7 @@ router.post('/:id/whatsapp', async (req, res) => {
     ]);
 
     const contact = contactRes.rows[0] || {};
+    const items = itemsRes.rows;
     if (!contact.phone) {
       return res.status(400).json({ error: 'Customer phone number is missing' });
     }
@@ -640,6 +641,16 @@ router.delete('/:id', async (req, res) => {
 
     await client.query('COMMIT');
     inTransaction = false;
+
+    // Clean up credit note PDF from Cloud Storage and re-sync linked order invoice
+    const safeNumber = (creditNote.credit_note_number || `credit_note_${creditNote.id}`).replace(/[^a-zA-Z0-9_-]/g, '_');
+    storageService.deleteFile(`credit-notes/Credit-Note-${safeNumber}.pdf`).catch(() => {});
+    if (orderId) {
+      import('../storage/documentSync.js').then(({ syncInvoicePdf }) => {
+        syncInvoicePdf(orderId).catch(() => {});
+      }).catch(() => {});
+    }
+
     res.json({ success: true, message: `Credit note ${creditNote.credit_note_number} has been voided successfully.` });
   } catch (err) {
     if (inTransaction) {

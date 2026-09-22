@@ -238,6 +238,23 @@ export async function reconnectWhatsAppWeb(forceReset = false) {
   return getWhatsAppWebStatus();
 }
 
+export async function destroyWhatsAppWebClient() {
+  console.log('[whatsapp-web] Gracefully destroying client and cleaning sessions...');
+  if (client) {
+    try {
+      await Promise.race([
+        client.destroy(),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('destroy timeout')), 3000)),
+      ]).catch(() => {});
+    } catch (_) {}
+    client = null;
+  }
+  await killStaleBrowserProcesses();
+  cleanChromiumLocks('./.wwebjs_auth');
+  clientStatus = 'DISCONNECTED';
+  qrCodeDataUrl = null;
+}
+
 export async function sendWhatsAppWebDocument(phone, docOptions, filenameArg, captionArg) {
   if (clientStatus !== 'CONNECTED' || !client) {
     initWhatsAppWebClient();
