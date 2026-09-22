@@ -4,6 +4,7 @@ import { renderHtmlToPdf } from '../pdf/renderPdf.js';
 import { buildCreditNoteHtml } from '../pdf/creditNoteHtml.js';
 import { sendWhatsAppWebDocument } from '../notify/whatsappWebClient.js';
 import { storageService } from '../storage/storageService.js';
+import { syncCreditNotePdf } from '../storage/documentSync.js';
 
 const router = Router();
 
@@ -418,6 +419,12 @@ router.post('/', async (req, res) => {
 
     await client.query('COMMIT');
     inTransaction = false;
+
+    // Eager background sync to Cloud Storage (myBillBook / Zoho style)
+    setImmediate(() => {
+      syncCreditNotePdf(creditNote.id).catch((e) => console.warn('[Storage] Background credit note PDF upload failed:', e.message));
+    });
+
     res.status(201).json(creditNote);
   } catch (err) {
     if (inTransaction) {

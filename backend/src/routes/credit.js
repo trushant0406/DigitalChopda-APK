@@ -5,6 +5,7 @@ import { buildStatementHtml } from '../pdf/statementHtml.js';
 import { buildPaymentReceiptHtml } from '../pdf/paymentReceiptHtml.js';
 import { sendWhatsAppWebText, sendWhatsAppWebDocument } from '../notify/whatsappWebClient.js';
 import { storageService } from '../storage/storageService.js';
+import { syncPaymentReceiptPdf } from '../storage/documentSync.js';
 
 const router = Router();
 
@@ -757,6 +758,13 @@ Thank you for your business!
         console.warn('Could not send WhatsApp receipt:', waErr.message);
         whatsappResult = { sent: false, error: waErr.message };
       }
+    }
+
+    // Eager background sync to Cloud Storage (myBillBook / Zoho style)
+    if (primaryPayment?.id) {
+      setImmediate(() => {
+        syncPaymentReceiptPdf(primaryPayment.id).catch((e) => console.warn('[Storage] Background payment receipt PDF upload failed:', e.message));
+      });
     }
 
     res.status(201).json({

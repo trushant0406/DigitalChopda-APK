@@ -6,6 +6,7 @@ import { renderHtmlToPdf } from '../pdf/renderPdf.js';
 import { sendWhatsAppDocument } from '../notify/whatsapp.js';
 import { calculateNextInvoiceNumber } from './orders.js';
 import { storageService } from '../storage/storageService.js';
+import { syncQuotationPdf } from '../storage/documentSync.js';
 
 const router = Router();
 
@@ -41,7 +42,7 @@ const QUOTATION_SELECT = `
 `;
 
 // Helper: load a full quotation with items and business details
-async function loadFullQuotation(id) {
+export async function loadFullQuotation(id) {
   const result = await pool.query(`${QUOTATION_SELECT} WHERE quotations.id = $1`, [id]);
   return result.rows[0] || null;
 }
@@ -148,7 +149,14 @@ router.post('/', async (req, res) => {
     }
 
     await client.query('COMMIT');
-    res.status(201).json(await loadFullQuotation(quotation.id));
+    const createdQuotation = await loadFullQuotation(quotation.id);
+
+    // Eager background sync to Cloud Storage (myBillBook / Zoho style)
+    setImmediate(() => {
+      syncQuotationPdf(quotation.id).catch((e) => console.warn('[Storage] Background quotation PDF upload failed:', e.message));
+    });
+
+    res.status(201).json(createdQuotation);
   } catch (err) {
     await client.query('ROLLBACK');
     console.error(err);

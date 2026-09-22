@@ -5,6 +5,7 @@ import { buildInvoiceHtml } from '../pdf/invoiceHtml.js';
 import { renderHtmlToPdf } from '../pdf/renderPdf.js';
 import { getNextReceiptNumber } from './credit.js';
 import { storageService } from '../storage/storageService.js';
+import { syncInvoicePdf } from '../storage/documentSync.js';
 
 const router = Router();
 
@@ -314,7 +315,14 @@ router.post('/', async (req, res) => {
     await client.query('COMMIT');
 
     const full = await pool.query(`${ORDER_SELECT} WHERE orders.id = $1`, [order.id]);
-    res.status(201).json(full.rows[0]);
+    const createdOrder = full.rows[0];
+
+    // Eager background sync to Cloud Storage (myBillBook / Zoho style)
+    setImmediate(() => {
+      syncInvoicePdf(order.id).catch((e) => console.warn('[Storage] Background invoice PDF upload failed:', e.message));
+    });
+
+    res.status(201).json(createdOrder);
   } catch (err) {
     await client.query('ROLLBACK');
     console.error(err);
@@ -527,17 +535,20 @@ router.patch('/:id', async (req, res) => {
   const full = await pool.query(`${ORDER_SELECT} WHERE orders.id = $1`, [req.params.id]);
   const updatedOrder = full.rows[0];
 
-  // Invalidate cached PDFs in Google Cloud Storage when order is modified
+  // Invalidate and eagerly re-sync cached PDF in Google Cloud Storage when order is modified
   if (updatedOrder) {
     const invNum = updatedOrder.invoice_number || updatedOrder.order_number || updatedOrder.id;
     storageService.deleteFile(`invoices/Tax-Invoice-${invNum}.pdf`).catch(() => {});
     storageService.deleteFile(`invoices/Tax-Invoice-${invNum}-paid.pdf`).catch(() => {});
+    setImmediate(() => {
+      syncInvoicePdf(updatedOrder.id).catch((e) => console.warn('[Storage] Background updated invoice PDF upload failed:', e.message));
+    });
   }
 
   res.json(updatedOrder);
 });
 
-async function loadFullOrder(id) {
+export async function loadFullOrder(id) {
   const result = await pool.query(`${ORDER_SELECT} WHERE orders.id = $1`, [id]);
   return result.rows[0] || null;
 }
