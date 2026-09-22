@@ -4,6 +4,9 @@ FROM node:20-bookworm-slim
 RUN apt-get update && apt-get install -y --no-install-recommends \
     chromium \
     fonts-liberation \
+    fonts-dejavu-core \
+    fonts-noto-core \
+    fonts-indic \
     fonts-noto-color-emoji \
     dumb-init \
     procps \

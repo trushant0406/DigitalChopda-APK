@@ -19,5 +19,8 @@ if [ $RETRY_COUNT -eq $MAX_RETRIES ]; then
   exit 1
 fi
 
+# Clean up leftover Chromium singleton locks from previous container runs
+find /app/.wwebjs_auth -name "Singleton*" -delete 2>/dev/null || true
+
 echo "==> Starting backend server..."
 exec dumb-init node src/index.js

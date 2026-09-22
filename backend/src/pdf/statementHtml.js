@@ -65,7 +65,7 @@ export function buildStatementHtml({ business, customer, stats, entries }) {
 <style>
   * { box-sizing: border-box; }
   body {
-    font-family: -apple-system, "Segoe UI", Arial, Helvetica, sans-serif;
+    font-family: "Noto Sans", "DejaVu Sans", -apple-system, "Segoe UI", Arial, Helvetica, sans-serif;
     color: #1f2430; font-size: 11px; margin: 0; padding: 32px 36px 28px;
   }
   .topbar { height: 6px; background: ${ACCENT}; border-radius: 3px; margin-bottom: 20px; }

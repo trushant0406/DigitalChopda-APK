@@ -58,6 +58,23 @@ export async function killStaleBrowserProcesses() {
   }
 }
 
+export function cleanChromiumLocks(dir = './.wwebjs_auth') {
+  if (!fs.existsSync(dir)) return;
+  try {
+    const entries = fs.readdirSync(dir, { withFileTypes: true });
+    for (const entry of entries) {
+      const fullPath = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        cleanChromiumLocks(fullPath);
+      } else if (entry.name.startsWith('Singleton')) {
+        try {
+          fs.unlinkSync(fullPath);
+        } catch (e) {}
+      }
+    }
+  } catch (e) {}
+}
+
 export async function getWhatsAppWebDiagnostics() {
   let state = null;
   if (client) {
@@ -90,6 +107,7 @@ export async function initWhatsAppWebClient() {
   }
 
   await killStaleBrowserProcesses();
+  cleanChromiumLocks('./.wwebjs_auth');
 
   const executablePath = process.env.CHROME_PATH || CHROME_PATHS.find((p) => existsSync(p));
   clientStatus = 'INITIALIZING';

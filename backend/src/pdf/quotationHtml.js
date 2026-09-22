@@ -124,7 +124,7 @@ export function buildQuotationHtml({ business, quotation, items }) {
 <style>
   * { box-sizing: border-box; }
   body {
-    font-family: -apple-system, "Segoe UI", Arial, Helvetica, sans-serif;
+    font-family: "Noto Sans", "DejaVu Sans", -apple-system, "Segoe UI", Arial, Helvetica, sans-serif;
     color: #1f2430; font-size: 12px; margin: 0; padding: 36px 40px 30px;
   }
   .topbar { height: 6px; background: ${ACCENT}; border-radius: 3px; margin-bottom: 22px; }
