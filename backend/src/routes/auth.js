@@ -47,14 +47,16 @@ router.post('/login', async (req, res) => {
     return res.status(401).json({ error: 'Invalid username or password' });
   }
 
-  const bizRes = await pool.query(
-    `SELECT b.id, b.name, b.trade_name, b.invoice_prefix, b.status, bu.role as user_role
-     FROM businesses b
-     JOIN business_users bu ON bu.business_id = b.id
-     WHERE bu.user_id = $1 AND bu.is_active = true
-     ORDER BY b.id ASC`,
-    [user.id]
-  );
+  const bizRes = user.role === 'admin'
+    ? await pool.query(`SELECT id, name, trade_name, invoice_prefix, status, 'owner' as user_role FROM businesses WHERE status = 'active' ORDER BY id ASC`)
+    : await pool.query(
+        `SELECT b.id, b.name, b.trade_name, b.invoice_prefix, b.status, bu.role as user_role
+         FROM businesses b
+         JOIN business_users bu ON bu.business_id = b.id
+         WHERE bu.user_id = $1 AND bu.is_active = true
+         ORDER BY b.id ASC`,
+        [user.id]
+      );
 
   const token = generateToken(user);
   res.json({
@@ -80,14 +82,16 @@ router.get('/me', async (req, res) => {
   }
 
   const user = result.rows[0];
-  const bizRes = await pool.query(
-    `SELECT b.id, b.name, b.trade_name, b.invoice_prefix, b.status, bu.role as user_role
-     FROM businesses b
-     JOIN business_users bu ON bu.business_id = b.id
-     WHERE bu.user_id = $1 AND bu.is_active = true
-     ORDER BY b.id ASC`,
-    [user.id]
-  );
+  const bizRes = user.role === 'admin'
+    ? await pool.query(`SELECT id, name, trade_name, invoice_prefix, status, 'owner' as user_role FROM businesses WHERE status = 'active' ORDER BY id ASC`)
+    : await pool.query(
+        `SELECT b.id, b.name, b.trade_name, b.invoice_prefix, b.status, bu.role as user_role
+         FROM businesses b
+         JOIN business_users bu ON bu.business_id = b.id
+         WHERE bu.user_id = $1 AND bu.is_active = true
+         ORDER BY b.id ASC`,
+        [user.id]
+      );
 
   res.json({
     user,

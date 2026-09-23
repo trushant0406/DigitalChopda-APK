@@ -29,6 +29,24 @@ export async function tenantContext(req, res, next) {
 
     // 3. Fallback: if user has assigned businesses, pick requested or first assigned
     if (req.user && req.user.id) {
+      if (req.user.role === 'admin') {
+        const allBizRes = await pool.query(`SELECT *, 'owner' as user_role FROM businesses WHERE status = 'active' ORDER BY id ASC`);
+        req.userBusinesses = allBizRes.rows;
+        if (requestedId) {
+          const match = allBizRes.rows.find((b) => b.id === requestedId);
+          if (match) {
+            req.businessId = match.id;
+            req.business = match;
+            return next();
+          }
+        }
+        if (allBizRes.rows.length > 0) {
+          req.businessId = allBizRes.rows[0].id;
+          req.business = allBizRes.rows[0];
+          return next();
+        }
+      }
+
       const userBizRes = await pool.query(
         `SELECT b.*, bu.role as user_role
          FROM businesses b
