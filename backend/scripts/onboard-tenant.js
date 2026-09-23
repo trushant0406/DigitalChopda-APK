@@ -30,9 +30,11 @@ function parseArgs() {
     const arg = args[i];
     if (arg.startsWith('--')) {
       const key = arg.slice(2);
-      const val = args[i + 1] && !args[i + 1].startsWith('--') ? args[i + 1] : true;
+      const val = args[i + 1] && !args[i + 1].startsWith('--') ? args[i + 1].trim() : true;
       params[key] = val;
       if (val !== true) i++;
+    } else if (!params.name && !params.business) {
+      params.name = arg.trim();
     }
   }
   return params;
