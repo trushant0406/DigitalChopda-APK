@@ -3,14 +3,15 @@ import { pool } from '../db.js';
 
 const router = Router();
 
-// GET /api/contacts — list all contacts, optional ?q= search on name/phone
+// GET /api/contacts — list all contacts for active business, optional ?q= search on name/phone
 router.get('/', async (req, res) => {
+  const businessId = req.businessId || 1;
   const { q } = req.query;
-  const params = [];
-  let where = '';
+  const params = [businessId];
+  let where = 'WHERE contacts.business_id = $1';
   if (q) {
     params.push(`%${q}%`);
-    where = `WHERE contacts.name ILIKE $1 OR contacts.phone ILIKE $1`;
+    where += ` AND (contacts.name ILIKE $2 OR contacts.phone ILIKE $2)`;
   }
 
   const result = await pool.query(
@@ -23,12 +24,12 @@ router.get('/', async (req, res) => {
             COALESCE(bool_or(orders.fulfillment_status = 'dispatched' AND orders.status != 'cancelled'), false) AS has_dispatched_order,
             COALESCE(bool_or(orders.fulfillment_status = 'delivered' AND orders.status != 'cancelled'), false) AS has_delivered_order
      FROM contacts
-     LEFT JOIN calls ON calls.contact_id = contacts.id
-     LEFT JOIN orders ON orders.contact_id = contacts.id
+     LEFT JOIN calls ON calls.contact_id = contacts.id AND calls.business_id = contacts.business_id
+     LEFT JOIN orders ON orders.contact_id = contacts.id AND orders.business_id = contacts.business_id
      LEFT JOIN (
        SELECT orders.contact_id, SUM(order_items.quantity * order_items.unit_price) AS total_spent
        FROM orders JOIN order_items ON order_items.order_id = orders.id
-       WHERE orders.status != 'cancelled'
+       WHERE orders.status != 'cancelled' AND orders.business_id = $1
        GROUP BY orders.contact_id
      ) order_totals ON order_totals.contact_id = contacts.id
      ${where}
@@ -39,15 +40,53 @@ router.get('/', async (req, res) => {
   res.json(result.rows);
 });
 
+// POST /api/contacts — create a new contact
+router.post('/', async (req, res) => {
+  const businessId = req.businessId || 1;
+  const {
+    phone, name, city, gstin, pan,
+    billing_address, shipping_address, state,
+    credit_limit, opening_balance, opening_balance_type, opening_balance_date
+  } = req.body;
+
+  if (!phone) return res.status(400).json({ error: 'Phone is required' });
+  const cleanPhone = phone.replace(/\D/g, '');
+
+  const result = await pool.query(
+    `INSERT INTO contacts (
+       phone, name, city, gstin, pan, billing_address, shipping_address, state,
+       credit_limit, opening_balance, opening_balance_type, opening_balance_date, business_id
+     )
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+     ON CONFLICT (business_id, phone) DO UPDATE SET
+       name = COALESCE(EXCLUDED.name, contacts.name),
+       city = COALESCE(EXCLUDED.city, contacts.city),
+       gstin = COALESCE(EXCLUDED.gstin, contacts.gstin),
+       pan = COALESCE(EXCLUDED.pan, contacts.pan),
+       billing_address = COALESCE(EXCLUDED.billing_address, contacts.billing_address),
+       shipping_address = COALESCE(EXCLUDED.shipping_address, contacts.shipping_address),
+       state = COALESCE(EXCLUDED.state, contacts.state)
+     RETURNING *`,
+    [
+      cleanPhone, name || null, city || null, gstin || null, pan || null,
+      billing_address || null, shipping_address || null, state || null,
+      credit_limit || 0, opening_balance || 0, opening_balance_type || 'to_receive',
+      opening_balance_date || null, businessId
+    ]
+  );
+  res.status(201).json(result.rows[0]);
+});
+
 // GET /api/contacts/:id — contact detail with full call + follow-up + order timeline
 router.get('/:id', async (req, res) => {
+  const businessId = req.businessId || 1;
   const { id } = req.params;
-  const contact = await pool.query('SELECT * FROM contacts WHERE id = $1', [id]);
+  const contact = await pool.query('SELECT * FROM contacts WHERE id = $1 AND business_id = $2', [id, businessId]);
   if (contact.rows.length === 0) return res.status(404).json({ error: 'Contact not found' });
 
   const [calls, followups, orders, topProducts, outstanding] = await Promise.all([
-    pool.query('SELECT * FROM calls WHERE contact_id = $1 ORDER BY started_at DESC', [id]),
-    pool.query('SELECT * FROM followups WHERE contact_id = $1 ORDER BY due_at DESC', [id]),
+    pool.query('SELECT * FROM calls WHERE contact_id = $1 AND business_id = $2 ORDER BY started_at DESC', [id, businessId]),
+    pool.query('SELECT * FROM followups WHERE contact_id = $1 AND business_id = $2 ORDER BY due_at DESC', [id, businessId]),
     pool.query(
       `SELECT orders.*,
               COALESCE(SUM(order_items.quantity * order_items.unit_price), 0) AS total_amount,
@@ -59,10 +98,10 @@ router.get('/:id', async (req, res) => {
               ) AS items
        FROM orders
        LEFT JOIN order_items ON order_items.order_id = orders.id
-       WHERE orders.contact_id = $1
+       WHERE orders.contact_id = $1 AND orders.business_id = $2
        GROUP BY orders.id
        ORDER BY orders.created_at DESC`,
-      [id]
+      [id, businessId]
     ),
     pool.query(
       `SELECT order_items.product_name,
@@ -70,17 +109,17 @@ router.get('/:id', async (req, res) => {
               SUM(order_items.quantity * order_items.unit_price) AS total_amount
        FROM order_items
        JOIN orders ON orders.id = order_items.order_id
-       WHERE orders.contact_id = $1 AND orders.status != 'cancelled'
+       WHERE orders.contact_id = $1 AND orders.business_id = $2 AND orders.status != 'cancelled'
        GROUP BY order_items.product_name
        ORDER BY total_amount DESC
        LIMIT 5`,
-      [id]
+      [id, businessId]
     ),
     pool.query(
       `SELECT COALESCE(SUM(order_items.quantity * order_items.unit_price), 0) AS amount
        FROM orders JOIN order_items ON order_items.order_id = orders.id
-       WHERE orders.contact_id = $1 AND orders.payment_status = 'pending' AND orders.status != 'cancelled'`,
-      [id]
+       WHERE orders.contact_id = $1 AND orders.business_id = $2 AND orders.payment_status = 'pending' AND orders.status != 'cancelled'`,
+      [id, businessId]
     ),
   ]);
 
@@ -94,8 +133,9 @@ router.get('/:id', async (req, res) => {
   });
 });
 
-// PATCH /api/contacts/:id — edit GST/PAN/address details (or name/city)
+// PATCH /api/contacts/:id — edit details
 router.patch('/:id', async (req, res) => {
+  const businessId = req.businessId || 1;
   const { name, city, gstin, pan, billing_address, shipping_address, state, credit_limit } = req.body;
   const fields = [];
   const values = [];
@@ -134,8 +174,9 @@ router.patch('/:id', async (req, res) => {
   if (fields.length === 0) return res.status(400).json({ error: 'Nothing to update' });
 
   values.push(req.params.id);
+  values.push(businessId);
   const result = await pool.query(
-    `UPDATE contacts SET ${fields.join(', ')} WHERE id = $${i} RETURNING *`,
+    `UPDATE contacts SET ${fields.join(', ')} WHERE id = $${i++} AND business_id = $${i} RETURNING *`,
     values
   );
   if (result.rows.length === 0) return res.status(404).json({ error: 'Contact not found' });

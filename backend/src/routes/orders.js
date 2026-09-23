@@ -6,6 +6,7 @@ import { renderHtmlToPdf } from '../pdf/renderPdf.js';
 import { getNextReceiptNumber } from './credit.js';
 import { storageService } from '../storage/storageService.js';
 import { syncInvoicePdf } from '../storage/documentSync.js';
+import { getDocumentStorageKey, getDocumentFallbackKeys, findCachedDocumentBuffer } from '../storage/storageKeyHelper.js';
 
 const router = Router();
 
@@ -79,22 +80,28 @@ const ORDER_SELECT = `
 `;
 
 // Helper to calculate the next invoice number strictly from (latest existing invoice number + 1)
-// combined with business_profile settings
-export async function calculateNextInvoiceNumber(clientOrPool) {
+// combined with business settings
+export async function calculateNextInvoiceNumber(clientOrPool, businessId = 1) {
+  const targetId = businessId || 1;
   const profileRes = await clientOrPool.query(
-    'SELECT invoice_prefix, invoice_next_number, invoice_padding FROM business_profile WHERE id = 1'
+    'SELECT invoice_prefix, invoice_next_number, invoice_padding FROM businesses WHERE id = $1',
+    [targetId]
   );
-  const profile = profileRes.rows[0] || {};
+  let profile = profileRes.rows[0];
+  if (!profile) {
+    const legacy = await clientOrPool.query('SELECT invoice_prefix, invoice_next_number, invoice_padding FROM business_profile WHERE id = 1');
+    profile = legacy.rows[0] || {};
+  }
   const prefix = (profile.invoice_prefix !== undefined && profile.invoice_prefix !== null) ? profile.invoice_prefix : 'INV-';
   const profileNext = Math.max(1, Number(profile.invoice_next_number) || 1);
   const padding = Number(profile.invoice_padding) || 0;
 
-  // Query existing orders matching current prefix on invoice_number
+  // Query existing orders matching current prefix on invoice_number FOR THIS BUSINESS
   let maxInvoiceNum = 0;
   if (prefix) {
     const ordersRes = await clientOrPool.query(
-      'SELECT invoice_number FROM orders WHERE invoice_number LIKE $1',
-      [`${prefix}%`]
+      'SELECT invoice_number FROM orders WHERE business_id = $1 AND invoice_number LIKE $2',
+      [targetId, `${prefix}%`]
     );
     for (const row of ordersRes.rows) {
       const val = (row.invoice_number || '').trim();
@@ -117,12 +124,13 @@ export async function calculateNextInvoiceNumber(clientOrPool) {
 // GET /api/orders/next-number — returns next suggested invoice number based on business profile settings + existing invoices
 router.get('/next-number', async (req, res) => {
   try {
-    const nextData = await calculateNextInvoiceNumber(pool);
-    // Sync business_profile if it was lagging behind actual invoices
+    const businessId = req.businessId || 1;
+    const nextData = await calculateNextInvoiceNumber(pool, businessId);
+    // Sync businesses table if it was lagging behind actual invoices
     if (nextData.nextNumber > (Number(nextData.nextNumber) || 1)) {
       await pool.query(
-        'UPDATE business_profile SET invoice_next_number = $1, updated_at = now() WHERE id = 1 AND invoice_next_number < $1',
-        [nextData.nextNumber]
+        'UPDATE businesses SET invoice_next_number = $1, updated_at = now() WHERE id = $2 AND invoice_next_number < $1',
+        [nextData.nextNumber, businessId]
       );
     }
     res.json({
@@ -139,6 +147,7 @@ router.get('/next-number', async (req, res) => {
 
 // POST /api/orders — create an order or an invoice
 router.post('/', async (req, res) => {
+  const businessId = req.businessId || 1;
   const {
     phone, name, city, call_id, notes, items, payment_status, payment_method,
     gstin, pan, billing_address, shipping_address, state,
@@ -161,10 +170,10 @@ router.post('/', async (req, res) => {
     await client.query('BEGIN');
 
     const contact = await findOrCreateContact(client, {
-      phone, name, city, gstin, pan, billing_address, shipping_address, state,
+      phone, name, city, gstin, pan, billing_address, shipping_address, state, business_id: businessId,
     });
 
-    const bpRes = await client.query('SELECT state FROM business_profile WHERE id = 1');
+    const bpRes = await client.query('SELECT state FROM businesses WHERE id = $1', [businessId]);
     const sellerState = (bpRes.rows[0]?.state || 'Gujarat').trim();
     const effectivePlaceOfSupply = (place_of_supply || state || contact.state || sellerState).trim();
     const effectiveTaxMode = tax_mode || (
@@ -198,7 +207,7 @@ router.post('/', async (req, res) => {
     if (create_invoice || invoice_number) {
       finalInvoiceNumber = (invoice_number || '').trim();
       if (finalInvoiceNumber) {
-        const existing = await client.query('SELECT id FROM orders WHERE invoice_number = $1', [finalInvoiceNumber]);
+        const existing = await client.query('SELECT id FROM orders WHERE invoice_number = $1 AND business_id = $2', [finalInvoiceNumber, businessId]);
         if (existing.rows.length > 0) {
           await client.query('ROLLBACK');
           return res.status(400).json({ error: `Invoice number "${finalInvoiceNumber}" already exists. Please choose a different number.` });
@@ -211,21 +220,21 @@ router.post('/', async (req, res) => {
           const num = parseInt(digitStr, 10);
           const padding = digitStr.length > 1 ? digitStr.length : 0;
           await client.query(
-            `UPDATE business_profile
+            `UPDATE businesses
              SET invoice_next_number = GREATEST(invoice_next_number, $1),
                  invoice_padding = $2,
                  invoice_prefix = COALESCE(NULLIF($3, ''), invoice_prefix),
                  updated_at = now()
-             WHERE id = 1`,
-            [num + 1, padding, detectedPrefix]
+             WHERE id = $4`,
+            [num + 1, padding, detectedPrefix, businessId]
           );
         }
       } else {
-        const nextData = await calculateNextInvoiceNumber(client);
+        const nextData = await calculateNextInvoiceNumber(client, businessId);
         finalInvoiceNumber = nextData.suggestedNumber;
         await client.query(
-          'UPDATE business_profile SET invoice_next_number = $1, updated_at = now() WHERE id = 1',
-          [nextData.nextNumber + 1]
+          'UPDATE businesses SET invoice_next_number = $1, updated_at = now() WHERE id = $2',
+          [nextData.nextNumber + 1, businessId]
         );
       }
     }
@@ -234,9 +243,9 @@ router.post('/', async (req, res) => {
     const orderResult = await client.query(
       `INSERT INTO orders (
          contact_id, call_id, order_number, invoice_number, invoice_date, order_ref, notes,
-         payment_status, payment_method, place_of_supply, tax_mode, round_off
+         payment_status, payment_method, place_of_supply, tax_mode, round_off, business_id
        )
-       VALUES ($1, $2, '', $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING *`,
+       VALUES ($1, $2, '', $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING *`,
       [
         contact.id,
         call_id || null,
@@ -249,6 +258,7 @@ router.post('/', async (req, res) => {
         effectivePlaceOfSupply,
         effectiveTaxMode,
         effectiveRoundOff,
+        businessId,
       ]
     );
     const order = orderResult.rows[0];
@@ -271,7 +281,8 @@ router.post('/', async (req, res) => {
       if (grandTotal > 0) {
         const seqRes = await client.query(
           `SELECT COALESCE(MAX(NULLIF(regexp_replace(receipt_number, '\\D', '', 'g'), '')::INT), 0) + 1 AS next_seq
-           FROM payments WHERE receipt_number IS NOT NULL`
+           FROM payments WHERE business_id = $1 AND receipt_number IS NOT NULL`,
+          [businessId]
         );
         const receiptNum = `REC-${String(seqRes.rows[0]?.next_seq || 1).padStart(4, '0')}`;
         const pMode = (payment_method && ['cash', 'upi', 'bank_transfer', 'card', 'cheque'].includes(payment_method))
@@ -289,8 +300,8 @@ router.post('/', async (req, res) => {
         }
 
         await client.query(
-          `INSERT INTO payments (order_id, contact_id, amount, payment_mode, method, paid_at, notes, receipt_number)
-           VALUES ($1, $2, $3, $4, $4, $5, $6, $7)`,
+          `INSERT INTO payments (order_id, contact_id, amount, payment_mode, method, paid_at, notes, receipt_number, business_id)
+           VALUES ($1, $2, $3, $4, $4, $5, $6, $7, $8)`,
           [
             order.id,
             contact.id,
@@ -299,6 +310,7 @@ router.post('/', async (req, res) => {
             initialPayAt.toISOString(),
             finalInvoiceNumber ? `Paid at invoice ${finalInvoiceNumber}` : `Paid at order ${generatedOrderNumber}`,
             receiptNum,
+            businessId,
           ]
         );
       }
@@ -306,9 +318,9 @@ router.post('/', async (req, res) => {
       // Payment pending at creation → auto-remind the owner to collect it
       const dueAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
       await client.query(
-        `INSERT INTO followups (contact_id, order_id, due_at, reason, channel)
-         VALUES ($1, $2, $3, $4, 'push')`,
-        [contact.id, order.id, dueAt, `Collect payment for order ${generatedOrderNumber}${finalInvoiceNumber ? ` (Invoice ${finalInvoiceNumber})` : ''}`]
+        `INSERT INTO followups (contact_id, order_id, due_at, reason, channel, business_id)
+         VALUES ($1, $2, $3, $4, 'push', $5)`,
+        [contact.id, order.id, dueAt, `Collect payment for order ${generatedOrderNumber}${finalInvoiceNumber ? ` (Invoice ${finalInvoiceNumber})` : ''}`, businessId]
       );
     }
 
@@ -334,10 +346,11 @@ router.post('/', async (req, res) => {
 
 // GET /api/orders — filterable by payment_status / fulfillment_status / status / is_invoice / q (search)
 router.get('/', async (req, res) => {
+  const businessId = req.businessId || 1;
   const { payment_status, fulfillment_status, status, is_invoice, q } = req.query;
-  const conditions = [];
-  const values = [];
-  let i = 1;
+  const conditions = [`orders.business_id = $1`];
+  const values = [businessId];
+  let i = 2;
 
   if (is_invoice === 'true') {
     conditions.push('orders.invoice_number IS NOT NULL');
@@ -387,6 +400,7 @@ router.get('/', async (req, res) => {
 
 // GET /api/orders/summary — counts + pending amount for stat cards
 router.get('/summary', async (req, res) => {
+  const businessId = req.businessId || 1;
   const [counts, pendingAmount] = await Promise.all([
     pool.query(`
       SELECT
@@ -397,13 +411,13 @@ router.get('/summary', async (req, res) => {
         COUNT(*) FILTER (WHERE fulfillment_status = 'delivered') AS delivered,
         COUNT(*) AS total_orders
       FROM orders
-      WHERE orders.status != 'cancelled'
-    `),
+      WHERE orders.status != 'cancelled' AND orders.business_id = $1
+    `, [businessId]),
     pool.query(`
       SELECT COALESCE(SUM(order_items.quantity * order_items.unit_price), 0) AS amount
       FROM orders JOIN order_items ON order_items.order_id = orders.id
-      WHERE orders.payment_status = 'pending' AND orders.status != 'cancelled'
-    `),
+      WHERE orders.payment_status = 'pending' AND orders.status != 'cancelled' AND orders.business_id = $1
+    `, [businessId]),
   ]);
 
   const row = counts.rows[0];
@@ -420,13 +434,15 @@ router.get('/summary', async (req, res) => {
 
 // GET /api/orders/:id
 router.get('/:id', async (req, res) => {
-  const result = await pool.query(`${ORDER_SELECT} WHERE orders.id = $1`, [req.params.id]);
+  const businessId = req.businessId || 1;
+  const result = await pool.query(`${ORDER_SELECT} WHERE orders.id = $1 AND orders.business_id = $2`, [req.params.id, businessId]);
   if (result.rows.length === 0) return res.status(404).json({ error: 'Order not found' });
   res.json(result.rows[0]);
 });
 
 // PATCH /api/orders/:id — update payment_status and/or fulfillment_status
 router.patch('/:id', async (req, res) => {
+  const businessId = req.businessId || 1;
   const { payment_status, payment_method, fulfillment_status, status, notes } = req.body;
   const fields = [];
   const values = [];
@@ -456,13 +472,14 @@ router.patch('/:id', async (req, res) => {
   fields.push('updated_at = now()');
 
   values.push(req.params.id);
+  values.push(businessId);
 
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
 
     const result = await client.query(
-      `UPDATE orders SET ${fields.join(', ')} WHERE id = $${i} RETURNING id`,
+      `UPDATE orders SET ${fields.join(', ')} WHERE id = $${i++} AND business_id = $${i} RETURNING id`,
       values
     );
     if (result.rows.length === 0) {
@@ -483,43 +500,44 @@ router.patch('/:id', async (req, res) => {
            FROM order_items GROUP BY order_id
          ) item_totals ON item_totals.order_id = o.id
          LEFT JOIN (
-           SELECT order_id, SUM(amount) AS total_paid FROM payments WHERE order_id IS NOT NULL GROUP BY order_id
+           SELECT order_id, SUM(amount) AS total_paid FROM payments WHERE order_id IS NOT NULL AND business_id = $2 GROUP BY order_id
          ) pay_totals ON pay_totals.order_id = o.id
-         WHERE o.id = $1`,
-        [req.params.id]
+         WHERE o.id = $1 AND o.business_id = $2`,
+        [req.params.id, businessId]
       );
 
       if (orderData.rows.length > 0) {
         const row = orderData.rows[0];
         const unpaid = Math.max(0, Number(row.grand_total) - Number(row.total_paid));
         if (unpaid > 0.01) {
-          const recNum = await getNextReceiptNumber(client);
+          const recNum = await getNextReceiptNumber(client, businessId);
           await client.query(
-            `INSERT INTO payments (order_id, contact_id, amount, method, payment_mode, receipt_number, paid_at, notes)
-             VALUES ($1, $2, $3, $4, $4, $5, now(), 'Settled on mark paid')`,
+            `INSERT INTO payments (order_id, contact_id, amount, method, payment_mode, receipt_number, paid_at, notes, business_id)
+             VALUES ($1, $2, $3, $4, $4, $5, now(), 'Settled on mark paid', $6)`,
             [
               req.params.id,
               row.contact_id,
               unpaid,
               payment_method || row.payment_method || 'cash',
               recNum,
+              businessId,
             ]
           );
         }
       }
 
       await client.query(
-        `UPDATE orders SET paid_at = COALESCE(paid_at, now()) WHERE id = $1`,
-        [req.params.id]
+        `UPDATE orders SET paid_at = COALESCE(paid_at, now()) WHERE id = $1 AND business_id = $2`,
+        [req.params.id, businessId]
       );
       await client.query(
-        `UPDATE followups SET status = 'cancelled' WHERE order_id = $1 AND status = 'pending'`,
-        [req.params.id]
+        `UPDATE followups SET status = 'cancelled' WHERE order_id = $1 AND business_id = $2 AND status = 'pending'`,
+        [req.params.id, businessId]
       );
     } else if (status === 'cancelled') {
       await client.query(
-        `UPDATE followups SET status = 'cancelled' WHERE order_id = $1 AND status = 'pending'`,
-        [req.params.id]
+        `UPDATE followups SET status = 'cancelled' WHERE order_id = $1 AND business_id = $2 AND status = 'pending'`,
+        [req.params.id, businessId]
       );
     }
 
@@ -532,14 +550,21 @@ router.patch('/:id', async (req, res) => {
     client.release();
   }
 
-  const full = await pool.query(`${ORDER_SELECT} WHERE orders.id = $1`, [req.params.id]);
+  const full = await pool.query(`${ORDER_SELECT} WHERE orders.id = $1 AND orders.business_id = $2`, [req.params.id, businessId]);
   const updatedOrder = full.rows[0];
 
   // Invalidate and eagerly re-sync cached PDF in Google Cloud Storage when order is modified
   if (updatedOrder) {
     const invNum = updatedOrder.invoice_number || updatedOrder.order_number || updatedOrder.id;
-    storageService.deleteFile(`invoices/Tax-Invoice-${invNum}.pdf`).catch(() => {});
-    storageService.deleteFile(`invoices/Tax-Invoice-${invNum}-paid.pdf`).catch(() => {});
+    const business = await loadBusinessProfile(businessId);
+    for (const paidFlag of ['', '-paid']) {
+      const filename = `Tax-Invoice-${invNum}${paidFlag}.pdf`;
+      const primaryKey = getDocumentStorageKey({ business, contactName: updatedOrder.name, docType: 'invoices', filename });
+      const fallbackKeys = getDocumentFallbackKeys({ business, contactName: updatedOrder.name, docType: 'invoices', filename });
+      for (const k of [primaryKey, ...fallbackKeys]) {
+        storageService.deleteFile(k).catch(() => {});
+      }
+    }
     setImmediate(() => {
       syncInvoicePdf(updatedOrder.id).catch((e) => console.warn('[Storage] Background updated invoice PDF upload failed:', e.message));
     });
@@ -548,14 +573,19 @@ router.patch('/:id', async (req, res) => {
   res.json(updatedOrder);
 });
 
-export async function loadFullOrder(id) {
-  const result = await pool.query(`${ORDER_SELECT} WHERE orders.id = $1`, [id]);
+export async function loadFullOrder(id, businessId = null) {
+  const where = businessId ? 'WHERE orders.id = $1 AND orders.business_id = $2' : 'WHERE orders.id = $1';
+  const params = businessId ? [id, businessId] : [id];
+  const result = await pool.query(`${ORDER_SELECT} ${where}`, params);
   return result.rows[0] || null;
 }
 
-async function loadBusinessProfile() {
-  const result = await pool.query('SELECT * FROM business_profile WHERE id = 1');
-  return result.rows[0] || null;
+async function loadBusinessProfile(businessId = 1) {
+  const targetId = businessId || 1;
+  const result = await pool.query('SELECT * FROM businesses WHERE id = $1', [targetId]);
+  if (result.rows.length > 0) return result.rows[0];
+  const legacy = await pool.query('SELECT * FROM business_profile WHERE id = 1');
+  return legacy.rows[0] || null;
 }
 
 // GET /api/orders/:id/pdf — stream the generated Tax Invoice PDF
@@ -563,32 +593,41 @@ router.get('/:id/pdf', async (req, res) => {
   try {
     const order = await loadFullOrder(req.params.id);
     if (!order) return res.status(404).json({ error: 'Invoice not found' });
-    const business = await loadBusinessProfile();
+    const businessId = order.business_id || req.businessId || 1;
+    const business = await loadBusinessProfile(businessId);
     const showPaymentDetails = req.query.payment_details === 'true' || req.query.show_payments === 'true';
     const invoiceNum = order.invoice_number || order.order_number || order.id;
-    const cacheKey = `invoices/Tax-Invoice-${invoiceNum}${showPaymentDetails ? '-paid' : ''}.pdf`;
+    const filename = `Tax-Invoice-${invoiceNum}${showPaymentDetails ? '-paid' : ''}.pdf`;
+    const primaryKey = getDocumentStorageKey({
+      business,
+      contactName: order.name,
+      docType: 'invoices',
+      filename,
+    });
+    const fallbackKeys = getDocumentFallbackKeys({
+      business,
+      contactName: order.name,
+      docType: 'invoices',
+      filename,
+    });
 
-    // 1. Return cached PDF from object storage if present
-    if (await storageService.exists(cacheKey)) {
-      try {
-        const cachedPdf = await storageService.getFileBuffer(cacheKey);
-        res.setHeader('Content-Type', 'application/pdf');
-        res.setHeader(
-          'Content-Disposition',
-          `inline; filename="Tax-Invoice-${invoiceNum}.pdf"`
-        );
-        return res.send(cachedPdf);
-      } catch (cacheErr) {
-        console.warn('[Storage] Failed to read cached invoice PDF, regenerating:', cacheErr.message);
-      }
+    // 1. Return cached PDF from object storage if present (checks primary, then fallback keys)
+    const cached = await findCachedDocumentBuffer(storageService, primaryKey, fallbackKeys);
+    if (cached) {
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader(
+        'Content-Disposition',
+        `inline; filename="Tax-Invoice-${invoiceNum}.pdf"`
+      );
+      return res.send(cached.buffer);
     }
 
     const html = buildInvoiceHtml({ business, order, items: order.items, showPaymentDetails });
     const pdf = await renderHtmlToPdf(html);
 
-    // Asynchronously save to storage cache (GCS, S3, or Local)
+    // Asynchronously save to primary storage cache
     storageService.uploadFile({
-      key: cacheKey,
+      key: primaryKey,
       buffer: pdf,
       contentType: 'application/pdf',
       isPublic: true,
@@ -611,7 +650,8 @@ router.post('/:id/send-whatsapp', async (req, res) => {
   try {
     const order = await loadFullOrder(req.params.id);
     if (!order) return res.status(404).json({ error: 'Invoice not found' });
-    const business = await loadBusinessProfile();
+    const businessId = order.business_id || req.businessId || 1;
+    const business = await loadBusinessProfile(businessId);
 
     const host = req.get('host');
     const protocol = req.protocol;
@@ -637,19 +677,25 @@ router.post('/:id/send-whatsapp', async (req, res) => {
     try {
       const { sendWhatsAppWebDocument } = await import('../notify/whatsappWebClient.js');
       const invoiceNum = order.invoice_number || order.order_number || order.id;
-      const cacheKey = `invoices/Tax-Invoice-${invoiceNum}.pdf`;
-      let pdf = null;
-      if (await storageService.exists(cacheKey)) {
-        try {
-          pdf = await storageService.getFileBuffer(cacheKey);
-        } catch (e) {
-          console.warn('[Storage] Failed to read cached PDF for WhatsApp, regenerating:', e.message);
-        }
-      }
+      const filename = `Tax-Invoice-${invoiceNum}.pdf`;
+      const primaryKey = getDocumentStorageKey({
+        business,
+        contactName: order.name,
+        docType: 'invoices',
+        filename,
+      });
+      const fallbackKeys = getDocumentFallbackKeys({
+        business,
+        contactName: order.name,
+        docType: 'invoices',
+        filename,
+      });
+      const cached = await findCachedDocumentBuffer(storageService, primaryKey, fallbackKeys);
+      let pdf = cached?.buffer || null;
       if (!pdf) {
         const html = buildInvoiceHtml({ business, order, items: order.items });
         pdf = await renderHtmlToPdf(html);
-        storageService.uploadFile({ key: cacheKey, buffer: pdf, contentType: 'application/pdf', isPublic: true }).catch(() => {});
+        storageService.uploadFile({ key: primaryKey, buffer: pdf, contentType: 'application/pdf', isPublic: true }).catch(() => {});
       }
       webResult = await sendWhatsAppWebDocument(order.phone, {
         pdfBuffer: pdf,

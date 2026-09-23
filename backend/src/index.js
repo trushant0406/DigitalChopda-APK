@@ -17,6 +17,8 @@ import businessProfileRouter from './routes/businessProfile.js';
 import creditRouter from './routes/credit.js';
 import creditNotesRouter from './routes/creditNotes.js';
 import authRouter from './routes/auth.js';
+import businessesRouter from './routes/businesses.js';
+import { tenantContext } from './middleware/tenantContext.js';
 import { startScheduler, stopScheduler } from './scheduler.js';
 import { initWhatsAppWebClient, destroyWhatsAppWebClient, getWhatsAppWebStatus } from './notify/whatsappWebClient.js';
 import { pool } from './db.js';
@@ -40,6 +42,10 @@ app.use(cors());
 app.use(express.json({ limit: '5mb' })); // signature image in business-profile is a base64 data URL
 app.use('/uploads', express.static(uploadsDir));
 
+// Multi-tenant context middleware (resolves req.businessId & req.business)
+app.use(tenantContext);
+
+app.use('/api/businesses', businessesRouter);
 app.use('/api/calls', callsRouter);
 app.use('/api/contacts', contactsRouter);
 app.use('/api/followups', followupsRouter);
@@ -51,6 +57,7 @@ app.use('/api/products', productsRouter);
 app.use('/api/quotations', quotationsRouter);
 app.use('/api/business-profile', businessProfileRouter);
 app.use('/api/credit', creditRouter);
+app.use('/api/payments', creditRouter);
 app.use('/api/credit-notes', creditNotesRouter);
 app.use('/api/auth', authRouter);
 

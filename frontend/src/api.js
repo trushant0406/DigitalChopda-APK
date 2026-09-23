@@ -1,8 +1,16 @@
 const BASE = '/api';
 
+export function getActiveBusinessId() {
+  return localStorage.getItem('ci_business_id') || '1';
+}
+
 function getAuthHeaders() {
   const token = localStorage.getItem('ci_token');
-  return token ? { Authorization: `Bearer ${token}` } : {};
+  const businessId = localStorage.getItem('ci_business_id');
+  const headers = {};
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+  if (businessId) headers['X-Business-Id'] = businessId;
+  return headers;
 }
 
 async function request(path, options = {}) {
@@ -65,8 +73,10 @@ export const api = {
   },
   updateOrder: (id, body) => request(`/orders/${id}`, { ...json(body), method: 'PATCH' }),
   ordersSummary: () => request('/orders/summary'),
-  orderPdfUrl: (id, withPayments = false) =>
-    `${BASE}/orders/${id}/pdf${withPayments ? '?payment_details=true' : ''}`,
+  orderPdfUrl: (id, withPayments = false) => {
+    const bizId = getActiveBusinessId();
+    return `${BASE}/orders/${id}/pdf?business_id=${bizId}${withPayments ? '&payment_details=true' : ''}`;
+  },
   sendOrderWhatsApp: (id) => request(`/orders/${id}/send-whatsapp`, json({})),
 
   listProducts: () => request('/products'),
@@ -77,10 +87,16 @@ export const api = {
   getBusinessProfile: () => request('/business-profile'),
   saveBusinessProfile: (body) => request('/business-profile', { ...json(body), method: 'PUT' }),
 
+  // Multi-Tenancy Businesses
+  listBusinesses: () => request('/businesses'),
+  getActiveBusiness: () => request('/businesses/active'),
+  createBusiness: (body) => request('/businesses', json(body)),
+  updateBusiness: (id, body) => request(`/businesses/${id}`, { ...json(body), method: 'PUT' }),
+
   createQuotation: (body) => request('/quotations', json(body)),
   listQuotations: () => request('/quotations'),
   getQuotation: (id) => request(`/quotations/${id}`),
-  quotationPdfUrl: (id) => `${BASE}/quotations/${id}/pdf`,
+  quotationPdfUrl: (id) => `${BASE}/quotations/${id}/pdf?business_id=${getActiveBusinessId()}`,
   sendQuotationWhatsApp: (id) => request(`/quotations/${id}/send-whatsapp`, json({})),
   convertQuotationToInvoice: (id, body = {}) => request(`/quotations/${id}/convert-to-invoice`, { ...json(body), method: 'POST' }),
 
@@ -94,8 +110,8 @@ export const api = {
   getUnpaidInvoices: (contactId) => request(`/credit/customers/${contactId}/unpaid-invoices`),
   getNextReceiptNumber: () => request('/credit/next-receipt-number'),
   recordPaymentIn: (body) => request('/credit/payment-in', json(body)),
-  customerStatementPdfUrl: (contactId) => `${BASE}/credit/customers/${contactId}/statement/pdf`,
-  paymentReceiptPdfUrl: (paymentId) => `${BASE}/credit/payments/${paymentId}/receipt/pdf`,
+  customerStatementPdfUrl: (contactId) => `${BASE}/credit/customers/${contactId}/statement/pdf?business_id=${getActiveBusinessId()}`,
+  paymentReceiptPdfUrl: (paymentId) => `${BASE}/credit/payments/${paymentId}/receipt/pdf?business_id=${getActiveBusinessId()}`,
   sendCustomerStatementWhatsApp: (contactId) => request(`/credit/customers/${contactId}/statement/whatsapp`, json({})),
   sendCustomerReminderWhatsApp: (contactId) => request(`/credit/customers/${contactId}/reminder`, json({})),
   collectCreditPayment: (body) => request('/credit/collect', json(body)),
@@ -109,7 +125,7 @@ export const api = {
   getNextCreditNoteNumber: () => request('/credit-notes/next-number'),
   createCreditNote: (body) => request('/credit-notes', json(body)),
   getReturnableOrderItems: (orderId) => request(`/credit-notes/orders/${orderId}/returnable-items`),
-  creditNotePdfUrl: (id) => `${BASE}/credit-notes/${id}/pdf`,
+  creditNotePdfUrl: (id) => `${BASE}/credit-notes/${id}/pdf?business_id=${getActiveBusinessId()}`,
   sendCreditNoteWhatsApp: (id) => request(`/credit-notes/${id}/whatsapp`, json({})),
   voidCreditNote: (id) => request(`/credit-notes/${id}`, { method: 'DELETE' }),
 

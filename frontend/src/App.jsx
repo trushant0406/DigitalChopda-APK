@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Routes, Route, useNavigate, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import LoginPage from './pages/LoginPage';
@@ -24,6 +24,14 @@ function MainLayout() {
   const [quotationPresetContact, setQuotationPresetContact] = useState(null);
 
   const bump = () => setRefreshKey((k) => k + 1);
+
+  useEffect(() => {
+    function handleBizSwitch() {
+      bump();
+    }
+    window.addEventListener('business-switched', handleBizSwitch);
+    return () => window.removeEventListener('business-switched', handleBizSwitch);
+  }, []);
 
   const path = location.pathname.substring(1);
   const activeTab = path || 'dashboard';

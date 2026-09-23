@@ -1,21 +1,29 @@
 import { Router } from 'express';
 import { pool } from '../db.js';
 import { storageService } from '../storage/storageService.js';
+import { sanitizeStorageSlug } from '../storage/storageKeyHelper.js';
 
 const router = Router();
 
-// GET /api/business-profile — your own business details (single row)
+// GET /api/business-profile — current business details for active tenant
 router.get('/', async (req, res) => {
-  const result = await pool.query('SELECT * FROM business_profile WHERE id = 1');
-  res.json(result.rows[0] || null);
+  const businessId = req.businessId || 1;
+  const result = await pool.query('SELECT * FROM businesses WHERE id = $1', [businessId]);
+  if (result.rows.length > 0) {
+    return res.json(result.rows[0]);
+  }
+  // Fallback to legacy single-row business_profile if businesses row not found
+  const legacy = await pool.query('SELECT * FROM business_profile WHERE id = 1');
+  res.json(legacy.rows[0] || null);
 });
 
-// PUT /api/business-profile — create or update it (upsert, always row id=1)
+// PUT /api/business-profile — create or update active business profile
 router.put('/', async (req, res) => {
-  const existingRes = await pool.query('SELECT * FROM business_profile WHERE id = 1');
+  const businessId = req.businessId || 1;
+  const existingRes = await pool.query('SELECT * FROM businesses WHERE id = $1', [businessId]);
   const existing = existingRes.rows[0] || {};
 
-  const name = req.body.name !== undefined ? req.body.name : (existing.name || null);
+  const name = req.body.name !== undefined ? req.body.name : (existing.name || 'My Business');
   const address = req.body.address !== undefined ? req.body.address : (existing.address || null);
   const gstin = req.body.gstin !== undefined ? req.body.gstin : (existing.gstin || null);
   const pan = req.body.pan !== undefined ? req.body.pan : (existing.pan || null);
@@ -35,7 +43,8 @@ router.put('/', async (req, res) => {
         const mimeType = matches[1];
         const buffer = Buffer.from(matches[2], 'base64');
         const ext = mimeType.split('/')[1]?.replace('+xml', '') || 'png';
-        const key = `signatures/signature_1_${Date.now()}.${ext}`;
+        const bizSlug = sanitizeStorageSlug(existing.name || 'Business', `Business_${businessId}`);
+        const key = `tenants/${bizSlug}/branding/signature_${Date.now()}.${ext}`;
         const uploadResult = await storageService.uploadFile({
           key,
           buffer,
@@ -54,33 +63,59 @@ router.put('/', async (req, res) => {
   const padding = req.body.invoice_padding !== undefined ? Math.max(0, parseInt(req.body.invoice_padding, 10) || 0) : (existing.invoice_padding || 0);
 
   const result = await pool.query(
-    `INSERT INTO business_profile
+    `INSERT INTO businesses
        (id, name, address, gstin, pan, mobile, state, bank_name, bank_account_no, bank_ifsc, bank_branch, terms_and_conditions, signature_image, invoice_prefix, invoice_next_number, invoice_padding, updated_at)
-     VALUES (1, $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, now())
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, now())
      ON CONFLICT (id) DO UPDATE SET
-       name = COALESCE($1, business_profile.name),
-       address = COALESCE($2, business_profile.address),
-       gstin = COALESCE($3, business_profile.gstin),
-       pan = COALESCE($4, business_profile.pan),
-       mobile = COALESCE($5, business_profile.mobile),
-       state = COALESCE($6, business_profile.state),
-       bank_name = COALESCE($7, business_profile.bank_name),
-       bank_account_no = COALESCE($8, business_profile.bank_account_no),
-       bank_ifsc = COALESCE($9, business_profile.bank_ifsc),
-       bank_branch = COALESCE($10, business_profile.bank_branch),
-       terms_and_conditions = COALESCE($11, business_profile.terms_and_conditions),
-       signature_image = COALESCE($12, business_profile.signature_image),
-       invoice_prefix = $13,
-       invoice_next_number = $14,
-       invoice_padding = $15,
+       name = COALESCE($2, businesses.name),
+       address = COALESCE($3, businesses.address),
+       gstin = COALESCE($4, businesses.gstin),
+       pan = COALESCE($5, businesses.pan),
+       mobile = COALESCE($6, businesses.mobile),
+       state = COALESCE($7, businesses.state),
+       bank_name = COALESCE($8, businesses.bank_name),
+       bank_account_no = COALESCE($9, businesses.bank_account_no),
+       bank_ifsc = COALESCE($10, businesses.bank_ifsc),
+       bank_branch = COALESCE($11, businesses.bank_branch),
+       terms_and_conditions = COALESCE($12, businesses.terms_and_conditions),
+       signature_image = COALESCE($13, businesses.signature_image),
+       invoice_prefix = $14,
+       invoice_next_number = $15,
+       invoice_padding = $16,
        updated_at = now()
      RETURNING *`,
     [
-      name, address, gstin, pan, mobile, state,
+      businessId, name, address, gstin, pan, mobile, state,
       bank_name, bank_account_no, bank_ifsc, bank_branch,
       terms_and_conditions, signature_image, prefix, nextNumber, padding,
     ]
   );
+
+  // Sync to legacy business_profile table if id=1 for backward compatibility
+  if (businessId === 1) {
+    try {
+      await pool.query(
+        `INSERT INTO business_profile (id, name, address, gstin, pan, mobile, state, bank_name, bank_account_no, bank_ifsc, bank_branch, terms_and_conditions, signature_image, invoice_prefix, invoice_next_number, invoice_padding, updated_at)
+         VALUES (1, $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, now())
+         ON CONFLICT (id) DO UPDATE SET
+           name = EXCLUDED.name, address = EXCLUDED.address, gstin = EXCLUDED.gstin, pan = EXCLUDED.pan,
+           mobile = EXCLUDED.mobile, state = EXCLUDED.state, bank_name = EXCLUDED.bank_name,
+           bank_account_no = EXCLUDED.bank_account_no, bank_ifsc = EXCLUDED.bank_ifsc,
+           bank_branch = EXCLUDED.bank_branch, terms_and_conditions = EXCLUDED.terms_and_conditions,
+           signature_image = EXCLUDED.signature_image, invoice_prefix = EXCLUDED.invoice_prefix,
+           invoice_next_number = EXCLUDED.invoice_next_number, invoice_padding = EXCLUDED.invoice_padding,
+           updated_at = now()`,
+        [
+          name, address, gstin, pan, mobile, state,
+          bank_name, bank_account_no, bank_ifsc, bank_branch,
+          terms_and_conditions, signature_image, prefix, nextNumber, padding
+        ]
+      );
+    } catch (e) {
+      // Ignore legacy sync failures
+    }
+  }
+
   res.json(result.rows[0]);
 });
 

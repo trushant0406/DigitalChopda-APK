@@ -7,6 +7,7 @@ import { sendWhatsAppDocument } from '../notify/whatsapp.js';
 import { calculateNextInvoiceNumber } from './orders.js';
 import { storageService } from '../storage/storageService.js';
 import { syncQuotationPdf } from '../storage/documentSync.js';
+import { getDocumentStorageKey, getDocumentFallbackKeys, findCachedDocumentBuffer } from '../storage/storageKeyHelper.js';
 
 const router = Router();
 
@@ -42,18 +43,24 @@ const QUOTATION_SELECT = `
 `;
 
 // Helper: load a full quotation with items and business details
-export async function loadFullQuotation(id) {
-  const result = await pool.query(`${QUOTATION_SELECT} WHERE quotations.id = $1`, [id]);
+export async function loadFullQuotation(id, businessId = null) {
+  const where = businessId ? 'WHERE quotations.id = $1 AND quotations.business_id = $2' : 'WHERE quotations.id = $1';
+  const params = businessId ? [id, businessId] : [id];
+  const result = await pool.query(`${QUOTATION_SELECT} ${where}`, params);
   return result.rows[0] || null;
 }
 
-async function loadBusinessProfile() {
-  const result = await pool.query('SELECT * FROM business_profile WHERE id = 1');
-  return result.rows[0] || null;
+async function loadBusinessProfile(businessId = 1) {
+  const targetId = businessId || 1;
+  const result = await pool.query('SELECT * FROM businesses WHERE id = $1', [targetId]);
+  if (result.rows.length > 0) return result.rows[0];
+  const legacy = await pool.query('SELECT * FROM business_profile WHERE id = 1');
+  return legacy.rows[0] || null;
 }
 
 // POST /api/quotations — create a quotation
 router.post('/', async (req, res) => {
+  const businessId = req.businessId || 1;
   const {
     contact_id, phone, name, city,
     gstin, pan, billing_address, shipping_address, state,
@@ -77,7 +84,7 @@ router.post('/', async (req, res) => {
 
     let contact;
     if (contact_id) {
-      const existing = await client.query('SELECT * FROM contacts WHERE id = $1', [contact_id]);
+      const existing = await client.query('SELECT * FROM contacts WHERE id = $1 AND business_id = $2', [contact_id, businessId]);
       if (existing.rows.length === 0) {
         await client.query('ROLLBACK');
         return res.status(404).json({ error: 'Contact not found' });
@@ -90,8 +97,8 @@ router.post('/', async (req, res) => {
              billing_address = COALESCE($5, billing_address),
              shipping_address = COALESCE($6, shipping_address),
              state = COALESCE($7, state)
-           WHERE id = $8 RETURNING *`,
-          [name || null, city || null, gstin || null, pan || null, billing_address || null, shipping_address || null, state || null, contact_id]
+           WHERE id = $8 AND business_id = $9 RETURNING *`,
+          [name || null, city || null, gstin || null, pan || null, billing_address || null, shipping_address || null, state || null, contact_id, businessId]
         );
         contact = updated.rows[0];
       } else {
@@ -99,11 +106,11 @@ router.post('/', async (req, res) => {
       }
     } else {
       contact = await findOrCreateContact(client, {
-        phone, name, city, gstin, pan, billing_address, shipping_address, state,
+        phone, name, city, gstin, pan, billing_address, shipping_address, state, business_id: businessId,
       });
     }
 
-    const business = await loadBusinessProfile();
+    const business = await loadBusinessProfile(businessId);
     const effectivePlaceOfSupply = state || contact.state || (business ? business.state : null);
     const taxMode = (business && business.state && effectivePlaceOfSupply && business.state.trim().toLowerCase() === effectivePlaceOfSupply.trim().toLowerCase())
       ? 'split'
@@ -112,8 +119,8 @@ router.post('/', async (req, res) => {
     const quotationRes = await client.query(
       `INSERT INTO quotations
        (contact_id, bill_to_name, bill_to_address, bill_to_mobile, bill_to_gstin, bill_to_pan,
-        ship_to_name, ship_to_address, place_of_supply, tax_mode, terms_and_conditions)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+        ship_to_name, ship_to_address, place_of_supply, tax_mode, terms_and_conditions, business_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
        RETURNING *`,
       [
         contact.id,
@@ -127,6 +134,7 @@ router.post('/', async (req, res) => {
         effectivePlaceOfSupply,
         taxMode,
         terms_and_conditions || business?.terms_and_conditions || null,
+        businessId,
       ]
     );
     const quotation = quotationRes.rows[0];
@@ -168,10 +176,11 @@ router.post('/', async (req, res) => {
 
 // GET /api/quotations — list with optional search query q
 router.get('/', async (req, res) => {
+  const businessId = req.businessId || 1;
   const { q } = req.query;
-  const conditions = [];
-  const values = [];
-  let i = 1;
+  const conditions = [`quotations.business_id = $1`];
+  const values = [businessId];
+  let i = 2;
 
   if (q && q.trim()) {
     const term = `%${q.trim()}%`;
@@ -195,7 +204,8 @@ router.get('/', async (req, res) => {
 
 // GET /api/quotations/:id
 router.get('/:id', async (req, res) => {
-  const quotation = await loadFullQuotation(req.params.id);
+  const businessId = req.businessId || 1;
+  const quotation = await loadFullQuotation(req.params.id, businessId);
   if (!quotation) return res.status(404).json({ error: 'Quotation not found' });
   res.json(quotation);
 });
@@ -205,27 +215,36 @@ router.get('/:id/pdf', async (req, res) => {
   try {
     const quotation = await loadFullQuotation(req.params.id);
     if (!quotation) return res.status(404).json({ error: 'Quotation not found' });
-    const business = await loadBusinessProfile();
-    const cacheKey = `quotations/Quotation-${quotation.id}.pdf`;
+    const businessId = quotation.business_id || req.businessId || 1;
+    const business = await loadBusinessProfile(businessId);
+    const filename = `Quotation-${quotation.id}.pdf`;
+    const primaryKey = getDocumentStorageKey({
+      business,
+      contactName: quotation.bill_to_name,
+      docType: 'quotations',
+      filename,
+    });
+    const fallbackKeys = getDocumentFallbackKeys({
+      business,
+      contactName: quotation.bill_to_name,
+      docType: 'quotations',
+      filename,
+    });
 
-    // 1. Return cached PDF from object storage if present
-    if (await storageService.exists(cacheKey)) {
-      try {
-        const cachedPdf = await storageService.getFileBuffer(cacheKey);
-        res.setHeader('Content-Type', 'application/pdf');
-        res.setHeader('Content-Disposition', `inline; filename="Quotation-${quotation.id}.pdf"`);
-        return res.send(cachedPdf);
-      } catch (cacheErr) {
-        console.warn('[Storage] Failed to read cached quotation PDF, regenerating:', cacheErr.message);
-      }
+    // 1. Return cached PDF from object storage if present (checks primary, then fallback keys)
+    const cached = await findCachedDocumentBuffer(storageService, primaryKey, fallbackKeys);
+    if (cached) {
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `inline; filename="Quotation-${quotation.id}.pdf"`);
+      return res.send(cached.buffer);
     }
 
     const html = buildQuotationHtml({ business, quotation, items: quotation.items });
     const pdf = await renderHtmlToPdf(html);
 
-    // Asynchronously save to storage cache (GCS, S3, or Local)
+    // Asynchronously save to primary storage cache
     storageService.uploadFile({
-      key: cacheKey,
+      key: primaryKey,
       buffer: pdf,
       contentType: 'application/pdf',
       isPublic: true,
@@ -245,7 +264,8 @@ router.post('/:id/send-whatsapp', async (req, res) => {
   try {
     const quotation = await loadFullQuotation(req.params.id);
     if (!quotation) return res.status(404).json({ error: 'Quotation not found' });
-    const business = await loadBusinessProfile();
+    const businessId = quotation.business_id || req.businessId || 1;
+    const business = await loadBusinessProfile(businessId);
 
     const host = req.get('host');
     const protocol = req.protocol;
@@ -265,19 +285,25 @@ router.post('/:id/send-whatsapp', async (req, res) => {
     // Try sending actual PDF file attachment via WhatsApp Web Client (tokenless)
     let webResult = null;
     let webError = null;
-    const cacheKey = `quotations/Quotation-${quotation.id}.pdf`;
-    let pdf = null;
-    if (await storageService.exists(cacheKey)) {
-      try {
-        pdf = await storageService.getFileBuffer(cacheKey);
-      } catch (e) {
-        console.warn('[Storage] Failed to read cached quotation PDF, regenerating:', e.message);
-      }
-    }
+    const filename = `Quotation-${quotation.id}.pdf`;
+    const primaryKey = getDocumentStorageKey({
+      business,
+      contactName: quotation.bill_to_name,
+      docType: 'quotations',
+      filename,
+    });
+    const fallbackKeys = getDocumentFallbackKeys({
+      business,
+      contactName: quotation.bill_to_name,
+      docType: 'quotations',
+      filename,
+    });
+    const cached = await findCachedDocumentBuffer(storageService, primaryKey, fallbackKeys);
+    let pdf = cached?.buffer || null;
     if (!pdf) {
       const html = buildQuotationHtml({ business, quotation, items: quotation.items });
       pdf = await renderHtmlToPdf(html);
-      storageService.uploadFile({ key: cacheKey, buffer: pdf, contentType: 'application/pdf', isPublic: true }).catch(() => {});
+      storageService.uploadFile({ key: primaryKey, buffer: pdf, contentType: 'application/pdf', isPublic: true }).catch(() => {});
     }
 
     try {
@@ -321,8 +347,8 @@ router.post('/:id/send-whatsapp', async (req, res) => {
   }
 });
 
-// POST /api/quotations/:id/convert-to-invoice — converts a quotation into a sales invoice (orders + order_items)
-router.post('/:id/convert-to-invoice', async (req, res) => {
+// POST /api/quotations/:id/convert-to-invoice (and alias /convert-to-order)
+router.post(['/:id/convert-to-invoice', '/:id/convert-to-order'], async (req, res) => {
   const quotationId = parseInt(req.params.id, 10);
   const {
     order_number, invoice_date, order_ref, notes,
@@ -377,10 +403,12 @@ router.post('/:id/convert-to-invoice', async (req, res) => {
       return res.status(400).json({ error: 'Cannot convert a quotation with no items' });
     }
 
+    const businessId = quotation.business_id || req.businessId || 1;
+
     // 3. Determine final invoice number
     let finalInvoiceNumber = (req.body?.invoice_number || req.body?.order_number || '').trim();
     if (finalInvoiceNumber) {
-      const existing = await client.query('SELECT id FROM orders WHERE invoice_number = $1', [finalInvoiceNumber]);
+      const existing = await client.query('SELECT id FROM orders WHERE invoice_number = $1 AND business_id = $2', [finalInvoiceNumber, businessId]);
       if (existing.rows.length > 0) {
         await client.query('ROLLBACK');
         return res.status(400).json({ error: `Invoice number "${finalInvoiceNumber}" already exists. Please choose a different number.` });
@@ -394,22 +422,22 @@ router.post('/:id/convert-to-invoice', async (req, res) => {
         const num = parseInt(digitStr, 10);
         const padding = digitStr.length > 1 ? digitStr.length : 0;
         await client.query(
-          `UPDATE business_profile
+          `UPDATE businesses
            SET invoice_next_number = GREATEST(invoice_next_number, $1),
                invoice_padding = $2,
                invoice_prefix = COALESCE(NULLIF($3, ''), invoice_prefix),
                updated_at = now()
-           WHERE id = 1`,
-          [num + 1, padding, detectedPrefix]
+           WHERE id = $4`,
+          [num + 1, padding, detectedPrefix, businessId]
         );
       }
     } else {
-      const nextData = await calculateNextInvoiceNumber(client);
+      const nextData = await calculateNextInvoiceNumber(client, businessId);
       finalInvoiceNumber = nextData.suggestedNumber;
 
       await client.query(
-        'UPDATE business_profile SET invoice_next_number = $1, updated_at = now() WHERE id = 1',
-        [nextData.nextNumber + 1]
+        'UPDATE businesses SET invoice_next_number = $1, updated_at = now() WHERE id = $2',
+        [nextData.nextNumber + 1, businessId]
       );
     }
 
@@ -434,9 +462,9 @@ router.post('/:id/convert-to-invoice', async (req, res) => {
     const orderRes = await client.query(
       `INSERT INTO orders (
          contact_id, quotation_id, order_number, invoice_number, invoice_date, order_ref, notes,
-         payment_status, payment_method, place_of_supply, tax_mode, round_off
+         payment_status, payment_method, place_of_supply, tax_mode, round_off, business_id
        )
-       VALUES ($1, $2, '', $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING *`,
+       VALUES ($1, $2, '', $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING *`,
       [
         quotation.contact_id,
         quotationId,
@@ -449,6 +477,7 @@ router.post('/:id/convert-to-invoice', async (req, res) => {
         quotation.place_of_supply || 'Gujarat',
         quotation.tax_mode || 'split',
         calculatedRoundOff,
+        businessId,
       ]
     );
     const newOrder = orderRes.rows[0];
@@ -456,16 +485,17 @@ router.post('/:id/convert-to-invoice', async (req, res) => {
     if (isPaid && roundedTotal > 0) {
       const seqRes = await client.query(
         `SELECT COALESCE(MAX(NULLIF(regexp_replace(receipt_number, '\\D', '', 'g'), '')::INT), 0) + 1 AS next_seq
-         FROM payments WHERE receipt_number IS NOT NULL`
+         FROM payments WHERE business_id = $1 AND receipt_number IS NOT NULL`,
+        [businessId]
       );
       const receiptNum = `REC-${String(seqRes.rows[0]?.next_seq || 1).padStart(4, '0')}`;
       const pMode = (payment_method && ['cash', 'upi', 'bank_transfer', 'card', 'cheque'].includes(payment_method))
         ? payment_method
         : 'cash';
       await client.query(
-        `INSERT INTO payments (contact_id, order_id, amount, payment_mode, method, receipt_number, paid_at)
-         VALUES ($1, $2, $3, $4, $4, $5, now())`,
-        [quotation.contact_id, newOrder.id, roundedTotal, pMode, receiptNum]
+        `INSERT INTO payments (contact_id, order_id, amount, payment_mode, method, receipt_number, paid_at, business_id)
+         VALUES ($1, $2, $3, $4, $4, $5, now(), $6)`,
+        [quotation.contact_id, newOrder.id, roundedTotal, pMode, receiptNum, businessId]
       );
     }
 
@@ -486,17 +516,17 @@ router.post('/:id/convert-to-invoice', async (req, res) => {
     await client.query(
       `UPDATE quotations
        SET status = 'converted', converted_order_id = $1, converted_at = now()
-       WHERE id = $2`,
-      [newOrder.id, quotationId]
+       WHERE id = $2 AND business_id = $3`,
+      [newOrder.id, quotationId, businessId]
     );
 
     // 7. If payment pending, create owner follow-up reminder
     if (!isPaid) {
       const dueAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
       await client.query(
-        `INSERT INTO followups (contact_id, order_id, due_at, reason, channel)
-         VALUES ($1, $2, $3, $4, 'push')`,
-        [quotation.contact_id, newOrder.id, dueAt, `Collect payment for invoice ${finalInvoiceNumber} (Order ${generatedOrderNumber} from Quotation #${quotationId})`]
+        `INSERT INTO followups (contact_id, order_id, due_at, reason, channel, business_id)
+         VALUES ($1, $2, $3, $4, 'push', $5)`,
+        [quotation.contact_id, newOrder.id, dueAt, `Collect payment for invoice ${finalInvoiceNumber} (Order ${generatedOrderNumber} from Quotation #${quotationId})`, businessId]
       );
     }
 

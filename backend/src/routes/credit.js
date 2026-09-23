@@ -6,31 +6,36 @@ import { buildPaymentReceiptHtml } from '../pdf/paymentReceiptHtml.js';
 import { sendWhatsAppWebText, sendWhatsAppWebDocument } from '../notify/whatsappWebClient.js';
 import { storageService } from '../storage/storageService.js';
 import { syncPaymentReceiptPdf } from '../storage/documentSync.js';
+import { getDocumentStorageKey, getDocumentFallbackKeys, findCachedDocumentBuffer } from '../storage/storageKeyHelper.js';
 
 const router = Router();
 
-async function loadBusinessProfile() {
-  const res = await pool.query('SELECT * FROM business_profile WHERE id = 1');
-  return res.rows[0] || null;
+async function loadBusinessProfile(businessId = 1) {
+  const targetId = businessId || 1;
+  const res = await pool.query('SELECT * FROM businesses WHERE id = $1', [targetId]);
+  if (res.rows.length > 0) return res.rows[0];
+  const legacy = await pool.query('SELECT * FROM business_profile WHERE id = 1');
+  return legacy.rows[0] || null;
 }
 
 // GET /api/credit/summary — overall business receivable totals
 router.get('/summary', async (req, res) => {
   try {
+    const businessId = req.businessId || 1;
     const result = await pool.query(`
       SELECT
         COALESCE(SUM(item_totals.grand_total), 0) +
-        COALESCE((SELECT SUM(opening_balance) FROM contacts WHERE opening_balance_type = 'to_receive'), 0) AS total_sales_amount,
-        COALESCE((SELECT SUM(amount) FROM payments), 0) AS total_collected,
-        COALESCE((SELECT SUM(total_amount) FROM credit_notes), 0) AS total_credit_notes
+        COALESCE((SELECT SUM(opening_balance) FROM contacts WHERE opening_balance_type = 'to_receive' AND business_id = $1), 0) AS total_sales_amount,
+        COALESCE((SELECT SUM(amount) FROM payments WHERE business_id = $1), 0) AS total_collected,
+        COALESCE((SELECT SUM(total_amount) FROM credit_notes WHERE business_id = $1), 0) AS total_credit_notes
       FROM orders
       JOIN (
         SELECT order_id,
                SUM(quantity * unit_price) + SUM(quantity * unit_price * COALESCE(gst_rate, 0) / 100) AS grand_total
         FROM order_items GROUP BY order_id
       ) item_totals ON item_totals.order_id = orders.id
-      WHERE orders.status != 'cancelled'
-    `);
+      WHERE orders.status != 'cancelled' AND orders.business_id = $1
+    `, [businessId]);
 
     const row = result.rows[0] || {};
     const totalCreditAmount = Number(row.total_sales_amount || 0);
@@ -50,24 +55,28 @@ router.get('/summary', async (req, res) => {
 
 // GET /api/credit/customers — party list with current balances and search
 router.get('/customers', async (req, res) => {
+  const businessId = req.businessId || 1;
   const { q, status } = req.query;
-  const conditions = [];
-  const values = [];
-  let i = 1;
+  const conditions = [`contacts.business_id = $1`];
+  const values = [businessId];
+  let i = 2;
 
   if (q) {
-    conditions.push(`(khata.name ILIKE $${i} OR khata.phone ILIKE $${i})`);
+    conditions.push(`(contacts.name ILIKE $${i} OR contacts.phone ILIKE $${i})`);
     values.push(`%${q}%`);
     i += 1;
   }
+
+  const outerConditions = [];
   if (status === 'outstanding') {
-    conditions.push('khata.outstanding > 0');
+    outerConditions.push('khata.outstanding > 0');
   } else if (status === 'settled') {
-    conditions.push('khata.outstanding <= 0');
+    outerConditions.push('khata.outstanding <= 0');
   } else if (status === 'over_limit') {
-    conditions.push('khata.credit_limit > 0 AND khata.outstanding > khata.credit_limit');
+    outerConditions.push('khata.credit_limit > 0 AND khata.outstanding > khata.credit_limit');
   }
-  const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
+  const outerWhere = outerConditions.length ? `WHERE ${outerConditions.join(' AND ')}` : '';
+  const innerWhere = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
 
   try {
     const result = await pool.query(
@@ -95,28 +104,29 @@ router.get('/customers', async (req, res) => {
                     SUM(quantity * unit_price) + SUM(quantity * unit_price * COALESCE(gst_rate, 0) / 100) AS grand_total
              FROM order_items GROUP BY order_id
            ) item_totals ON item_totals.order_id = orders.id
-           WHERE orders.status != 'cancelled'
+           WHERE orders.status != 'cancelled' AND orders.business_id = $1
            GROUP BY orders.contact_id
          ) order_totals ON order_totals.contact_id = contacts.id
          LEFT JOIN (
            SELECT contact_id, SUM(amount) AS collected
            FROM payments
-           WHERE contact_id IS NOT NULL
+           WHERE contact_id IS NOT NULL AND business_id = $1
            GROUP BY contact_id
          ) payment_totals ON payment_totals.contact_id = contacts.id
          LEFT JOIN (
            SELECT contact_id, SUM(total_amount) AS total_returned
            FROM credit_notes
-           WHERE contact_id IS NOT NULL
+           WHERE contact_id IS NOT NULL AND business_id = $1
            GROUP BY contact_id
          ) cn_totals ON cn_totals.contact_id = contacts.id
-         WHERE contacts.credit_limit > 0
-            OR contacts.opening_balance > 0
-            OR order_totals.total_sales > 0
-            OR payment_totals.collected > 0
-            OR cn_totals.total_returned > 0
+         ${innerWhere}
+           AND (contacts.credit_limit > 0
+             OR contacts.opening_balance > 0
+             OR order_totals.total_sales > 0
+             OR payment_totals.collected > 0
+             OR cn_totals.total_returned > 0)
        ) khata
-       ${where}
+       ${outerWhere}
        ORDER BY khata.outstanding DESC NULLS LAST, khata.name ASC`,
       values
     );
@@ -128,8 +138,9 @@ router.get('/customers', async (req, res) => {
 });
 
 // Helper to assemble running balance ledger entries for a contact matching myBillBook format
-async function getCustomerLedgerData(contactId) {
-  const contactRes = await pool.query('SELECT * FROM contacts WHERE id = $1', [contactId]);
+export async function getCustomerLedgerData(contactId, businessId = 1) {
+  const targetBizId = businessId || 1;
+  const contactRes = await pool.query('SELECT * FROM contacts WHERE id = $1 AND business_id = $2', [contactId, targetBizId]);
   if (contactRes.rows.length === 0) {
     throw new Error('Customer not found');
   }
@@ -152,9 +163,9 @@ async function getCustomerLedgerData(contactId) {
               string_agg(oi.product_name || ' ×' || oi.quantity, ', ') AS items_summary
        FROM order_items oi GROUP BY oi.order_id
      ) item_totals ON item_totals.order_id = orders.id
-     WHERE orders.contact_id = $1 AND orders.status != 'cancelled'
+     WHERE orders.contact_id = $1 AND orders.business_id = $2 AND orders.status != 'cancelled'
      ORDER BY COALESCE(orders.invoice_date, orders.created_at::date) ASC, orders.id ASC`,
-    [contactId]
+    [contactId, targetBizId]
   );
 
   // 2. Fetch all payments recorded for this contact
@@ -162,9 +173,9 @@ async function getCustomerLedgerData(contactId) {
     `SELECT p.*, o.invoice_number AS order_invoice_number, o.order_number
      FROM payments p
      LEFT JOIN orders o ON o.id = p.order_id
-     WHERE p.contact_id = $1
+     WHERE p.contact_id = $1 AND p.business_id = $2
      ORDER BY p.paid_at ASC, p.id ASC`,
-    [contactId]
+    [contactId, targetBizId]
   );
 
   const rawList = [];
@@ -277,9 +288,9 @@ async function getCustomerLedgerData(contactId) {
        SELECT credit_note_id, string_agg(product_name || ' ×' || quantity, ', ') AS items_summary
        FROM credit_note_items GROUP BY credit_note_id
      ) ci ON ci.credit_note_id = cn.id
-     WHERE cn.contact_id = $1
+     WHERE cn.contact_id = $1 AND cn.business_id = $2
      ORDER BY cn.credit_note_date ASC, cn.id ASC`,
-    [contactId]
+    [contactId, targetBizId]
   );
 
   for (const cn of creditNotesRes.rows) {
@@ -400,10 +411,11 @@ async function getCustomerLedgerData(contactId) {
   };
 }
 
-// GET /api/credit/customers/:id/ledger — detailed running passbook ledger
-router.get('/customers/:id/ledger', async (req, res) => {
+// GET /api/credit/customers/:id/ledger (and alias /customer/:id/ledger)
+router.get(['/customers/:id/ledger', '/customer/:id/ledger'], async (req, res) => {
   try {
-    const ledger = await getCustomerLedgerData(req.params.id);
+    const businessId = req.businessId || 1;
+    const ledger = await getCustomerLedgerData(req.params.id, businessId);
     res.json(ledger);
   } catch (err) {
     console.error('Error fetching customer ledger:', err);
@@ -414,6 +426,7 @@ router.get('/customers/:id/ledger', async (req, res) => {
 // GET /api/credit/customers/:id/orders — fetch customer invoices with full return status
 router.get('/customers/:id/orders', async (req, res) => {
   try {
+    const businessId = req.businessId || 1;
     const contactId = req.params.id;
     const ordersRes = await pool.query(
       `SELECT o.id, o.order_number, o.invoice_number, o.invoice_date, o.created_at, o.payment_status,
@@ -431,14 +444,14 @@ router.get('/customers/:id/orders', async (req, res) => {
          FROM order_items oi GROUP BY oi.order_id
        ) item_totals ON item_totals.order_id = o.id
        LEFT JOIN (
-         SELECT order_id, SUM(amount) AS total_paid FROM payments WHERE order_id IS NOT NULL GROUP BY order_id
+         SELECT order_id, SUM(amount) AS total_paid FROM payments WHERE order_id IS NOT NULL AND business_id = $2 GROUP BY order_id
        ) pay_totals ON pay_totals.order_id = o.id
        LEFT JOIN (
-         SELECT order_id, COUNT(id) AS cn_count, SUM(total_amount) AS total_credited FROM credit_notes WHERE order_id IS NOT NULL GROUP BY order_id
+         SELECT order_id, COUNT(id) AS cn_count, SUM(total_amount) AS total_credited FROM credit_notes WHERE order_id IS NOT NULL AND business_id = $2 GROUP BY order_id
        ) cn_totals ON cn_totals.order_id = o.id
-       WHERE o.contact_id = $1 AND o.status != 'cancelled'
+       WHERE o.contact_id = $1 AND o.business_id = $2 AND o.status != 'cancelled'
        ORDER BY COALESCE(o.invoice_date, o.created_at::date) DESC, o.id DESC`,
-      [contactId]
+      [contactId, businessId]
     );
 
     const orders = ordersRes.rows.map((r) => {
@@ -465,6 +478,7 @@ router.get('/customers/:id/orders', async (req, res) => {
 // GET /api/credit/customers/:id/unpaid-invoices — fetch open/unpaid bills for dropdown
 router.get('/customers/:id/unpaid-invoices', async (req, res) => {
   try {
+    const businessId = req.businessId || 1;
     const contactId = req.params.id;
     const result = await pool.query(
       `SELECT o.id, o.order_number, o.invoice_number, o.invoice_date, o.created_at, o.payment_status,
@@ -479,14 +493,14 @@ router.get('/customers/:id/unpaid-invoices', async (req, res) => {
          FROM order_items oi GROUP BY oi.order_id
        ) item_totals ON item_totals.order_id = o.id
        LEFT JOIN (
-         SELECT order_id, SUM(amount) AS total_paid FROM payments WHERE order_id IS NOT NULL GROUP BY order_id
+         SELECT order_id, SUM(amount) AS total_paid FROM payments WHERE order_id IS NOT NULL AND business_id = $2 GROUP BY order_id
        ) pay_totals ON pay_totals.order_id = o.id
        LEFT JOIN (
-         SELECT order_id, SUM(total_amount) AS total_credited FROM credit_notes WHERE order_id IS NOT NULL GROUP BY order_id
+         SELECT order_id, SUM(total_amount) AS total_credited FROM credit_notes WHERE order_id IS NOT NULL AND business_id = $2 GROUP BY order_id
        ) cn_totals ON cn_totals.order_id = o.id
-       WHERE o.contact_id = $1 AND o.status != 'cancelled' AND o.payment_status != 'paid'
+       WHERE o.contact_id = $1 AND o.business_id = $2 AND o.status != 'cancelled' AND o.payment_status != 'paid'
        ORDER BY COALESCE(o.invoice_date, o.created_at::date) ASC, o.id ASC`,
-      [contactId]
+      [contactId, businessId]
     );
 
     const unpaid = result.rows
@@ -507,9 +521,11 @@ router.get('/customers/:id/unpaid-invoices', async (req, res) => {
 });
 
 // Helper to generate next sequential receipt number REC-XXXX
-export async function getNextReceiptNumber(client) {
+export async function getNextReceiptNumber(client, businessId = 1) {
+  const targetBizId = businessId || 1;
   const result = await client.query(
-    `SELECT receipt_number FROM payments WHERE receipt_number IS NOT NULL ORDER BY id DESC LIMIT 50`
+    `SELECT receipt_number FROM payments WHERE receipt_number IS NOT NULL AND business_id = $1 ORDER BY id DESC LIMIT 50`,
+    [targetBizId]
   );
   let maxSeq = 0;
   for (const row of result.rows) {
@@ -525,9 +541,10 @@ export async function getNextReceiptNumber(client) {
 
 // GET /api/credit/next-receipt-number (and alias /payments/next-receipt) — preview next receipt number
 router.get(['/next-receipt-number', '/payments/next-receipt'], async (req, res) => {
+  const businessId = req.businessId || 1;
   const client = await pool.connect();
   try {
-    const receiptNumber = await getNextReceiptNumber(client);
+    const receiptNumber = await getNextReceiptNumber(client, businessId);
     res.json({ receiptNumber });
   } catch (err) {
     console.error('Error getting next receipt number:', err);
@@ -537,8 +554,9 @@ router.get(['/next-receipt-number', '/payments/next-receipt'], async (req, res) 
   }
 });
 
-// POST /api/credit/payment-in (and alias /payments) — record Payment In
-router.post(['/payment-in', '/payments'], async (req, res) => {
+// POST /api/credit/payment-in (and alias /payments, /pay-in) — record Payment In
+router.post(['/payment-in', '/payments', '/pay-in'], async (req, res) => {
+  const businessId = req.businessId || 1;
   const {
     contact_id,
     order_id,
@@ -561,14 +579,14 @@ router.post(['/payment-in', '/payments'], async (req, res) => {
   try {
     await client.query('BEGIN');
 
-    const contactRes = await client.query('SELECT * FROM contacts WHERE id = $1', [contact_id]);
+    const contactRes = await client.query('SELECT * FROM contacts WHERE id = $1 AND business_id = $2', [contact_id, businessId]);
     if (contactRes.rows.length === 0) {
       await client.query('ROLLBACK');
       return res.status(404).json({ error: 'Customer contact not found' });
     }
     const customer = contactRes.rows[0];
 
-    const receiptNumber = await getNextReceiptNumber(client);
+    const receiptNumber = await getNextReceiptNumber(client, businessId);
     let primaryPayment = null;
 
     let finalPaidAt = paid_at ? new Date(paid_at) : new Date();
@@ -594,13 +612,13 @@ router.post(['/payment-in', '/payments'], async (req, res) => {
            FROM order_items GROUP BY order_id
          ) item_totals ON item_totals.order_id = o.id
          LEFT JOIN (
-           SELECT order_id, SUM(amount) AS total_paid FROM payments WHERE order_id IS NOT NULL GROUP BY order_id
+           SELECT order_id, SUM(amount) AS total_paid FROM payments WHERE order_id IS NOT NULL AND business_id = $3 GROUP BY order_id
          ) pay_totals ON pay_totals.order_id = o.id
          LEFT JOIN (
-           SELECT order_id, SUM(total_amount) AS total_credited FROM credit_notes WHERE order_id IS NOT NULL GROUP BY order_id
+           SELECT order_id, SUM(total_amount) AS total_credited FROM credit_notes WHERE order_id IS NOT NULL AND business_id = $3 GROUP BY order_id
          ) cn_totals ON cn_totals.order_id = o.id
-         WHERE o.id = $1 AND o.contact_id = $2`,
-        [order_id, contact_id]
+         WHERE o.id = $1 AND o.contact_id = $2 AND o.business_id = $3`,
+        [order_id, contact_id, businessId]
       );
 
       if (targetOrderRes.rows.length === 0) {
@@ -610,10 +628,11 @@ router.post(['/payment-in', '/payments'], async (req, res) => {
 
       const orderRow = targetOrderRes.rows[0];
       const insertRes = await client.query(
-        `INSERT INTO payments (contact_id, order_id, amount, payment_mode, method, reference_no, paid_at, notes, receipt_number)
-         VALUES ($1, $2, $3, $4, $4, $5, $6, $7, $8)
+        `INSERT INTO payments (business_id, contact_id, order_id, amount, payment_mode, method, reference_no, paid_at, notes, receipt_number)
+         VALUES ($1, $2, $3, $4, $5, $5, $6, $7, $8, $9)
          RETURNING *`,
         [
+          businessId,
           contact_id,
           order_id,
           payAmount,
@@ -629,10 +648,10 @@ router.post(['/payment-in', '/payments'], async (req, res) => {
       const effectiveGrandTotal = Math.max(0, Number(orderRow.grand_total) - Number(orderRow.total_credited || 0));
       const newTotalPaid = Number(orderRow.total_paid) + payAmount;
       if (newTotalPaid >= effectiveGrandTotal - 0.01) {
-        await client.query(`UPDATE orders SET payment_status = 'paid', paid_at = COALESCE(paid_at, now()), updated_at = now() WHERE id = $1`, [order_id]);
-        await client.query(`UPDATE followups SET status = 'cancelled' WHERE order_id = $1 AND status = 'pending'`, [order_id]);
+        await client.query(`UPDATE orders SET payment_status = 'paid', paid_at = COALESCE(paid_at, now()), updated_at = now() WHERE id = $1 AND business_id = $2`, [order_id, businessId]);
+        await client.query(`UPDATE followups SET status = 'cancelled' WHERE order_id = $1 AND business_id = $2 AND status = 'pending'`, [order_id, businessId]);
       } else {
-        await client.query(`UPDATE orders SET payment_status = 'partially_paid', updated_at = now() WHERE id = $1`, [order_id]);
+        await client.query(`UPDATE orders SET payment_status = 'partially_paid', updated_at = now() WHERE id = $1 AND business_id = $2`, [order_id, businessId]);
       }
     } else {
       // CASE 2: On-Account / Auto-allocate via FIFO to open unpaid orders
@@ -648,14 +667,14 @@ router.post(['/payment-in', '/payments'], async (req, res) => {
            FROM order_items GROUP BY order_id
          ) item_totals ON item_totals.order_id = orders.id
          LEFT JOIN (
-           SELECT order_id, SUM(amount) AS total_paid FROM payments WHERE order_id IS NOT NULL GROUP BY order_id
+           SELECT order_id, SUM(amount) AS total_paid FROM payments WHERE order_id IS NOT NULL AND business_id = $2 GROUP BY order_id
          ) paid_totals ON paid_totals.order_id = orders.id
          LEFT JOIN (
-           SELECT order_id, SUM(total_amount) AS total_credited FROM credit_notes WHERE order_id IS NOT NULL GROUP BY order_id
+           SELECT order_id, SUM(total_amount) AS total_credited FROM credit_notes WHERE order_id IS NOT NULL AND business_id = $2 GROUP BY order_id
          ) cn_totals ON cn_totals.order_id = orders.id
-         WHERE orders.contact_id = $1 AND orders.status != 'cancelled' AND orders.payment_status != 'paid'
+         WHERE orders.contact_id = $1 AND orders.business_id = $2 AND orders.status != 'cancelled' AND orders.payment_status != 'paid'
          ORDER BY COALESCE(orders.invoice_date, orders.created_at::date) ASC, orders.id ASC`,
-        [contact_id]
+        [contact_id, businessId]
       );
 
       let remainingToAllocate = payAmount;
@@ -668,14 +687,15 @@ router.post(['/payment-in', '/payments'], async (req, res) => {
           const canPay = Math.min(orderDue, remainingToAllocate);
           remainingToAllocate -= canPay;
 
-          const recToUse = isFirst ? receiptNumber : await getNextReceiptNumber(client);
+          const recToUse = isFirst ? receiptNumber : await getNextReceiptNumber(client, businessId);
           isFirst = false;
 
           const ins = await client.query(
-            `INSERT INTO payments (contact_id, order_id, amount, payment_mode, method, reference_no, paid_at, notes, receipt_number)
-             VALUES ($1, $2, $3, $4, $4, $5, $6, $7, $8)
+            `INSERT INTO payments (business_id, contact_id, order_id, amount, payment_mode, method, reference_no, paid_at, notes, receipt_number)
+             VALUES ($1, $2, $3, $4, $5, $5, $6, $7, $8, $9)
              RETURNING *`,
             [
+              businessId,
               contact_id,
               order.id,
               canPay,
@@ -691,22 +711,23 @@ router.post(['/payment-in', '/payments'], async (req, res) => {
           const effectiveTotal = Math.max(0, Number(order.grand_total) - Number(order.total_credited || 0));
           const newPaid = Number(order.total_paid) + canPay;
           if (newPaid >= effectiveTotal - 0.01) {
-            await client.query(`UPDATE orders SET payment_status = 'paid', paid_at = COALESCE(paid_at, now()), updated_at = now() WHERE id = $1`, [order.id]);
-            await client.query(`UPDATE followups SET status = 'cancelled' WHERE order_id = $1 AND status = 'pending'`, [order.id]);
+            await client.query(`UPDATE orders SET payment_status = 'paid', paid_at = COALESCE(paid_at, now()), updated_at = now() WHERE id = $1 AND business_id = $2`, [order.id, businessId]);
+            await client.query(`UPDATE followups SET status = 'cancelled' WHERE order_id = $1 AND business_id = $2 AND status = 'pending'`, [order.id, businessId]);
           } else {
-            await client.query(`UPDATE orders SET payment_status = 'partially_paid', updated_at = now() WHERE id = $1`, [order.id]);
+            await client.query(`UPDATE orders SET payment_status = 'partially_paid', updated_at = now() WHERE id = $1 AND business_id = $2`, [order.id, businessId]);
           }
         }
       }
 
       // If still money remaining (advance on-account) or no open orders
       if (remainingToAllocate > 0) {
-        const recToUse = isFirst ? receiptNumber : await getNextReceiptNumber(client);
+        const recToUse = isFirst ? receiptNumber : await getNextReceiptNumber(client, businessId);
         const ins = await client.query(
-          `INSERT INTO payments (contact_id, order_id, amount, payment_mode, method, reference_no, paid_at, notes, receipt_number)
-           VALUES ($1, NULL, $2, $3, $3, $4, $5, $6, $7)
+          `INSERT INTO payments (business_id, contact_id, order_id, amount, payment_mode, method, reference_no, paid_at, notes, receipt_number)
+           VALUES ($1, $2, NULL, $3, $4, $4, $5, $6, $7, $8)
            RETURNING *`,
           [
+            businessId,
             contact_id,
             remainingToAllocate,
             payment_mode || 'cash',
@@ -725,8 +746,8 @@ router.post(['/payment-in', '/payments'], async (req, res) => {
     let whatsappResult = { sent: false };
     if (send_whatsapp && customer.phone) {
       try {
-        const profile = await loadBusinessProfile();
-        const updatedLedger = await getCustomerLedgerData(contact_id);
+        const profile = await loadBusinessProfile(businessId);
+        const updatedLedger = await getCustomerLedgerData(contact_id, businessId);
         const closingBal = updatedLedger.stats.current_balance;
         const balLabel = closingBal > 0
           ? `₹${closingBal.toFixed(2)} (Due)`
@@ -747,11 +768,11 @@ We have received your payment of *₹${payAmount.toFixed(2)}* via *${(payment_mo
 💰 *Current Account Balance:* *${balLabel}*
 
 Thank you for your business!
-— *${profile?.company_name || 'Accounts Dept'}*`;
+— *${profile?.company_name || profile?.name || 'Accounts Dept'}*`;
 
         await sendWhatsAppWebText(customer.phone, msg);
         if (primaryPayment?.id) {
-          await pool.query(`UPDATE payments SET whatsapp_sent = true WHERE id = $1`, [primaryPayment.id]);
+          await pool.query(`UPDATE payments SET whatsapp_sent = true WHERE id = $1 AND business_id = $2`, [primaryPayment.id, businessId]);
         }
         whatsappResult = { sent: true };
       } catch (waErr) {
@@ -785,8 +806,9 @@ Thank you for your business!
 // POST /api/credit/customers/:id/reminder — send payment reminder on WhatsApp (Matches top button in myBillBook)
 router.post('/customers/:id/reminder', async (req, res) => {
   try {
-    const business = await loadBusinessProfile();
-    const ledger = await getCustomerLedgerData(req.params.id);
+    const businessId = req.businessId || 1;
+    const business = await loadBusinessProfile(businessId);
+    const ledger = await getCustomerLedgerData(req.params.id, businessId);
     const { customer, stats } = ledger;
 
     if (!customer.phone) {
@@ -803,7 +825,7 @@ router.post('/customers/:id/reminder', async (req, res) => {
       : '';
 
     const msg =
-`🔔 *Payment Reminder from ${business?.company_name || 'Laduba Industries'}*
+`🔔 *Payment Reminder from ${business?.company_name || business?.name || 'Laduba Industries'}*
 
 Dear *${customer.name || 'Customer'}*,
 This is a gentle reminder that your current outstanding balance is *₹${new Intl.NumberFormat('en-IN', { minimumFractionDigits: 2 }).format(dueAmount)}*.${bankBlock}
@@ -811,7 +833,7 @@ This is a gentle reminder that your current outstanding balance is *₹${new Int
 Kindly arrange for payment at your earliest convenience. If already paid, please ignore this reminder.
 
 Thank you!
-— *${business?.company_name || 'Accounts Team'}*`;
+— *${business?.company_name || business?.name || 'Accounts Team'}*`;
 
     await sendWhatsAppWebText(customer.phone, msg);
     res.json({ success: true, message: `Reminder sent to ${customer.phone}` });
@@ -824,8 +846,9 @@ Thank you!
 // GET /api/credit/customers/:id/statement/pdf — generate royal blue Statement PDF
 router.get('/customers/:id/statement/pdf', async (req, res) => {
   try {
-    const business = await loadBusinessProfile();
-    const ledger = await getCustomerLedgerData(req.params.id);
+    const businessId = req.businessId || 1;
+    const business = await loadBusinessProfile(businessId);
+    const ledger = await getCustomerLedgerData(req.params.id, businessId);
 
     const html = buildStatementHtml({
       business,
@@ -852,16 +875,17 @@ router.get('/customers/:id/statement/pdf', async (req, res) => {
 // GET /api/credit/payments/:id/receipt/pdf (and alias /payments/:id/pdf) — generate official Payment Receipt PDF
 router.get(['/payments/:id/receipt/pdf', '/payments/:id/pdf', '/receipts/:id/pdf'], async (req, res) => {
   try {
-    const payRes = await pool.query('SELECT * FROM payments WHERE id = $1', [req.params.id]);
+    const businessId = req.businessId || 1;
+    const payRes = await pool.query('SELECT * FROM payments WHERE id = $1 AND business_id = $2', [req.params.id, businessId]);
     if (payRes.rows.length === 0) {
       return res.status(404).json({ error: 'Payment receipt not found' });
     }
     const payment = payRes.rows[0];
 
     const [business, contactRes, orderRes] = await Promise.all([
-      loadBusinessProfile(),
-      pool.query('SELECT * FROM contacts WHERE id = $1', [payment.contact_id]),
-      payment.order_id ? pool.query('SELECT * FROM orders WHERE id = $1', [payment.order_id]) : Promise.resolve({ rows: [] }),
+      loadBusinessProfile(businessId),
+      pool.query('SELECT * FROM contacts WHERE id = $1 AND business_id = $2', [payment.contact_id, businessId]),
+      payment.order_id ? pool.query('SELECT * FROM orders WHERE id = $1 AND business_id = $2', [payment.order_id, businessId]) : Promise.resolve({ rows: [] }),
     ]);
 
     const contact = contactRes.rows[0] || {};
@@ -869,29 +893,37 @@ router.get(['/payments/:id/receipt/pdf', '/payments/:id/pdf', '/receipts/:id/pdf
 
     let closingBalance = null;
     try {
-      const ledger = await getCustomerLedgerData(payment.contact_id);
+      const ledger = await getCustomerLedgerData(payment.contact_id, businessId);
       closingBalance = ledger.stats?.current_balance;
     } catch {
       // ignore
     }
 
     const receiptNum = (payment.receipt_number || `REC_${payment.id}`).replace(/[^a-zA-Z0-9_-]/g, '_');
-    const filename = `${receiptNum}.pdf`;
-    const cacheKey = `receipts/Payment-Receipt-${receiptNum}.pdf`;
+    const downloadFilename = `${receiptNum}.pdf`;
+    const filename = `Payment-Receipt-${receiptNum}.pdf`;
+    const primaryKey = getDocumentStorageKey({
+      business,
+      contactName: contact.name,
+      docType: 'receipts',
+      filename,
+    });
+    const fallbackKeys = getDocumentFallbackKeys({
+      business,
+      contactName: contact.name,
+      docType: 'receipts',
+      filename,
+    });
 
     // 1. Return cached PDF from Google Cloud Storage if present
-    if (await storageService.exists(cacheKey)) {
-      try {
-        const cachedPdf = await storageService.getFileBuffer(cacheKey);
-        res.set({
-          'Content-Type': 'application/pdf',
-          'Content-Disposition': `inline; filename="${filename}"`,
-          'Content-Length': cachedPdf.length,
-        });
-        return res.send(cachedPdf);
-      } catch (cacheErr) {
-        console.warn('[Storage] Failed to read cached receipt PDF, regenerating:', cacheErr.message);
-      }
+    const cached = await findCachedDocumentBuffer(storageService, primaryKey, fallbackKeys);
+    if (cached) {
+      res.set({
+        'Content-Type': 'application/pdf',
+        'Content-Disposition': `inline; filename="${downloadFilename}"`,
+        'Content-Length': cached.buffer.length,
+      });
+      return res.send(cached.buffer);
     }
 
     const html = buildPaymentReceiptHtml({
@@ -904,9 +936,9 @@ router.get(['/payments/:id/receipt/pdf', '/payments/:id/pdf', '/receipts/:id/pdf
 
     const pdfBuffer = await renderHtmlToPdf(html);
 
-    // Asynchronously save to storage cache (GCS, S3, or Local)
+    // Asynchronously save to primary storage cache
     storageService.uploadFile({
-      key: cacheKey,
+      key: primaryKey,
       buffer: pdfBuffer,
       contentType: 'application/pdf',
       isPublic: true,
@@ -914,7 +946,7 @@ router.get(['/payments/:id/receipt/pdf', '/payments/:id/pdf', '/receipts/:id/pdf
 
     res.set({
       'Content-Type': 'application/pdf',
-      'Content-Disposition': `inline; filename="${filename}"`,
+      'Content-Disposition': `inline; filename="${downloadFilename}"`,
       'Content-Length': pdfBuffer.length,
     });
     res.send(pdfBuffer);
@@ -927,8 +959,9 @@ router.get(['/payments/:id/receipt/pdf', '/payments/:id/pdf', '/receipts/:id/pdf
 // POST /api/credit/customers/:id/statement/whatsapp — send Statement PDF to customer WhatsApp
 router.post('/customers/:id/statement/whatsapp', async (req, res) => {
   try {
-    const business = await loadBusinessProfile();
-    const ledger = await getCustomerLedgerData(req.params.id);
+    const businessId = req.businessId || 1;
+    const business = await loadBusinessProfile(businessId);
+    const ledger = await getCustomerLedgerData(req.params.id, businessId);
     const { customer, stats } = ledger;
 
     if (!customer.phone) {
@@ -960,7 +993,7 @@ Please find attached your updated statement of accounts.
 📊 *Total Invoiced:* ₹${stats.total_sales_amount.toFixed(2)}
 💳 *Total Received:* ₹${stats.total_received_amount.toFixed(2)}
 
-— *${business?.company_name || 'Accounts Team'}*`;
+— *${business?.company_name || business?.name || 'Accounts Team'}*`;
 
     await sendWhatsAppWebDocument(customer.phone, {
       pdfBuffer,
@@ -977,6 +1010,7 @@ Please find attached your updated statement of accounts.
 
 // Legacy backward-compatibility endpoint for single order collect
 router.post('/collect', async (req, res) => {
+  const businessId = req.businessId || 1;
   const { order_id, amount, method, notes } = req.body;
   if (!order_id || !amount || Number(amount) <= 0) {
     return res.status(400).json({ error: 'order_id and a positive amount are required' });
@@ -986,37 +1020,37 @@ router.post('/collect', async (req, res) => {
   try {
     await client.query('BEGIN');
 
-    const orderResult = await client.query('SELECT * FROM orders WHERE id = $1', [order_id]);
+    const orderResult = await client.query('SELECT * FROM orders WHERE id = $1 AND business_id = $2', [order_id, businessId]);
     if (orderResult.rows.length === 0) {
       await client.query('ROLLBACK');
       return res.status(404).json({ error: 'Order not found' });
     }
     const order = orderResult.rows[0];
 
-    const receiptNumber = await getNextReceiptNumber(client);
+    const receiptNumber = await getNextReceiptNumber(client, businessId);
 
     const payInsertRes = await client.query(
-      `INSERT INTO payments (order_id, contact_id, amount, payment_mode, method, notes, receipt_number)
-       VALUES ($1, $2, $3, $4, $4, $5, $6) RETURNING id`,
-      [order_id, order.contact_id, amount, method || 'cash', notes || null, receiptNumber]
+      `INSERT INTO payments (business_id, order_id, contact_id, amount, payment_mode, method, notes, receipt_number)
+       VALUES ($1, $2, $3, $4, $5, $5, $6, $7) RETURNING id`,
+      [businessId, order_id, order.contact_id, amount, method || 'cash', notes || null, receiptNumber]
     );
     const newPaymentId = payInsertRes.rows[0]?.id;
 
     const totals = await client.query(
       `SELECT
          COALESCE((SELECT SUM(quantity * unit_price) + SUM(quantity * unit_price * COALESCE(gst_rate, 0) / 100) FROM order_items WHERE order_id = $1), 0) AS total,
-         COALESCE((SELECT SUM(amount) FROM payments WHERE order_id = $1), 0) AS collected,
-         COALESCE((SELECT SUM(total_amount) FROM credit_notes WHERE order_id = $1), 0) AS credited`,
-      [order_id]
+         COALESCE((SELECT SUM(amount) FROM payments WHERE order_id = $1 AND business_id = $2), 0) AS collected,
+         COALESCE((SELECT SUM(total_amount) FROM credit_notes WHERE order_id = $1 AND business_id = $2), 0) AS credited`,
+      [order_id, businessId]
     );
     const total = Math.max(0, Number(totals.rows[0].total) - Number(totals.rows[0].credited || 0));
     const collected = Number(totals.rows[0].collected);
 
     if (collected >= total - 0.01) {
-      await client.query(`UPDATE orders SET payment_status = 'paid', updated_at = now() WHERE id = $1`, [order_id]);
+      await client.query(`UPDATE orders SET payment_status = 'paid', updated_at = now() WHERE id = $1 AND business_id = $2`, [order_id, businessId]);
       await client.query(
-        `UPDATE followups SET status = 'cancelled' WHERE order_id = $1 AND status = 'pending'`,
-        [order_id]
+        `UPDATE followups SET status = 'cancelled' WHERE order_id = $1 AND business_id = $2 AND status = 'pending'`,
+        [order_id, businessId]
       );
     }
 

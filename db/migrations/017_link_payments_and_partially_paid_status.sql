@@ -31,17 +31,22 @@ BEGIN
     IF ord.total_paid < ord.grand_total - 0.01 THEN
       rec_seq := rec_seq + 1;
       rec_num := 'REC-' || LPAD(rec_seq::TEXT, 4, '0');
-      INSERT INTO payments (order_id, contact_id, amount, method, payment_mode, receipt_number, paid_at, notes)
-      VALUES (
-        ord.id,
-        ord.contact_id,
-        ord.grand_total - ord.total_paid,
-        COALESCE(ord.payment_method, 'cash'),
-        COALESCE(ord.payment_method, 'cash'),
-        rec_num,
-        ord.created_at,
-        'Settled on order creation / mark paid'
-      );
+      IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'payments' AND column_name = 'business_id') THEN
+        EXECUTE 'INSERT INTO payments (order_id, contact_id, amount, method, payment_mode, receipt_number, paid_at, notes, business_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 1)'
+        USING ord.id, ord.contact_id, ord.grand_total - ord.total_paid, COALESCE(ord.payment_method, 'cash'), COALESCE(ord.payment_method, 'cash'), rec_num, ord.created_at, 'Settled on order creation / mark paid';
+      ELSE
+        INSERT INTO payments (order_id, contact_id, amount, method, payment_mode, receipt_number, paid_at, notes)
+        VALUES (
+          ord.id,
+          ord.contact_id,
+          ord.grand_total - ord.total_paid,
+          COALESCE(ord.payment_method, 'cash'),
+          COALESCE(ord.payment_method, 'cash'),
+          rec_num,
+          ord.created_at,
+          'Settled on order creation / mark paid'
+        );
+      END IF;
     END IF;
   END LOOP;
 END $$;

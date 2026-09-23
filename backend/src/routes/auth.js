@@ -47,10 +47,21 @@ router.post('/login', async (req, res) => {
     return res.status(401).json({ error: 'Invalid username or password' });
   }
 
+  const bizRes = await pool.query(
+    `SELECT b.id, b.name, b.trade_name, b.invoice_prefix, b.status, bu.role as user_role
+     FROM businesses b
+     JOIN business_users bu ON bu.business_id = b.id
+     WHERE bu.user_id = $1 AND bu.is_active = true
+     ORDER BY b.id ASC`,
+    [user.id]
+  );
+
   const token = generateToken(user);
   res.json({
     token,
     user: { id: user.id, username: user.username, name: user.name, role: user.role },
+    businesses: bizRes.rows,
+    activeBusiness: bizRes.rows[0] || null,
   });
 });
 
@@ -68,7 +79,21 @@ router.get('/me', async (req, res) => {
     return res.status(401).json({ error: 'User not found' });
   }
 
-  res.json({ user: result.rows[0] });
+  const user = result.rows[0];
+  const bizRes = await pool.query(
+    `SELECT b.id, b.name, b.trade_name, b.invoice_prefix, b.status, bu.role as user_role
+     FROM businesses b
+     JOIN business_users bu ON bu.business_id = b.id
+     WHERE bu.user_id = $1 AND bu.is_active = true
+     ORDER BY b.id ASC`,
+    [user.id]
+  );
+
+  res.json({
+    user,
+    businesses: bizRes.rows,
+    activeBusiness: bizRes.rows[0] || null,
+  });
 });
 
 // POST /api/auth/change-password

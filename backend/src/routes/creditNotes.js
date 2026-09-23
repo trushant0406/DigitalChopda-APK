@@ -5,18 +5,24 @@ import { buildCreditNoteHtml } from '../pdf/creditNoteHtml.js';
 import { sendWhatsAppWebDocument } from '../notify/whatsappWebClient.js';
 import { storageService } from '../storage/storageService.js';
 import { syncCreditNotePdf } from '../storage/documentSync.js';
+import { getDocumentStorageKey, getDocumentFallbackKeys, findCachedDocumentBuffer } from '../storage/storageKeyHelper.js';
 
 const router = Router();
 
-async function loadBusinessProfile() {
-  const res = await pool.query('SELECT * FROM business_profile WHERE id = 1');
-  return res.rows[0] || null;
+async function loadBusinessProfile(businessId = 1) {
+  const targetId = businessId || 1;
+  const res = await pool.query('SELECT * FROM businesses WHERE id = $1', [targetId]);
+  if (res.rows.length > 0) return res.rows[0];
+  const legacy = await pool.query('SELECT * FROM business_profile WHERE id = 1');
+  return legacy.rows[0] || null;
 }
 
 // Calculate the next sequential credit note number (e.g. CN-0001)
-export async function calculateNextCreditNoteNumber(clientOrPool = pool) {
+export async function calculateNextCreditNoteNumber(clientOrPool = pool, businessId = 1) {
+  const targetId = businessId || 1;
   const res = await clientOrPool.query(
-    `SELECT credit_note_number FROM credit_notes WHERE credit_note_number LIKE 'CN-%'`
+    `SELECT credit_note_number FROM credit_notes WHERE business_id = $1 AND credit_note_number LIKE 'CN-%'`,
+    [targetId]
   );
   let maxSeq = 0;
   for (const row of res.rows) {
@@ -35,7 +41,8 @@ export async function calculateNextCreditNoteNumber(clientOrPool = pool) {
 // GET /api/credit-notes/next-number — get next sequential credit note number
 router.get('/next-number', async (req, res) => {
   try {
-    const data = await calculateNextCreditNoteNumber();
+    const businessId = req.businessId || 1;
+    const data = await calculateNextCreditNoteNumber(pool, businessId);
     res.json(data);
   } catch (err) {
     console.error('Error in GET /api/credit-notes/next-number:', err);
@@ -46,10 +53,11 @@ router.get('/next-number', async (req, res) => {
 // GET /api/credit-notes — list credit notes with filtering
 router.get('/', async (req, res) => {
   try {
+    const businessId = req.businessId || 1;
     const { contact_id, order_id, q } = req.query;
-    const conditions = [];
-    const params = [];
-    let i = 1;
+    const conditions = [`cn.business_id = $1`];
+    const params = [businessId];
+    let i = 2;
 
     if (contact_id) {
       conditions.push(`cn.contact_id = $${i++}`);
@@ -94,16 +102,17 @@ router.get('/', async (req, res) => {
   }
 });
 
-// GET /api/credit-notes/orders/:orderId/returnable-items — get invoice items with remaining returnable quantities
-router.get('/orders/:orderId/returnable-items', async (req, res) => {
+// GET /api/credit-notes/orders/:orderId/returnable-items (and alias /returnable-items/:orderId)
+router.get(['/orders/:orderId/returnable-items', '/returnable-items/:orderId'], async (req, res) => {
   try {
+    const businessId = req.businessId || 1;
     const orderId = req.params.orderId;
     const ordRes = await pool.query(
       `SELECT o.*, c.name AS contact_name, c.phone AS contact_phone, c.city AS contact_city
        FROM orders o
        JOIN contacts c ON c.id = o.contact_id
-       WHERE o.id = $1`,
-      [orderId]
+       WHERE o.id = $1 AND o.business_id = $2`,
+      [orderId, businessId]
     );
     if (ordRes.rows.length === 0) {
       return res.status(404).json({ error: 'Order not found' });
@@ -116,9 +125,9 @@ router.get('/orders/:orderId/returnable-items', async (req, res) => {
         `SELECT cni.product_name, SUM(cni.quantity) AS total_returned_qty
          FROM credit_note_items cni
          JOIN credit_notes cn ON cn.id = cni.credit_note_id
-         WHERE cn.order_id = $1
+         WHERE cn.order_id = $1 AND cn.business_id = $2
          GROUP BY cni.product_name`,
-        [orderId]
+        [orderId, businessId]
       ),
     ]);
 
@@ -168,14 +177,15 @@ router.get('/orders/:orderId/returnable-items', async (req, res) => {
 // GET /api/credit-notes/:id — fetch single credit note with items
 router.get('/:id', async (req, res) => {
   try {
+    const businessId = req.businessId || 1;
     const cnRes = await pool.query(
       `SELECT cn.*,
               c.name AS contact_name, c.phone AS contact_phone, c.city AS contact_city,
               c.gstin AS contact_gstin, c.pan AS contact_pan, c.billing_address, c.shipping_address, c.state
        FROM credit_notes cn
        JOIN contacts c ON c.id = cn.contact_id
-       WHERE cn.id = $1`,
-      [req.params.id]
+       WHERE cn.id = $1 AND cn.business_id = $2`,
+      [req.params.id, businessId]
     );
     if (cnRes.rows.length === 0) {
       return res.status(404).json({ error: 'Credit note not found' });
@@ -198,6 +208,7 @@ router.get('/:id', async (req, res) => {
 
 // POST /api/credit-notes — create new credit note
 router.post('/', async (req, res) => {
+  const businessId = req.businessId || 1;
   const {
     contact_id,
     order_id,
@@ -230,14 +241,14 @@ router.post('/', async (req, res) => {
     // Determine credit note number
     let finalCnNumber = (credit_note_number || '').trim();
     if (finalCnNumber) {
-      const existing = await client.query('SELECT id FROM credit_notes WHERE credit_note_number = $1', [finalCnNumber]);
+      const existing = await client.query('SELECT id FROM credit_notes WHERE credit_note_number = $1 AND business_id = $2', [finalCnNumber, businessId]);
       if (existing.rows.length > 0) {
         await client.query('ROLLBACK');
         inTransaction = false;
         return res.status(400).json({ error: `Credit Note number "${finalCnNumber}" already exists.` });
       }
     } else {
-      const nextData = await calculateNextCreditNoteNumber(client);
+      const nextData = await calculateNextCreditNoteNumber(client, businessId);
       finalCnNumber = nextData.suggestedNumber;
     }
 
@@ -247,7 +258,7 @@ router.post('/', async (req, res) => {
     let taxMode = 'split';
     if (order_id) {
       // Use FOR UPDATE for concurrency safety to prevent race conditions during returns
-      const ordRes = await client.query('SELECT * FROM orders WHERE id = $1 FOR UPDATE', [order_id]);
+      const ordRes = await client.query('SELECT * FROM orders WHERE id = $1 AND business_id = $2 FOR UPDATE', [order_id, businessId]);
       if (ordRes.rows.length === 0) {
         await client.query('ROLLBACK');
         inTransaction = false;
@@ -266,9 +277,9 @@ router.post('/', async (req, res) => {
           `SELECT cni.product_name, SUM(cni.quantity) AS total_returned_qty
            FROM credit_note_items cni
            JOIN credit_notes cn ON cn.id = cni.credit_note_id
-           WHERE cn.order_id = $1
+           WHERE cn.order_id = $1 AND cn.business_id = $2
            GROUP BY cni.product_name`,
-          [order_id]
+          [order_id, businessId]
         ),
       ]);
 
@@ -350,12 +361,13 @@ router.post('/', async (req, res) => {
 
     const cnResult = await client.query(
       `INSERT INTO credit_notes (
-        credit_note_number, order_id, contact_id, credit_note_date,
+        business_id, credit_note_number, order_id, contact_id, credit_note_date,
         original_invoice_no, original_invoice_date, reason, notes,
         subtotal, tax_amount, total_amount, tax_mode
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
       RETURNING *`,
       [
+        businessId,
         finalCnNumber,
         order_id || null,
         contact_id,
@@ -404,8 +416,8 @@ router.post('/', async (req, res) => {
          LEFT JOIN (
            SELECT order_id, SUM(total_amount) AS total_credited FROM credit_notes WHERE order_id IS NOT NULL GROUP BY order_id
          ) cn_totals ON cn_totals.order_id = o.id
-         WHERE o.id = $1`,
-        [order_id]
+         WHERE o.id = $1 AND o.business_id = $2`,
+        [order_id, businessId]
       );
       if (ordCheck.rows.length > 0) {
         const row = ordCheck.rows[0];
@@ -454,41 +466,49 @@ router.post('/', async (req, res) => {
 // GET /api/credit-notes/:id/pdf — render and download official GST Credit Note PDF
 router.get('/:id/pdf', async (req, res) => {
   try {
-    const cnRes = await pool.query('SELECT * FROM credit_notes WHERE id = $1', [req.params.id]);
+    const businessId = req.businessId || 1;
+    const cnRes = await pool.query('SELECT * FROM credit_notes WHERE id = $1 AND business_id = $2', [req.params.id, businessId]);
     if (cnRes.rows.length === 0) {
       return res.status(404).json({ error: 'Credit note not found' });
     }
     const creditNote = cnRes.rows[0];
     const safeNumber = (creditNote.credit_note_number || `credit_note_${creditNote.id}`).replace(/[^a-zA-Z0-9_-]/g, '_');
-    const cacheKey = `credit-notes/Credit-Note-${safeNumber}.pdf`;
-
-    // 1. Return cached PDF from object storage if present
-    if (await storageService.exists(cacheKey)) {
-      try {
-        const cachedPdf = await storageService.getFileBuffer(cacheKey);
-        res.setHeader('Content-Type', 'application/pdf');
-        res.setHeader('Content-Disposition', `inline; filename="${safeNumber}.pdf"`);
-        return res.end(cachedPdf);
-      } catch (cacheErr) {
-        console.warn('[Storage] Failed to read cached credit note PDF, regenerating:', cacheErr.message);
-      }
-    }
-
     const [itemsRes, contactRes, business] = await Promise.all([
       pool.query('SELECT * FROM credit_note_items WHERE credit_note_id = $1 ORDER BY id ASC', [creditNote.id]),
       pool.query('SELECT * FROM contacts WHERE id = $1', [creditNote.contact_id]),
-      loadBusinessProfile(),
+      loadBusinessProfile(businessId),
     ]);
 
     const contact = contactRes.rows[0] || {};
     const items = itemsRes.rows;
+    const filename = `Credit-Note-${safeNumber}.pdf`;
+    const primaryKey = getDocumentStorageKey({
+      business,
+      contactName: contact.name,
+      docType: 'credit-notes',
+      filename,
+    });
+    const fallbackKeys = getDocumentFallbackKeys({
+      business,
+      contactName: contact.name,
+      docType: 'credit-notes',
+      filename,
+    });
+
+    // 1. Return cached PDF from object storage if present (checks primary, then fallback keys)
+    const cached = await findCachedDocumentBuffer(storageService, primaryKey, fallbackKeys);
+    if (cached) {
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `inline; filename="${safeNumber}.pdf"`);
+      return res.end(cached.buffer);
+    }
 
     const html = buildCreditNoteHtml({ business, creditNote, items, contact });
     const pdfBuffer = await renderHtmlToPdf(html);
 
-    // Asynchronously save to storage cache (GCS, S3, or Local)
+    // Asynchronously save to primary storage cache
     storageService.uploadFile({
-      key: cacheKey,
+      key: primaryKey,
       buffer: pdfBuffer,
       contentType: 'application/pdf',
       isPublic: true,
@@ -506,7 +526,8 @@ router.get('/:id/pdf', async (req, res) => {
 // POST /api/credit-notes/:id/whatsapp (and alias /send-whatsapp) — send Credit Note PDF directly to customer
 router.post(['/:id/whatsapp', '/:id/send-whatsapp'], async (req, res) => {
   try {
-    const cnRes = await pool.query('SELECT * FROM credit_notes WHERE id = $1', [req.params.id]);
+    const businessId = req.businessId || 1;
+    const cnRes = await pool.query('SELECT * FROM credit_notes WHERE id = $1 AND business_id = $2', [req.params.id, businessId]);
     if (cnRes.rows.length === 0) {
       return res.status(404).json({ error: 'Credit note not found' });
     }
@@ -515,7 +536,7 @@ router.post(['/:id/whatsapp', '/:id/send-whatsapp'], async (req, res) => {
     const [itemsRes, contactRes, business] = await Promise.all([
       pool.query('SELECT * FROM credit_note_items WHERE credit_note_id = $1 ORDER BY id ASC', [creditNote.id]),
       pool.query('SELECT * FROM contacts WHERE id = $1', [creditNote.contact_id]),
-      loadBusinessProfile(),
+      loadBusinessProfile(businessId),
     ]);
 
     const contact = contactRes.rows[0] || {};
@@ -525,19 +546,26 @@ router.post(['/:id/whatsapp', '/:id/send-whatsapp'], async (req, res) => {
     }
 
     const safeNumber = (creditNote.credit_note_number || `credit_note_${creditNote.id}`).replace(/[^a-zA-Z0-9_-]/g, '_');
-    const cacheKey = `credit-notes/Credit-Note-${safeNumber}.pdf`;
-    let pdfBuffer = null;
-    if (await storageService.exists(cacheKey)) {
-      try {
-        pdfBuffer = await storageService.getFileBuffer(cacheKey);
-      } catch (e) {
-        console.warn('[Storage] Failed to read cached credit note PDF for WhatsApp:', e.message);
-      }
-    }
+    const filename = `Credit-Note-${safeNumber}.pdf`;
+    const primaryKey = getDocumentStorageKey({
+      business,
+      contactName: contact.name,
+      docType: 'credit-notes',
+      filename,
+    });
+    const fallbackKeys = getDocumentFallbackKeys({
+      business,
+      contactName: contact.name,
+      docType: 'credit-notes',
+      filename,
+    });
+
+    const cached = await findCachedDocumentBuffer(storageService, primaryKey, fallbackKeys);
+    let pdfBuffer = cached?.buffer || null;
     if (!pdfBuffer) {
       const html = buildCreditNoteHtml({ business, creditNote, items, contact });
       pdfBuffer = await renderHtmlToPdf(html);
-      storageService.uploadFile({ key: cacheKey, buffer: pdfBuffer, contentType: 'application/pdf', isPublic: true }).catch(() => {});
+      storageService.uploadFile({ key: primaryKey, buffer: pdfBuffer, contentType: 'application/pdf', isPublic: true }).catch(() => {});
     }
 
     const fileName = `${safeNumber}.pdf`;
@@ -571,6 +599,7 @@ router.post(['/:id/whatsapp', '/:id/send-whatsapp'], async (req, res) => {
 
 // DELETE /api/credit-notes/:id — void / cancel credit note with full atomic transaction rollback
 router.delete('/:id', async (req, res) => {
+  const businessId = req.businessId || 1;
   const client = await pool.connect();
   let inTransaction = false;
   try {
@@ -578,7 +607,7 @@ router.delete('/:id', async (req, res) => {
     inTransaction = true;
 
     // 1. Fetch and lock credit note row
-    const cnRes = await client.query('SELECT * FROM credit_notes WHERE id = $1 FOR UPDATE', [req.params.id]);
+    const cnRes = await client.query('SELECT * FROM credit_notes WHERE id = $1 AND business_id = $2 FOR UPDATE', [req.params.id, businessId]);
     if (cnRes.rows.length === 0) {
       await client.query('ROLLBACK');
       inTransaction = false;
@@ -589,12 +618,12 @@ router.delete('/:id', async (req, res) => {
 
     // 2. If linked to an order, lock order row
     if (orderId) {
-      await client.query('SELECT id FROM orders WHERE id = $1 FOR UPDATE', [orderId]);
+      await client.query('SELECT id FROM orders WHERE id = $1 AND business_id = $2 FOR UPDATE', [orderId, businessId]);
     }
 
     // 3. Delete items and credit note header
     await client.query('DELETE FROM credit_note_items WHERE credit_note_id = $1', [creditNote.id]);
-    await client.query('DELETE FROM credit_notes WHERE id = $1', [creditNote.id]);
+    await client.query('DELETE FROM credit_notes WHERE id = $1 AND business_id = $2', [creditNote.id, businessId]);
 
     // 4. If linked to an order, recalculate the order's remaining balance and update status
     if (orderId) {
@@ -608,13 +637,13 @@ router.delete('/:id', async (req, res) => {
            FROM order_items GROUP BY order_id
          ) item_totals ON item_totals.order_id = o.id
          LEFT JOIN (
-           SELECT order_id, SUM(amount) AS total_paid FROM payments WHERE order_id IS NOT NULL GROUP BY order_id
+           SELECT order_id, SUM(amount) AS total_paid FROM payments WHERE order_id IS NOT NULL AND business_id = $2 GROUP BY order_id
          ) pay_totals ON pay_totals.order_id = o.id
          LEFT JOIN (
-           SELECT order_id, SUM(total_amount) AS total_credited FROM credit_notes WHERE order_id IS NOT NULL GROUP BY order_id
+           SELECT order_id, SUM(total_amount) AS total_credited FROM credit_notes WHERE order_id IS NOT NULL AND business_id = $2 GROUP BY order_id
          ) cn_totals ON cn_totals.order_id = o.id
-         WHERE o.id = $1`,
-        [orderId]
+         WHERE o.id = $1 AND o.business_id = $2`,
+        [orderId, businessId]
       );
       if (ordCheck.rows.length > 0) {
         const row = ordCheck.rows[0];
@@ -627,13 +656,13 @@ router.delete('/:id', async (req, res) => {
           // Revert payment status back to pending or partially_paid
           const newStatus = totalPaid > 0.01 ? 'partially_paid' : 'pending';
           await client.query(
-            `UPDATE orders SET payment_status = $1, paid_at = NULL, updated_at = now() WHERE id = $2`,
-            [newStatus, orderId]
+            `UPDATE orders SET payment_status = $1, paid_at = NULL, updated_at = now() WHERE id = $2 AND business_id = $3`,
+            [newStatus, orderId, businessId]
           );
         } else {
           await client.query(
-            `UPDATE orders SET payment_status = 'paid', updated_at = now() WHERE id = $1`,
-            [orderId]
+            `UPDATE orders SET payment_status = 'paid', updated_at = now() WHERE id = $1 AND business_id = $2`,
+            [orderId, businessId]
           );
         }
       }
@@ -644,7 +673,17 @@ router.delete('/:id', async (req, res) => {
 
     // Clean up credit note PDF from Cloud Storage and re-sync linked order invoice
     const safeNumber = (creditNote.credit_note_number || `credit_note_${creditNote.id}`).replace(/[^a-zA-Z0-9_-]/g, '_');
-    storageService.deleteFile(`credit-notes/Credit-Note-${safeNumber}.pdf`).catch(() => {});
+    const [contactRes, business] = await Promise.all([
+      client.query('SELECT name FROM contacts WHERE id = $1', [creditNote.contact_id]),
+      loadBusinessProfile(businessId),
+    ]);
+    const contactName = contactRes.rows[0]?.name;
+    const filename = `Credit-Note-${safeNumber}.pdf`;
+    const primaryKey = getDocumentStorageKey({ business, contactName, docType: 'credit-notes', filename });
+    const fallbackKeys = getDocumentFallbackKeys({ business, contactName, docType: 'credit-notes', filename });
+    for (const k of [primaryKey, ...fallbackKeys]) {
+      storageService.deleteFile(k).catch(() => {});
+    }
     if (orderId) {
       import('../storage/documentSync.js').then(({ syncInvoicePdf }) => {
         syncInvoicePdf(orderId).catch(() => {});
