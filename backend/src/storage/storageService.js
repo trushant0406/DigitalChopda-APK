@@ -17,10 +17,10 @@ function initializeStorage() {
     } catch (err) {
       console.warn(`[Storage] GCS initialization failed: ${err.message}. Falling back to local storage.`);
     }
-  } else if (provider === 's3' || provider === 'r2') {
+  } else if (['s3', 'r2', 'aws', 'aws-s3', 'aws_s3'].includes(provider)) {
     try {
       activeDriver = new S3StorageDriver();
-      activeDriverName = provider;
+      activeDriverName = 's3';
       console.log(`[Storage] Initialized S3-compatible storage (Bucket: ${process.env.S3_BUCKET_NAME})`);
       return;
     } catch (err) {

@@ -13,9 +13,12 @@ import {
 export class S3StorageDriver {
   constructor(options = {}) {
     this.bucketName = options.bucketName || process.env.S3_BUCKET_NAME;
-    this.endpoint = options.endpoint || process.env.S3_ENDPOINT;
-    this.region = options.region || process.env.S3_REGION || 'auto';
-    this.publicBaseUrl = options.publicBaseUrl || process.env.S3_PUBLIC_BASE_URL;
+    this.endpoint = (options.endpoint || process.env.S3_ENDPOINT || '').trim();
+    this.region = (options.region || process.env.S3_REGION || process.env.AWS_REGION || '').trim();
+    if (!this.region) {
+      this.region = this.endpoint ? 'auto' : 'ap-south-1';
+    }
+    this.publicBaseUrl = (options.publicBaseUrl || process.env.S3_PUBLIC_BASE_URL || '').trim();
 
     if (!this.bucketName) {
       throw new Error('S3StorageDriver: S3_BUCKET_NAME is required');
@@ -23,18 +26,26 @@ export class S3StorageDriver {
 
     const clientConfig = {
       region: this.region,
-      credentials: {
-        accessKeyId: options.accessKeyId || process.env.S3_ACCESS_KEY_ID,
-        secretAccessKey: options.secretAccessKey || process.env.S3_SECRET_ACCESS_KEY,
-      },
     };
+
+    const accessKeyId = options.accessKeyId || process.env.S3_ACCESS_KEY_ID || process.env.AWS_ACCESS_KEY_ID;
+    const secretAccessKey = options.secretAccessKey || process.env.S3_SECRET_ACCESS_KEY || process.env.AWS_SECRET_ACCESS_KEY;
+    if (accessKeyId && secretAccessKey) {
+      clientConfig.credentials = {
+        accessKeyId: accessKeyId.trim(),
+        secretAccessKey: secretAccessKey.trim(),
+      };
+    }
 
     if (this.endpoint) {
       clientConfig.endpoint = this.endpoint;
     }
 
     // Needed for Cloudflare R2 / MinIO / GCS
-    if (options.forcePathStyle !== undefined ? options.forcePathStyle : process.env.S3_FORCE_PATH_STYLE === 'true') {
+    const forcePathStyle = options.forcePathStyle !== undefined
+      ? options.forcePathStyle
+      : (process.env.S3_FORCE_PATH_STYLE === 'true');
+    if (forcePathStyle) {
       clientConfig.forcePathStyle = true;
     }
 
