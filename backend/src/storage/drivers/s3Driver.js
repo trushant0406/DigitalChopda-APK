@@ -13,7 +13,14 @@ import {
 export class S3StorageDriver {
   constructor(options = {}) {
     this.bucketName = options.bucketName || process.env.S3_BUCKET_NAME;
-    this.endpoint = (options.endpoint || process.env.S3_ENDPOINT || '').trim();
+    let rawEndpoint = (options.endpoint || process.env.S3_ENDPOINT || '').trim();
+    if (rawEndpoint) {
+      if (this.bucketName && rawEndpoint.endsWith(`/${this.bucketName}`)) {
+        rawEndpoint = rawEndpoint.slice(0, -(`/${this.bucketName}`.length));
+      }
+      rawEndpoint = rawEndpoint.replace(/\/+$/, '');
+    }
+    this.endpoint = rawEndpoint;
     this.region = (options.region || process.env.S3_REGION || process.env.AWS_REGION || '').trim();
     if (!this.region) {
       this.region = this.endpoint ? 'auto' : 'ap-south-1';
