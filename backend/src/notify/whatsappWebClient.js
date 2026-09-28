@@ -17,30 +17,65 @@ const CHROME_PATHS = [
   '/usr/bin/chromium',
 ];
 
-let qrCodeDataUrl = null;
-let clientStatus = 'DISCONNECTED'; // 'DISCONNECTED' | 'INITIALIZING' | 'QR_READY' | 'CONNECTED'
-let client = null; // WhatsApp Web Client with MobX media model patch
-let isReconnecting = false;
+// Multi-Tenant Session Registry: businessId -> Session Object
+const tenantSessions = new Map();
 
-export function getWhatsAppWebStatus() {
+function getTenantSession(bizId = 1) {
+  const id = Number(bizId) || 1;
+  if (!tenantSessions.has(id)) {
+    tenantSessions.set(id, {
+      businessId: id,
+      client: null,
+      clientStatus: 'DISCONNECTED', // 'DISCONNECTED' | 'INITIALIZING' | 'QR_READY' | 'CONNECTED'
+      qrCodeDataUrl: null,
+      info: null,
+      isReconnecting: false,
+    });
+  }
+  return tenantSessions.get(id);
+}
+
+export function getWhatsAppWebStatus(bizId = 1) {
+  const session = getTenantSession(bizId);
   return {
-    status: clientStatus,
-    qrCodeDataUrl,
+    businessId: session.businessId,
+    status: session.clientStatus,
+    qrCodeDataUrl: session.qrCodeDataUrl,
   };
 }
 
-export async function killStaleBrowserProcesses() {
-  if (client?.pupBrowser?.process) {
-    try {
-      const proc = client.pupBrowser.process();
-      if (proc?.pid) {
-        if (process.platform === 'win32') {
-          spawn('taskkill', ['/F', '/T', '/PID', String(proc.pid)], { stdio: 'ignore', windowsHide: true });
-        } else {
-          try { process.kill(proc.pid, 'SIGKILL'); } catch (e) {}
+export async function killStaleBrowserProcesses(bizId = null) {
+  if (bizId) {
+    const session = tenantSessions.get(Number(bizId));
+    if (session?.client?.pupBrowser?.process) {
+      try {
+        const proc = session.client.pupBrowser.process();
+        if (proc?.pid) {
+          if (process.platform === 'win32') {
+            spawn('taskkill', ['/F', '/T', '/PID', String(proc.pid)], { stdio: 'ignore', windowsHide: true });
+          } else {
+            try { process.kill(proc.pid, 'SIGKILL'); } catch (e) {}
+          }
         }
-      }
-    } catch (e) {}
+      } catch (e) {}
+    }
+    return;
+  }
+
+  // If no bizId given, iterate all known sessions
+  for (const session of tenantSessions.values()) {
+    if (session?.client?.pupBrowser?.process) {
+      try {
+        const proc = session.client.pupBrowser.process();
+        if (proc?.pid) {
+          if (process.platform === 'win32') {
+            spawn('taskkill', ['/F', '/T', '/PID', String(proc.pid)], { stdio: 'ignore', windowsHide: true });
+          } else {
+            try { process.kill(proc.pid, 'SIGKILL'); } catch (e) {}
+          }
+        }
+      } catch (e) {}
+    }
   }
 
   if (process.platform === 'win32') {
@@ -75,48 +110,55 @@ export function cleanChromiumLocks(dir = './.wwebjs_auth') {
   } catch (e) {}
 }
 
-export async function getWhatsAppWebDiagnostics() {
+export async function getWhatsAppWebDiagnostics(bizId = 1) {
+  const session = getTenantSession(bizId);
   let state = null;
-  if (client) {
+  if (session.client) {
     try {
-      state = await client.getState();
+      state = await session.client.getState();
     } catch (e) {
       state = `getState error: ${e.message}`;
     }
   }
   return {
-    clientStatus,
-    hasClient: Boolean(client),
-    hasQr: Boolean(qrCodeDataUrl),
+    businessId: session.businessId,
+    clientStatus: session.clientStatus,
+    hasClient: Boolean(session.client),
+    hasQr: Boolean(session.qrCodeDataUrl),
     state,
-    info: client?.info ? {
-      wid: client.info.wid,
-      pushname: client.info.pushname,
-      platform: client.info.platform,
-    } : null,
+    info: session.info || (session.client?.info ? {
+      wid: session.client.info.wid,
+      pushname: session.client.info.pushname,
+      platform: session.client.info.platform,
+    } : null),
   };
 }
 
-export async function initWhatsAppWebClient() {
-  if (client && (clientStatus === 'CONNECTED' || clientStatus === 'QR_READY')) {
+export async function initWhatsAppWebClient(bizId = 1) {
+  const session = getTenantSession(bizId);
+  if (session.client && (session.clientStatus === 'CONNECTED' || session.clientStatus === 'QR_READY')) {
     return;
   }
-  if (client) {
-    try { await client.destroy().catch(() => {}); } catch (e) {}
-    client = null;
+  if (session.client) {
+    try { await session.client.destroy().catch(() => {}); } catch (e) {}
+    session.client = null;
   }
 
-  await killStaleBrowserProcesses();
-  cleanChromiumLocks('./.wwebjs_auth');
+  const clientId = `tenant_${session.businessId}`;
+  const sessionAuthPath = path.resolve(process.cwd(), `./.wwebjs_auth/session-${clientId}`);
+  cleanChromiumLocks(sessionAuthPath);
 
   const executablePath = process.env.CHROME_PATH || CHROME_PATHS.find((p) => existsSync(p));
-  clientStatus = 'INITIALIZING';
-  qrCodeDataUrl = null;
-  console.log('[whatsapp-web] Initializing client (executable:', executablePath || 'bundled', ')...');
+  session.clientStatus = 'INITIALIZING';
+  session.qrCodeDataUrl = null;
+  console.log(`[whatsapp-web][Tenant ${session.businessId}] Initializing client (executable: ${executablePath || 'bundled'})...`);
 
   try {
-    client = new Client({
-      authStrategy: new LocalAuth({ dataPath: './.wwebjs_auth' }),
+    const client = new Client({
+      authStrategy: new LocalAuth({
+        clientId,
+        dataPath: './.wwebjs_auth',
+      }),
       puppeteer: {
         executablePath,
         headless: true,
@@ -137,130 +179,137 @@ export async function initWhatsAppWebClient() {
       } catch (e) {}
 
       try {
-        qrCodeDataUrl = await QRCode.toDataURL(qr);
-        clientStatus = 'QR_READY';
-        console.log('📱 [whatsapp-web] QR code generated successfully and ready to scan!');
+        session.qrCodeDataUrl = await QRCode.toDataURL(qr);
+        session.clientStatus = 'QR_READY';
+        console.log(`📱 [whatsapp-web][Tenant ${session.businessId}] QR code generated successfully and ready to scan!`);
       } catch (err) {
-        console.error('[whatsapp-web] Failed to generate QR data URL:', err.message);
+        console.error(`[whatsapp-web][Tenant ${session.businessId}] Failed to generate QR data URL:`, err.message);
       }
     });
 
     client.on('ready', () => {
-      console.log('✅ WhatsApp Web Client is ready and connected!');
-      clientStatus = 'CONNECTED';
-      qrCodeDataUrl = null;
+      console.log(`✅ [whatsapp-web][Tenant ${session.businessId}] Client is ready and connected!`);
+      session.clientStatus = 'CONNECTED';
+      session.qrCodeDataUrl = null;
+      if (client.info) {
+        session.info = {
+          wid: client.info.wid,
+          pushname: client.info.pushname,
+          platform: client.info.platform,
+        };
+      }
     });
 
     client.on('authenticated', () => {
-      console.log('[whatsapp-web] Authenticated successfully.');
-      clientStatus = 'CONNECTED';
-      qrCodeDataUrl = null;
+      console.log(`[whatsapp-web][Tenant ${session.businessId}] Authenticated successfully.`);
+      session.clientStatus = 'CONNECTED';
+      session.qrCodeDataUrl = null;
     });
 
     client.on('auth_failure', async (msg) => {
-      console.error('[whatsapp-web] Authentication failure:', msg);
-      clientStatus = 'DISCONNECTED';
-      qrCodeDataUrl = null;
+      console.error(`[whatsapp-web][Tenant ${session.businessId}] Authentication failure:`, msg);
+      session.clientStatus = 'DISCONNECTED';
+      session.qrCodeDataUrl = null;
+      session.info = null;
       try { await client.destroy().catch(() => {}); } catch (e) {}
-      client = null;
-      await killStaleBrowserProcesses();
+      session.client = null;
       setTimeout(() => {
-        reconnectWhatsAppWeb(true).catch((e) => console.warn('[whatsapp-web] Auto-restart on auth_failure failed:', e.message));
+        reconnectWhatsAppWeb(session.businessId, true).catch((e) =>
+          console.warn(`[whatsapp-web][Tenant ${session.businessId}] Auto-restart on auth_failure failed:`, e.message)
+        );
       }, 1000);
     });
 
     client.on('disconnected', async (reason) => {
-      console.log('[whatsapp-web] Disconnected from device/web:', reason);
-      clientStatus = 'DISCONNECTED';
-      qrCodeDataUrl = null;
+      console.log(`[whatsapp-web][Tenant ${session.businessId}] Disconnected:`, reason);
+      session.clientStatus = 'DISCONNECTED';
+      session.qrCodeDataUrl = null;
+      session.info = null;
       try { await client.destroy().catch(() => {}); } catch (e) {}
-      client = null;
-      await killStaleBrowserProcesses();
+      session.client = null;
       setTimeout(() => {
-        reconnectWhatsAppWeb(true).catch((e) => console.warn('[whatsapp-web] Auto-restart on disconnect failed:', e.message));
+        reconnectWhatsAppWeb(session.businessId, true).catch((e) =>
+          console.warn(`[whatsapp-web][Tenant ${session.businessId}] Auto-restart on disconnect failed:`, e.message)
+        );
       }, 1000);
     });
 
+    session.client = client;
     client.initialize().catch((err) => {
-      console.error('[whatsapp-web] Failed to initialize:', err.message);
-      clientStatus = 'DISCONNECTED';
-      client = null;
+      console.error(`[whatsapp-web][Tenant ${session.businessId}] Failed to initialize:`, err.message);
+      session.clientStatus = 'DISCONNECTED';
+      session.client = null;
     });
   } catch (err) {
-    console.error('[whatsapp-web] Setup error:', err.message);
-    clientStatus = 'DISCONNECTED';
-    client = null;
+    console.error(`[whatsapp-web][Tenant ${session.businessId}] Setup error:`, err.message);
+    session.clientStatus = 'DISCONNECTED';
+    session.client = null;
   }
 }
 
-export async function reconnectWhatsAppWeb(forceReset = false) {
-  if (isReconnecting) {
-    console.log('[whatsapp-web] Reconnect already in progress, returning status.');
-    return getWhatsAppWebStatus();
+export async function reconnectWhatsAppWeb(bizId = 1, forceReset = false) {
+  const session = getTenantSession(bizId);
+  if (session.isReconnecting) {
+    console.log(`[whatsapp-web][Tenant ${session.businessId}] Reconnect already in progress.`);
+    return getWhatsAppWebStatus(session.businessId);
   }
-  isReconnecting = true;
-  console.log('[whatsapp-web] reconnectWhatsAppWeb called:', JSON.stringify({ forceReset, currentStatus: clientStatus }));
-  
+  session.isReconnecting = true;
+  console.log(`[whatsapp-web][Tenant ${session.businessId}] reconnectWhatsAppWeb called: forceReset=${forceReset}`);
+
   try {
-    if (client) {
-      try { await client.destroy().catch(() => {}); } catch (e) {}
-      client = null;
+    if (session.client) {
+      try { await session.client.logout().catch(() => {}); } catch (e) {}
+      try { await session.client.destroy().catch(() => {}); } catch (e) {}
+      session.client = null;
     }
 
-    await killStaleBrowserProcesses();
-    await new Promise((resolve) => setTimeout(resolve, 600));
-
-    clientStatus = 'INITIALIZING';
-    qrCodeDataUrl = null;
+    session.clientStatus = 'INITIALIZING';
+    session.qrCodeDataUrl = null;
+    session.info = null;
 
     if (forceReset) {
-      const authPath = path.resolve(process.cwd(), './.wwebjs_auth');
-      for (let attempt = 0; attempt < 3; attempt++) {
+      const clientId = `tenant_${session.businessId}`;
+      const sessionPath = path.resolve(process.cwd(), `./.wwebjs_auth/session-${clientId}`);
+      if (existsSync(sessionPath)) {
         try {
-          if (existsSync(authPath)) {
-            fs.rmSync(authPath, { recursive: true, force: true });
-            console.log('[whatsapp-web] Cleared .wwebjs_auth session cache.');
-          }
-          break;
-        } catch (e) {
-          console.warn(`[whatsapp-web] Clean attempt ${attempt + 1} failed: ${e.message}`);
-          await killStaleBrowserProcesses();
-          await new Promise((r) => setTimeout(r, 800));
+          fs.rmSync(sessionPath, { recursive: true, force: true });
+          console.log(`[whatsapp-web][Tenant ${session.businessId}] Deleted session auth directory: ${sessionPath}`);
+        } catch (rmErr) {
+          console.warn(`[whatsapp-web][Tenant ${session.businessId}] Could not remove session dir:`, rmErr.message);
         }
       }
     }
 
-    await initWhatsAppWebClient();
+    await new Promise((resolve) => setTimeout(resolve, 600));
+    await initWhatsAppWebClient(session.businessId);
+    return getWhatsAppWebStatus(session.businessId);
   } finally {
-    isReconnecting = false;
+    session.isReconnecting = false;
   }
-
-  return getWhatsAppWebStatus();
 }
 
-export async function destroyWhatsAppWebClient() {
-  console.log('[whatsapp-web] Gracefully destroying client and cleaning sessions...');
-  if (client) {
-    try {
-      await Promise.race([
-        client.destroy(),
-        new Promise((_, reject) => setTimeout(() => reject(new Error('destroy timeout')), 3000)),
-      ]).catch(() => {});
-    } catch (_) {}
-    client = null;
+export async function destroyWhatsAppWebClient(bizId = null) {
+  if (bizId) {
+    const session = tenantSessions.get(Number(bizId));
+    if (session?.client) {
+      try { await session.client.destroy().catch(() => {}); } catch (e) {}
+      session.client = null;
+    }
+    return;
+  }
+
+  for (const session of tenantSessions.values()) {
+    if (session?.client) {
+      try { await session.client.destroy().catch(() => {}); } catch (e) {}
+      session.client = null;
+    }
   }
   await killStaleBrowserProcesses();
   cleanChromiumLocks('./.wwebjs_auth');
-  clientStatus = 'DISCONNECTED';
-  qrCodeDataUrl = null;
 }
 
 export async function sendWhatsAppWebDocument(phone, docOptions, filenameArg, captionArg) {
-  if (clientStatus !== 'CONNECTED' || !client) {
-    initWhatsAppWebClient();
-    throw new Error(`WhatsApp Web client is not connected yet (status=${clientStatus}). Please scan the QR code in Settings.`);
-  }
-
+  let businessId = 1;
   let pdfBuffer;
   let filename = 'document.pdf';
   let caption = '';
@@ -273,10 +322,15 @@ export async function sendWhatsAppWebDocument(phone, docOptions, filenameArg, ca
     pdfBuffer = docOptions.pdfBuffer;
     filename = docOptions.filename || docOptions.fileName || filename;
     caption = docOptions.caption || '';
+    if (docOptions.businessId) {
+      businessId = Number(docOptions.businessId);
+    }
   }
 
-  if (!pdfBuffer) {
-    throw new Error('Missing pdfBuffer in sendWhatsAppWebDocument');
+  const session = getTenantSession(businessId);
+  if (session.clientStatus !== 'CONNECTED' || !session.client) {
+    initWhatsAppWebClient(businessId);
+    throw new Error(`WhatsApp Web client for Store #${businessId} is not connected yet (status=${session.clientStatus}). Please scan the QR code in Settings.`);
   }
 
   const cleanPhone = (phone || '').replace(/\D/g, '');
@@ -286,18 +340,19 @@ export async function sendWhatsAppWebDocument(phone, docOptions, filenameArg, ca
   const media = new MessageMedia('application/pdf', pdfBuffer.toString('base64'), filename);
 
   try {
-    const sendResult = await client.sendMessage(chatId, media, { sendMediaAsDocument: true, caption });
+    const sendResult = await session.client.sendMessage(chatId, media, { sendMediaAsDocument: true, caption });
     return { sent: true, method: 'whatsapp-web', messageId: sendResult?.id?._serialized };
   } catch (sendErr) {
-    console.error(`[whatsapp-web] Document send failed to ${chatId}:`, sendErr.message);
+    console.error(`[whatsapp-web][Tenant ${businessId}] Document send failed to ${chatId}:`, sendErr.message);
     throw sendErr;
   }
 }
 
-export async function sendWhatsAppWebText(phone, text) {
-  if (clientStatus !== 'CONNECTED' || !client) {
-    initWhatsAppWebClient();
-    throw new Error(`WhatsApp Web client is not connected yet (status=${clientStatus}). Please scan the QR code in Settings.`);
+export async function sendWhatsAppWebText(phone, text, businessId = 1) {
+  const session = getTenantSession(businessId);
+  if (session.clientStatus !== 'CONNECTED' || !session.client) {
+    initWhatsAppWebClient(businessId);
+    throw new Error(`WhatsApp Web client for Store #${businessId} is not connected yet (status=${session.clientStatus}). Please scan the QR code in Settings.`);
   }
 
   const cleanPhone = (phone || '').replace(/\D/g, '');
@@ -305,10 +360,10 @@ export async function sendWhatsAppWebText(phone, text) {
   const chatId = `${formattedPhone}@c.us`;
 
   try {
-    const sendResult = await client.sendMessage(chatId, text);
+    const sendResult = await session.client.sendMessage(chatId, text);
     return { sent: true, method: 'whatsapp-web', messageId: sendResult?.id?._serialized };
   } catch (sendErr) {
-    console.error(`[whatsapp-web] Text send failed to ${chatId}:`, sendErr.message);
+    console.error(`[whatsapp-web][Tenant ${businessId}] Text send failed to ${chatId}:`, sendErr.message);
     throw sendErr;
   }
 }

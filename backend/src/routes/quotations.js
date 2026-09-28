@@ -312,6 +312,7 @@ router.post('/:id/send-whatsapp', async (req, res) => {
         pdfBuffer: pdf,
         filename: `Quotation-${quotation.id}.pdf`,
         caption: pdfCaption,
+        businessId: quotation.business_id || business?.id || 1,
       });
     } catch (e) {
       webError = e.message;
@@ -603,6 +604,7 @@ router.post(['/:id/convert-to-invoice', '/:id/convert-to-order'], async (req, re
             pdfBuffer: pdf,
             filename: `Invoice-${finalInvoiceNumber}.pdf`,
             caption: pdfCaption,
+            businessId: quotation.business_id || business?.id || 1,
           });
           webSent = Boolean(r?.sent);
           console.log('[convert-to-invoice] WhatsApp document dispatch success:', JSON.stringify(r));

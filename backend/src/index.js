@@ -102,10 +102,28 @@ app.get('/api/health', async (req, res) => {
 });
 
 const port = process.env.PORT || 4000;
-const server = app.listen(port, () => {
+const server = app.listen(port, async () => {
   console.log(`DigitalChopda.in backend on :${port}`);
   startScheduler();
-  initWhatsAppWebClient();
+
+  // Auto-restore saved WhatsApp Web sessions for each tenant on startup
+  try {
+    const authDir = path.resolve(process.cwd(), './.wwebjs_auth');
+    if (fs.existsSync(authDir)) {
+      const entries = fs.readdirSync(authDir);
+      for (const entry of entries) {
+        const match = entry.match(/^session-tenant_(\d+)$/);
+        if (match) {
+          const bizId = parseInt(match[1], 10);
+          console.log(`[whatsapp-web] Restoring saved session for Business #${bizId}...`);
+          initWhatsAppWebClient(bizId).catch(() => {});
+        }
+      }
+    }
+  } catch (e) {
+    console.warn('[whatsapp-web] Session scan error:', e.message);
+  }
+  initWhatsAppWebClient(1).catch(() => {});
 });
 
 // Enterprise Keep-Alive & Timeout Protection behind Nginx / ALB

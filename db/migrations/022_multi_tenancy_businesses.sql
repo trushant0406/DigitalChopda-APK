@@ -89,6 +89,9 @@ ALTER TABLE products ADD COLUMN IF NOT EXISTS business_id INTEGER DEFAULT 1 REFE
 UPDATE products SET business_id = 1 WHERE business_id IS NULL;
 ALTER TABLE products ALTER COLUMN business_id SET DEFAULT 1;
 ALTER TABLE products ALTER COLUMN business_id SET NOT NULL;
+ALTER TABLE products DROP CONSTRAINT IF EXISTS products_name_key;
+ALTER TABLE products DROP CONSTRAINT IF EXISTS products_business_name_key;
+ALTER TABLE products ADD CONSTRAINT products_business_name_key UNIQUE (business_id, name);
 CREATE INDEX IF NOT EXISTS idx_products_business_id ON products(business_id);
 
 -- orders

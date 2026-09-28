@@ -770,7 +770,7 @@ We have received your payment of *₹${payAmount.toFixed(2)}* via *${(payment_mo
 Thank you for your business!
 — *${profile?.company_name || profile?.name || 'Accounts Dept'}*`;
 
-        await sendWhatsAppWebText(customer.phone, msg);
+        await sendWhatsAppWebText(customer.phone, msg, businessId);
         if (primaryPayment?.id) {
           await pool.query(`UPDATE payments SET whatsapp_sent = true WHERE id = $1 AND business_id = $2`, [primaryPayment.id, businessId]);
         }
@@ -835,7 +835,7 @@ Kindly arrange for payment at your earliest convenience. If already paid, please
 Thank you!
 — *${business?.company_name || business?.name || 'Accounts Team'}*`;
 
-    await sendWhatsAppWebText(customer.phone, msg);
+    await sendWhatsAppWebText(customer.phone, msg, businessId);
     res.json({ success: true, message: `Reminder sent to ${customer.phone}` });
   } catch (err) {
     console.error('Failed to send payment reminder:', err);
@@ -999,6 +999,7 @@ Please find attached your updated statement of accounts.
       pdfBuffer,
       filename,
       caption,
+      businessId,
     });
 
     res.json({ success: true, message: `Statement PDF sent to ${customer.phone}` });

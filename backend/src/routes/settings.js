@@ -11,29 +11,34 @@ import {
 const router = Router();
 
 router.get('/status', (req, res) => {
-  const webStatus = getWhatsAppWebStatus();
+  const businessId = req.businessId || 1;
+  const webStatus = getWhatsAppWebStatus(businessId);
   res.json({
     pushConfigured: isPushConfigured(),
     whatsappConfigured: isWhatsAppConfigured() || webStatus.status === 'CONNECTED',
     whatsappWebStatus: webStatus.status,
     whatsappWebQr: webStatus.qrCodeDataUrl,
+    businessId,
     reminderPollSeconds: Number(process.env.REMINDER_POLL_SECONDS) || 60,
   });
 });
 
 router.get('/whatsapp-web/diagnostics', async (req, res) => {
-  const diag = await getWhatsAppWebDiagnostics();
+  const businessId = req.businessId || 1;
+  const diag = await getWhatsAppWebDiagnostics(businessId);
   res.json(diag);
 });
 
 router.post('/whatsapp-web/connect', (req, res) => {
-  initWhatsAppWebClient();
-  res.json(getWhatsAppWebStatus());
+  const businessId = req.businessId || 1;
+  initWhatsAppWebClient(businessId);
+  res.json(getWhatsAppWebStatus(businessId));
 });
 
 router.post('/whatsapp-web/reconnect', async (req, res) => {
+  const businessId = req.businessId || 1;
   const { forceReset } = req.body || {};
-  const status = await reconnectWhatsAppWeb(Boolean(forceReset));
+  const status = await reconnectWhatsAppWeb(businessId, Boolean(forceReset));
   res.json(status);
 });
 

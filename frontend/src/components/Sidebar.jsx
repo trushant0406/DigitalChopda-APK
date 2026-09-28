@@ -16,21 +16,7 @@ const NAV = [
 ];
 
 export default function Sidebar({ active, onNavigate }) {
-  const { user, logout, businesses, activeBusiness, switchBusiness } = useAuth();
-  const [dropdownOpen, setDropdownOpen] = useState(false);
-  const dropdownRef = useRef(null);
-
-  useEffect(() => {
-    function handleClickOutside(event) {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
-        setDropdownOpen(false);
-      }
-    }
-    if (dropdownOpen) {
-      document.addEventListener('mousedown', handleClickOutside);
-    }
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [dropdownOpen]);
+  const { user, logout, activeBusiness } = useAuth();
 
   return (
     <nav className="sidebar">
@@ -40,14 +26,9 @@ export default function Sidebar({ active, onNavigate }) {
           <span className="brand-name">DigitalChopda.in</span>
         </div>
 
-        {/* Multi-Tenancy Company Switcher (myBillBook / Zoho style) */}
-        <div className="company-switcher-wrapper" ref={dropdownRef}>
-          <button
-            type="button"
-            className="company-switcher-trigger"
-            onClick={() => setDropdownOpen((prev) => !prev)}
-            title="Click to switch business or company"
-          >
+        {/* Active Business Badge (Static display — no tenant switching) */}
+        <div className="company-switcher-wrapper">
+          <div className="company-switcher-trigger" style={{ cursor: 'default' }}>
             <div className="company-switcher-left">
               <span className="company-switcher-badge">🏢</span>
               <div className="company-switcher-texts">
@@ -57,38 +38,7 @@ export default function Sidebar({ active, onNavigate }) {
                 <span className="company-switcher-tag">Active Company</span>
               </div>
             </div>
-            <span className="company-switcher-caret">{dropdownOpen ? '▴' : '▾'}</span>
-          </button>
-
-          {dropdownOpen && (
-            <div className="company-switcher-menu">
-              <div className="company-menu-label">SWITCH COMPANY</div>
-              <div className="company-menu-list">
-                {(businesses || []).map((biz) => {
-                  const isActive = biz.id === activeBusiness?.id;
-                  return (
-                    <button
-                      key={biz.id}
-                      type="button"
-                      className={`company-menu-item ${isActive ? 'active' : ''}`}
-                      onClick={() => {
-                        switchBusiness(biz.id);
-                        setDropdownOpen(false);
-                      }}
-                    >
-                      <div className="company-menu-item-info">
-                        <span className="company-menu-item-name">{biz.name}</span>
-                        {biz.trade_name && (
-                          <span className="company-menu-item-sub">{biz.trade_name}</span>
-                        )}
-                      </div>
-                      {isActive && <span className="company-menu-item-check">✓</span>}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          )}
+          </div>
         </div>
 
         <ul>

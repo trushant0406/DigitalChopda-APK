@@ -701,6 +701,7 @@ router.post('/:id/send-whatsapp', async (req, res) => {
         pdfBuffer: pdf,
         filename: `Invoice-${order.order_number || order.id}.pdf`,
         caption: pdfCaption,
+        businessId: order.business_id || business?.id || 1,
       });
     } catch (e) {
       webError = e.message;

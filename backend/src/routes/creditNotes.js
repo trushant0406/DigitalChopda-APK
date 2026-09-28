@@ -583,6 +583,7 @@ router.post(['/:id/whatsapp', '/:id/send-whatsapp'], async (req, res) => {
         pdfBuffer,
         filename: fileName,
         caption,
+        businessId: creditNote.business_id || business?.id || 1,
       });
       sentViaWeb = Boolean(waRes?.sent);
     } catch (webErr) {
