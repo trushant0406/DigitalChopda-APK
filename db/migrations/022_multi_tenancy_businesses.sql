@@ -67,10 +67,11 @@ CREATE TABLE IF NOT EXISTS business_users (
   UNIQUE(business_id, user_id)
 );
 
--- Associate all existing users with business 1 as owners
+-- Associate existing admin users with business 1 as owners
 INSERT INTO business_users (business_id, user_id, role)
 SELECT 1, id, 'owner'
 FROM users
+WHERE role = 'admin'
 ON CONFLICT (business_id, user_id) DO NOTHING;
 
 -- 3. Add business_id to core entity tables

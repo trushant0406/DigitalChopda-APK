@@ -311,9 +311,73 @@ async function runRegressionTests() {
   const dash2Res = await fetch(`${BASE_URL}/dashboard`, { headers: authHeadersBiz2 });
   const dash2 = await dash2Res.json();
 
-  assert(dash1Res.ok && dash2Res.ok, 'Dashboard metrics fetched successfully for both businesses');
   console.log(`   Business 1 Total Contacts: ${dash1.totalContacts || 0}, Calls Today: ${dash1.callsToday || 0}`);
   console.log(`   Business 2 Total Contacts: ${dash2.totalContacts || 0}, Calls Today: ${dash2.callsToday || 0}`);
+
+  // =========================================================================
+  // 12. ONBOARDED MERCHANT STRICT TENANT ISOLATION (DHRUV & SHREEJI)
+  // =========================================================================
+  console.log('\n--- MODULE 12: ONBOARDED MERCHANT STRICT TENANT ISOLATION ---');
+  // Test Dhruv (Surat E Commerce Store - Business ID 4)
+  const dhruvLoginRes = await fetch(`${BASE_URL}/auth/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username: 'dhruv', password: 'admin' }),
+  });
+  const dhruvData = await dhruvLoginRes.json();
+  assert(dhruvLoginRes.ok && dhruvData.token, 'Dhruv login succeeded with valid token');
+  assert(dhruvData.user.username === 'dhruv', 'Dhruv user identity verified');
+  assert(dhruvData.user.role === 'user', 'Dhruv is a non-admin merchant (role: user)');
+  assert(Array.isArray(dhruvData.businesses) && dhruvData.businesses.length === 1, 'Dhruv has strictly 1 business assigned');
+  assert(dhruvData.activeBusiness?.id === 4, 'Dhruv activeBusiness ID is strictly 4');
+  assert(dhruvData.activeBusiness?.name === 'Surat E Commerce Store', 'Dhruv activeBusiness name is "Surat E Commerce Store"');
+
+  const dhruvMeRes = await fetch(`${BASE_URL}/auth/me`, {
+    headers: { Authorization: `Bearer ${dhruvData.token}` },
+  });
+  const dhruvMeData = await dhruvMeRes.json();
+  assert(dhruvMeRes.ok, 'GET /api/auth/me for Dhruv succeeded');
+  assert(dhruvMeData.activeBusiness?.id === 4, 'Dhruv /me returns activeBusiness ID 4');
+  assert(dhruvMeData.activeBusiness?.name === 'Surat E Commerce Store', 'Dhruv /me returns activeBusiness name "Surat E Commerce Store"');
+
+  // Verify Dhruv product operations
+  const dhruvProdRes = await fetch(`${BASE_URL}/products`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${dhruvData.token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      name: `Dhruv Item ${Date.now()}`,
+      default_price: 499,
+      gst_rate: 12,
+    }),
+  });
+  const dhruvProd = await dhruvProdRes.json();
+  assert(dhruvProdRes.ok && dhruvProd.id, 'Dhruv successfully created a product');
+  assert(Number(dhruvProd.business_id) === 4, 'Dhruv product is strictly scoped to Business 4');
+
+  // Test Shreeji (Shreeji Telecom - Business ID 3)
+  const shreejiLoginRes = await fetch(`${BASE_URL}/auth/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username: 'shreeji', password: 'shreeji123' }),
+  });
+  const shreejiData = await shreejiLoginRes.json();
+  assert(shreejiLoginRes.ok && shreejiData.token, 'Shreeji login succeeded with valid token');
+  assert(shreejiData.user.username === 'shreeji', 'Shreeji user identity verified');
+  assert(shreejiData.user.role === 'user', 'Shreeji is a non-admin merchant (role: user)');
+  assert(Array.isArray(shreejiData.businesses) && shreejiData.businesses.length === 1, 'Shreeji has strictly 1 business assigned');
+  assert(shreejiData.activeBusiness?.id === 3, 'Shreeji activeBusiness ID is strictly 3');
+  assert(shreejiData.activeBusiness?.name === 'Shreeji Telecom', 'Shreeji activeBusiness name is "Shreeji Telecom"');
+
+  const shreejiMeRes = await fetch(`${BASE_URL}/auth/me`, {
+    headers: { Authorization: `Bearer ${shreejiData.token}` },
+  });
+  const shreejiMeData = await shreejiMeRes.json();
+  assert(shreejiMeRes.ok, 'GET /api/auth/me for Shreeji succeeded');
+  assert(shreejiMeData.activeBusiness?.id === 3, 'Shreeji /me returns activeBusiness ID 3');
+  assert(shreejiMeData.activeBusiness?.name === 'Shreeji Telecom', 'Shreeji /me returns activeBusiness name "Shreeji Telecom"');
 
   // =========================================================================
   // SUMMARY

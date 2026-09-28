@@ -32,8 +32,8 @@ export default function Sidebar({ active, onNavigate }) {
             <div className="company-switcher-left">
               <span className="company-switcher-badge">🏢</span>
               <div className="company-switcher-texts">
-                <span className="company-switcher-name">
-                  {activeBusiness?.name || 'My Business'}
+                <span className="company-switcher-name" title={activeBusiness?.name || user?.name || ''}>
+                  {activeBusiness?.name || (user?.role !== 'admin' && user?.name ? user.name : 'My Business')}
                 </span>
                 <span className="company-switcher-tag">Active Company</span>
               </div>

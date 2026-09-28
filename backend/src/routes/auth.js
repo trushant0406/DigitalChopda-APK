@@ -54,16 +54,21 @@ router.post('/login', async (req, res) => {
          FROM businesses b
          JOIN business_users bu ON bu.business_id = b.id
          WHERE bu.user_id = $1 AND bu.is_active = true
-         ORDER BY b.id ASC`,
+         ORDER BY (CASE WHEN b.id = 1 THEN 2 ELSE 1 END), b.id ASC`,
         [user.id]
       );
+
+  let businesses = bizRes.rows;
+  if (user.role !== 'admin' && businesses.some((b) => b.id !== 1)) {
+    businesses = businesses.filter((b) => b.id !== 1);
+  }
 
   const token = generateToken(user);
   res.json({
     token,
     user: { id: user.id, username: user.username, name: user.name, role: user.role },
-    businesses: bizRes.rows,
-    activeBusiness: bizRes.rows[0] || null,
+    businesses,
+    activeBusiness: businesses[0] || null,
   });
 });
 
@@ -89,14 +94,19 @@ router.get('/me', async (req, res) => {
          FROM businesses b
          JOIN business_users bu ON bu.business_id = b.id
          WHERE bu.user_id = $1 AND bu.is_active = true
-         ORDER BY b.id ASC`,
+         ORDER BY (CASE WHEN b.id = 1 THEN 2 ELSE 1 END), b.id ASC`,
         [user.id]
       );
 
+  let businesses = bizRes.rows;
+  if (user.role !== 'admin' && businesses.some((b) => b.id !== 1)) {
+    businesses = businesses.filter((b) => b.id !== 1);
+  }
+
   res.json({
     user,
-    businesses: bizRes.rows,
-    activeBusiness: bizRes.rows[0] || null,
+    businesses,
+    activeBusiness: businesses[0] || null,
   });
 });
 

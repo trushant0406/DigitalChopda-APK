@@ -44,7 +44,12 @@ export function AuthProvider({ children }) {
           setBusinesses(bizList);
 
           const storedBizId = localStorage.getItem('ci_business_id');
-          const currentActive = resolveActiveBusiness(bizList, storedBizId || res.activeBusiness?.id);
+          let currentActive;
+          if (res.user?.role === 'admin' && storedBizId) {
+            currentActive = resolveActiveBusiness(bizList, storedBizId);
+          } else {
+            currentActive = res.activeBusiness || bizList[0] || null;
+          }
           if (currentActive) {
             localStorage.setItem('ci_business_id', String(currentActive.id));
             setActiveBusiness(currentActive);
