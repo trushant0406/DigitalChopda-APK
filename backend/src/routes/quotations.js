@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { pool } from '../db.js';
 import { findOrCreateContact } from '../lib/contacts.js';
 import { buildQuotationHtml } from '../pdf/quotationHtml.js';
+import { buildShippingLabelHtml } from '../pdf/shippingLabelHtml.js';
 import { renderHtmlToPdf } from '../pdf/renderPdf.js';
 import { sendWhatsAppDocument } from '../notify/whatsapp.js';
 import { calculateNextInvoiceNumber } from './orders.js';
@@ -256,6 +257,39 @@ router.get('/:id/pdf', async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Failed to generate PDF' });
+  }
+});
+
+// GET /api/quotations/:id/shipping-label/pdf — stream the 1/3 A4 Transport Parcel Label PDF
+router.get('/:id/shipping-label/pdf', async (req, res) => {
+  try {
+    const quotation = await loadFullQuotation(req.params.id);
+    if (!quotation) return res.status(404).json({ error: 'Quotation not found' });
+    const businessId = quotation.business_id || req.businessId || 1;
+    const business = await loadBusinessProfile(businessId);
+
+    const orderLike = {
+      invoice_number: quotation.converted_order_invoice_number || `EST-${quotation.id}`,
+      order_number: quotation.converted_order_number || `QUO-${quotation.id}`,
+      invoice_date: quotation.converted_order_invoice_date || quotation.created_at,
+      name: quotation.bill_to_name,
+      phone: quotation.bill_to_mobile,
+      shipping_address: quotation.bill_to_address,
+      billing_address: quotation.bill_to_address,
+      city: quotation.place_of_supply,
+      state: quotation.place_of_supply,
+      order_ref: `Quotation #${quotation.id}`,
+    };
+
+    const html = buildShippingLabelHtml({ business, order: orderLike, items: quotation.items || [] });
+    const pdf = await renderHtmlToPdf(html);
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="Shipping-Label-Quotation-${quotation.id}.pdf"`);
+    res.send(pdf);
+  } catch (err) {
+    console.error('Shipping label generation from quotation failed:', err);
+    res.status(500).json({ error: 'Failed to generate shipping label PDF' });
   }
 });
 

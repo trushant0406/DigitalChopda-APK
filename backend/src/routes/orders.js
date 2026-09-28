@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { pool } from '../db.js';
 import { findOrCreateContact } from '../lib/contacts.js';
 import { buildInvoiceHtml } from '../pdf/invoiceHtml.js';
+import { buildShippingLabelHtml } from '../pdf/shippingLabelHtml.js';
 import { renderHtmlToPdf } from '../pdf/renderPdf.js';
 import { getNextReceiptNumber } from './credit.js';
 import { storageService } from '../storage/storageService.js';
@@ -642,6 +643,30 @@ router.get('/:id/pdf', async (req, res) => {
   } catch (err) {
     console.error('Invoice PDF generation failed:', err);
     res.status(500).json({ error: 'Failed to generate PDF' });
+  }
+});
+
+// GET /api/orders/:id/shipping-label/pdf — stream the 1/3 A4 Transport Parcel Label PDF
+router.get('/:id/shipping-label/pdf', async (req, res) => {
+  try {
+    const order = await loadFullOrder(req.params.id);
+    if (!order) return res.status(404).json({ error: 'Invoice / Order not found' });
+    const businessId = order.business_id || req.businessId || 1;
+    const business = await loadBusinessProfile(businessId);
+    const invoiceNum = order.invoice_number || order.order_number || order.id;
+
+    const html = buildShippingLabelHtml({ business, order, items: order.items || [] });
+    const pdf = await renderHtmlToPdf(html);
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader(
+      'Content-Disposition',
+      `inline; filename="Shipping-Label-${invoiceNum}.pdf"`
+    );
+    res.send(pdf);
+  } catch (err) {
+    console.error('Shipping label PDF generation failed:', err);
+    res.status(500).json({ error: 'Failed to generate shipping label PDF' });
   }
 });
 

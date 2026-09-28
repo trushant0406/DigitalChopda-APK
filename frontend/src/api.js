@@ -77,6 +77,10 @@ export const api = {
     const bizId = getActiveBusinessId();
     return `${BASE}/orders/${id}/pdf?business_id=${bizId}${withPayments ? '&payment_details=true' : ''}`;
   },
+  orderShippingLabelUrl: (id) => {
+    const bizId = getActiveBusinessId();
+    return `${BASE}/orders/${id}/shipping-label/pdf?business_id=${bizId}`;
+  },
   sendOrderWhatsApp: (id) => request(`/orders/${id}/send-whatsapp`, json({})),
 
   listProducts: () => request('/products'),
@@ -97,6 +101,7 @@ export const api = {
   listQuotations: () => request('/quotations'),
   getQuotation: (id) => request(`/quotations/${id}`),
   quotationPdfUrl: (id) => `${BASE}/quotations/${id}/pdf?business_id=${getActiveBusinessId()}`,
+  quotationShippingLabelUrl: (id) => `${BASE}/quotations/${id}/shipping-label/pdf?business_id=${getActiveBusinessId()}`,
   sendQuotationWhatsApp: (id) => request(`/quotations/${id}/send-whatsapp`, json({})),
   convertQuotationToInvoice: (id, body = {}) => request(`/quotations/${id}/convert-to-invoice`, { ...json(body), method: 'POST' }),
 

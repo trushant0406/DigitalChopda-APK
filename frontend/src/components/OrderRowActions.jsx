@@ -109,6 +109,30 @@ export default function OrderRowActions({
         <FileTextIcon size={14} color="#2563eb" />
       </a>
 
+      {/* 1b. PRINT TRANSPORT PARCEL LABEL (1/3 A4) */}
+      <a
+        href={api.orderShippingLabelUrl(order.id)}
+        target="_blank"
+        rel="noreferrer"
+        title="Print Shipping Label"
+        style={{
+          background: '#f0fdfa',
+          color: '#0f766e',
+          border: '1px solid #99f6e4',
+          width: '28px',
+          height: '26px',
+          borderRadius: '5px',
+          display: 'inline-flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          fontSize: '12px',
+          textDecoration: 'none',
+          cursor: 'pointer',
+        }}
+      >
+        🏷️
+      </a>
+
       {/* 2. SEND TAX INVOICE VIA WHATSAPP ICON */}
       <button
         type="button"
@@ -224,6 +248,17 @@ export default function OrderRowActions({
                 <span>🧾</span> Download Tax Invoice + Payment History
               </a>
             )}
+
+            <a
+              className="payment-menu-item"
+              href={api.orderShippingLabelUrl(order.id)}
+              target="_blank"
+              rel="noreferrer"
+              onClick={() => setOpen(false)}
+              style={{ display: 'flex', alignItems: 'center', gap: '8px', textDecoration: 'none', color: '#0f766e', fontWeight: 600 }}
+            >
+              <span>🏷️</span> Print Shipping Label
+            </a>
 
             {/* PAYMENT OPTIONS */}
             {onSettle && isUnpaid && (

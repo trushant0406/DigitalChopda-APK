@@ -182,32 +182,57 @@ export default function QuotationsPage({ presetContact }) {
             )}
           </button>
 
-          {/* 3. CONVERT TO INVOICE (OR OPEN INVOICE IF CONVERTED) */}
+          {/* 3. CONVERT TO INVOICE (OR OPEN INVOICE & TRANSPORT LABEL IF CONVERTED) */}
           {q.status === 'converted' ? (
-            <a
-              href={q.converted_order_id ? api.orderPdfUrl(q.converted_order_id) : '#'}
-              target="_blank"
-              rel="noreferrer"
-              title={`Converted to Invoice ${q.converted_order_invoice_number || q.converted_order_number || (`#` + q.converted_order_id)} (Click to view Tax Invoice PDF)`}
-              style={{
-                width: '28px',
-                height: '26px',
-                borderRadius: '5px',
-                padding: 0,
-                display: 'inline-flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                background: '#f0fdf4',
-                border: '1px solid #86efac',
-                color: '#15803d',
-                fontSize: '13px',
-                fontWeight: 700,
-                textDecoration: 'none',
-                cursor: 'pointer',
-              }}
-            >
-              <InvoiceCheckIcon size={14} color="#15803d" />
-            </a>
+            <>
+              <a
+                href={q.converted_order_id ? api.orderPdfUrl(q.converted_order_id) : '#'}
+                target="_blank"
+                rel="noreferrer"
+                title={`Converted to Invoice ${q.converted_order_invoice_number || q.converted_order_number || (`#` + q.converted_order_id)} (Click to view Tax Invoice PDF)`}
+                style={{
+                  width: '28px',
+                  height: '26px',
+                  borderRadius: '5px',
+                  padding: 0,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  background: '#f0fdf4',
+                  border: '1px solid #86efac',
+                  color: '#15803d',
+                  fontSize: '13px',
+                  fontWeight: 700,
+                  textDecoration: 'none',
+                  cursor: 'pointer',
+                }}
+              >
+                <InvoiceCheckIcon size={14} color="#15803d" />
+              </a>
+              <a
+                href={q.converted_order_id ? api.orderShippingLabelUrl(q.converted_order_id) : api.quotationShippingLabelUrl(q.id)}
+                target="_blank"
+                rel="noreferrer"
+                title="Print Shipping Label"
+                style={{
+                  width: '28px',
+                  height: '26px',
+                  borderRadius: '5px',
+                  padding: 0,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  background: '#f0fdfa',
+                  border: '1px solid #99f6e4',
+                  color: '#0f766e',
+                  fontSize: '12px',
+                  textDecoration: 'none',
+                  cursor: 'pointer',
+                }}
+              >
+                🏷️
+              </a>
+            </>
           ) : (
             <button
               type="button"

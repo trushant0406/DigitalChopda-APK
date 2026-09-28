@@ -26,6 +26,7 @@ export default function ConvertQuotationModal({ quotation, onClose, onConverted 
   const [sendWhatsApp, setSendWhatsApp] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
+  const [convertedOrder, setConvertedOrder] = useState(null);
 
   useEffect(() => {
     api.getNextInvoiceNumber()
@@ -121,7 +122,7 @@ export default function ConvertQuotationModal({ quotation, onClose, onConverted 
       }
 
       onConverted(res);
-      onClose();
+      setConvertedOrder(res.order || { id: res.order?.id, invoice_number: orderNumber });
     } catch (err) {
       setError(err.message || 'Failed to convert quotation');
     } finally {
@@ -138,7 +139,7 @@ export default function ConvertQuotationModal({ quotation, onClose, onConverted 
       >
         <div className="drawer-header">
           <div>
-            <h2>Convert to Sales Invoice / Bill</h2>
+            <h2>{convertedOrder ? 'Invoice Created Successfully' : 'Convert to Sales Invoice / Bill'}</h2>
             <p className="subtitle">
               From Quotation #{quotation.id} &middot; <strong>{quotation.bill_to_name}</strong> ({quotation.bill_to_mobile})
             </p>
@@ -146,6 +147,72 @@ export default function ConvertQuotationModal({ quotation, onClose, onConverted 
           <button type="button" onClick={onClose}>✕</button>
         </div>
 
+        {convertedOrder ? (
+          <div style={{ padding: '2.5rem 1.5rem', textAlign: 'center' }}>
+            <div style={{ fontSize: '3.2rem', marginBottom: '0.8rem' }}>🎉</div>
+            <h2 style={{ fontSize: '1.45rem', fontWeight: 800, color: '#0f172a', marginBottom: '0.4rem' }}>
+              Invoice {convertedOrder.invoice_number || 'Generated'} Ready!
+            </h2>
+            <p style={{ color: '#475569', fontSize: '0.95rem', marginBottom: '2rem' }}>
+              Quotation #{quotation.id} converted successfully for <strong>{quotation.bill_to_name}</strong>.
+            </p>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem', maxWidth: '380px', margin: '0 auto 2.5rem auto' }}>
+              <a
+                className="btn"
+                href={api.orderShippingLabelUrl(convertedOrder.id)}
+                target="_blank"
+                rel="noreferrer"
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '10px',
+                  padding: '14px 20px',
+                  fontSize: '1.05rem',
+                  fontWeight: 700,
+                  background: '#0f766e',
+                  color: '#ffffff',
+                  borderRadius: '8px',
+                  textDecoration: 'none',
+                  boxShadow: '0 4px 12px rgba(15, 118, 110, 0.25)',
+                }}
+              >
+                🏷️ Print Shipping Label
+              </a>
+              <a
+                className="btn btn-outline"
+                href={api.orderPdfUrl(convertedOrder.id)}
+                target="_blank"
+                rel="noreferrer"
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '8px',
+                  padding: '11px 18px',
+                  fontSize: '0.95rem',
+                  fontWeight: 600,
+                  borderRadius: '8px',
+                  textDecoration: 'none',
+                  border: '1px solid var(--border)',
+                  color: 'var(--text)',
+                }}
+              >
+                🧾 View Tax Invoice PDF
+              </a>
+            </div>
+
+            <button
+              type="button"
+              className="secondary-action"
+              onClick={onClose}
+              style={{ minWidth: '130px', margin: '0 auto' }}
+            >
+              Done & Close
+            </button>
+          </div>
+        ) : (
         <form onSubmit={(e) => { e.preventDefault(); handleConvert(sendWhatsApp); }}>
           {/* Bill Identifiers & Date */}
           <div className="grid" style={{ marginBottom: '1rem' }}>
@@ -372,6 +439,7 @@ export default function ConvertQuotationModal({ quotation, onClose, onConverted 
             </button>
           </div>
         </form>
+        )}
       </div>
     </div>
   );
