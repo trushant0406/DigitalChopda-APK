@@ -274,6 +274,7 @@ router.get('/:id/shipping-label/pdf', async (req, res) => {
       invoice_date: quotation.converted_order_invoice_date || quotation.created_at,
       name: quotation.bill_to_name,
       phone: quotation.bill_to_mobile,
+      gstin: quotation.bill_to_gstin,
       shipping_address: quotation.bill_to_address,
       billing_address: quotation.bill_to_address,
       city: quotation.place_of_supply,

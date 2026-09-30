@@ -654,7 +654,6 @@ router.get('/:id/shipping-label/pdf', async (req, res) => {
     const businessId = order.business_id || req.businessId || 1;
     const business = await loadBusinessProfile(businessId);
     const invoiceNum = order.invoice_number || order.order_number || order.id;
-
     const html = buildShippingLabelHtml({ business, order, items: order.items || [] });
     const pdf = await renderHtmlToPdf(html);
 
