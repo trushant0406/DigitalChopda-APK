@@ -4,6 +4,8 @@ import InvoiceForm from '../components/InvoiceForm';
 import OrdersTable from '../components/OrdersTable';
 import RecordPaymentInModal from '../components/RecordPaymentInModal';
 import CreateCreditNoteModal from '../components/CreateCreditNoteModal';
+import EditInvoiceModal from '../components/EditInvoiceModal';
+import DeleteInvoiceModal from '../components/DeleteInvoiceModal';
 import StatCard from '../components/StatCard';
 import { FULFILLMENT_LABEL } from '../orderStatus';
 
@@ -23,6 +25,8 @@ export default function InvoicesPage({ refreshKey }) {
   const [showForm, setShowForm] = useState(false);
   const [settlingOrder, setSettlingOrder] = useState(null);
   const [creditNoteOrder, setCreditNoteOrder] = useState(null);
+  const [editingOrder, setEditingOrder] = useState(null);
+  const [deletingOrder, setDeletingOrder] = useState(null);
   const [toast, setToast] = useState(null);
 
   async function load(queryText = search) {
@@ -238,6 +242,8 @@ export default function InvoicesPage({ refreshKey }) {
           onChanged={load}
           onSettle={(order) => setSettlingOrder(order)}
           onIssueCreditNote={(order) => setCreditNoteOrder(order)}
+          onEditOrder={(order) => setEditingOrder(order)}
+          onDeleteOrder={(order) => setDeletingOrder(order)}
           emptyText={search.trim() ? `No invoices matching "${search.trim()}".` : 'No invoices created yet.'}
         />
       </div>
@@ -278,6 +284,34 @@ export default function InvoicesPage({ refreshKey }) {
           onSuccess={(cn) => {
             setCreditNoteOrder(null);
             setToast(`Credit Note ${cn.credit_note_number} issued successfully against ${creditNoteOrder.invoice_number || creditNoteOrder.order_number}!`);
+            load();
+            setTimeout(() => setToast(null), 4000);
+          }}
+        />
+      )}
+
+      {/* EDIT INVOICE MODAL */}
+      {editingOrder && (
+        <EditInvoiceModal
+          order={editingOrder}
+          onClose={() => setEditingOrder(null)}
+          onSaved={(updated) => {
+            setEditingOrder(null);
+            setToast(`Invoice ${updated.invoice_number || updated.order_number} updated successfully!`);
+            load();
+            setTimeout(() => setToast(null), 4000);
+          }}
+        />
+      )}
+
+      {/* DELETE INVOICE MODAL */}
+      {deletingOrder && (
+        <DeleteInvoiceModal
+          order={deletingOrder}
+          onClose={() => setDeletingOrder(null)}
+          onDeleted={(deleted) => {
+            setDeletingOrder(null);
+            setToast(`Invoice ${deleted.invoice_number || deleted.order_number} deleted completely.`);
             load();
             setTimeout(() => setToast(null), 4000);
           }}

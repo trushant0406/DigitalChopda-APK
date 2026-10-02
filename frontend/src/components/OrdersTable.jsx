@@ -85,6 +85,8 @@ export default function OrdersTable({
   onChanged,
   onSettle,
   onIssueCreditNote,
+  onEditOrder,
+  onDeleteOrder,
   showCustomer = true,
   emptyText = 'No orders yet.',
 }) {
@@ -247,6 +249,8 @@ export default function OrdersTable({
           onSettle={onSettle}
           onChanged={onChanged}
           onIssueCreditNote={onIssueCreditNote}
+          onEditOrder={onEditOrder}
+          onDeleteOrder={onDeleteOrder}
           handleSendWhatsApp={handleSendWhatsApp}
           sendingWhatsappId={sendingWhatsappId}
           advanceFulfillment={advanceFulfillment}

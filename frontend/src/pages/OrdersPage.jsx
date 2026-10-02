@@ -4,6 +4,8 @@ import OrderForm from '../components/OrderForm';
 import OrdersTable from '../components/OrdersTable';
 import RecordPaymentInModal from '../components/RecordPaymentInModal';
 import CreateCreditNoteModal from '../components/CreateCreditNoteModal';
+import EditInvoiceModal from '../components/EditInvoiceModal';
+import DeleteInvoiceModal from '../components/DeleteInvoiceModal';
 import StatCard from '../components/StatCard';
 import { FULFILLMENT_LABEL } from '../orderStatus';
 
@@ -29,6 +31,8 @@ export default function OrdersPage({ refreshKey, onLogged, initialFilter }) {
   const [showForm, setShowForm] = useState(false);
   const [settlingOrder, setSettlingOrder] = useState(null);
   const [creditNoteOrder, setCreditNoteOrder] = useState(null);
+  const [editingOrder, setEditingOrder] = useState(null);
+  const [deletingOrder, setDeletingOrder] = useState(null);
 
   async function load(queryText = search) {
     setLoading(true);
@@ -207,6 +211,8 @@ export default function OrdersPage({ refreshKey, onLogged, initialFilter }) {
           onChanged={handleChanged}
           onSettle={(order) => setSettlingOrder(order)}
           onIssueCreditNote={(order) => setCreditNoteOrder(order)}
+          onEditOrder={(order) => setEditingOrder(order)}
+          onDeleteOrder={(order) => setDeletingOrder(order)}
           emptyText={search.trim() ? `No orders matching "${search.trim()}".` : 'No orders yet.'}
         />
       </div>
@@ -244,6 +250,30 @@ export default function OrdersPage({ refreshKey, onLogged, initialFilter }) {
           onClose={() => setCreditNoteOrder(null)}
           onSuccess={() => {
             setCreditNoteOrder(null);
+            handleChanged();
+          }}
+        />
+      )}
+
+      {/* EDIT INVOICE MODAL */}
+      {editingOrder && (
+        <EditInvoiceModal
+          order={editingOrder}
+          onClose={() => setEditingOrder(null)}
+          onSaved={() => {
+            setEditingOrder(null);
+            handleChanged();
+          }}
+        />
+      )}
+
+      {/* DELETE INVOICE MODAL */}
+      {deletingOrder && (
+        <DeleteInvoiceModal
+          order={deletingOrder}
+          onClose={() => setDeletingOrder(null)}
+          onDeleted={() => {
+            setDeletingOrder(null);
             handleChanged();
           }}
         />

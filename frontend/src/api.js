@@ -72,6 +72,8 @@ export const api = {
     return request(`/orders${suffix}`);
   },
   updateOrder: (id, body) => request(`/orders/${id}`, { ...json(body), method: 'PATCH' }),
+  editOrder: (id, body) => request(`/orders/${id}`, { ...json(body), method: 'PUT' }),
+  deleteOrder: (id) => request(`/orders/${id}`, { method: 'DELETE' }),
   ordersSummary: () => request('/orders/summary'),
   orderPdfUrl: (id, withPayments = false) => {
     const bizId = getActiveBusinessId();

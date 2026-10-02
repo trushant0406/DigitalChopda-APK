@@ -574,6 +574,307 @@ router.patch('/:id', async (req, res) => {
   res.json(updatedOrder);
 });
 
+// PUT /api/orders/:id — full edit for an invoice (items, pricing, customer, date, number, etc.)
+router.put('/:id', async (req, res) => {
+  const businessId = req.businessId || 1;
+  const orderId = req.params.id;
+  const {
+    phone, name, city, notes, items, payment_status, payment_method,
+    gstin, pan, billing_address, shipping_address, state,
+    invoice_number, invoice_date, order_ref,
+    place_of_supply, tax_mode, round_off,
+  } = req.body;
+
+  if (!phone) return res.status(400).json({ error: 'phone is required' });
+  if (!Array.isArray(items) || items.length === 0) {
+    return res.status(400).json({ error: 'At least one item is required' });
+  }
+  for (const item of items) {
+    if (!item.product_name || item.quantity === undefined || item.quantity === '' || Number(item.quantity) <= 0 || item.unit_price === undefined || item.unit_price === '') {
+      return res.status(400).json({ error: 'Each item needs a valid product_name, a quantity greater than 0, and a unit_price' });
+    }
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    // 1. Verify existing order
+    const existingRes = await client.query('SELECT * FROM orders WHERE id = $1 AND business_id = $2', [orderId, businessId]);
+    if (existingRes.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Invoice / Order not found' });
+    }
+    const currentOrder = existingRes.rows[0];
+
+    // 2. Validate Invoice Number uniqueness if provided
+    let finalInvoiceNumber = (invoice_number !== undefined ? invoice_number : currentOrder.invoice_number);
+    if (finalInvoiceNumber) {
+      finalInvoiceNumber = String(finalInvoiceNumber).trim();
+      const dup = await client.query(
+        'SELECT id FROM orders WHERE invoice_number = $1 AND id != $2 AND business_id = $3',
+        [finalInvoiceNumber, orderId, businessId]
+      );
+      if (dup.rows.length > 0) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ error: `Invoice number "${finalInvoiceNumber}" already exists. Please choose a different number.` });
+      }
+    }
+
+    // 3. Find or update contact
+    const contact = await findOrCreateContact(client, {
+      phone, name, city, gstin, pan, billing_address, shipping_address, state, business_id: businessId,
+    });
+
+    // 4. Determine place of supply and tax mode
+    const bpRes = await client.query('SELECT state FROM businesses WHERE id = $1', [businessId]);
+    const sellerState = (bpRes.rows[0]?.state || 'Gujarat').trim();
+    const effectivePlaceOfSupply = (place_of_supply || state || contact.state || sellerState).trim();
+    const effectiveTaxMode = tax_mode || (
+      effectivePlaceOfSupply.toLowerCase() === sellerState.toLowerCase() ? 'split' : 'igst'
+    );
+
+    // 5. Calculate Subtotal, Tax and Round-off
+    let calculatedSubtotal = 0;
+    let calculatedTax = 0;
+    for (const item of items) {
+      const q = Number(item.quantity || 0);
+      const p = Number(item.unit_price || 0);
+      const g = Number(item.gst_rate || 0);
+      const lineBase = Math.round(q * p * 100) / 100;
+      const lineTax = Math.round(lineBase * (g / 100) * 100) / 100;
+      calculatedSubtotal += lineBase;
+      calculatedTax += lineTax;
+    }
+    const rawTotal = calculatedSubtotal + calculatedTax;
+    const roundedTotal = Math.round(rawTotal);
+    const calculatedRoundOff = Number((roundedTotal - rawTotal).toFixed(2));
+    const effectiveRoundOff = (round_off !== undefined && round_off !== null)
+      ? Number(round_off)
+      : calculatedRoundOff;
+    const grandTotal = roundedTotal;
+
+    // 6. Check if Credit Notes exist for this order
+    const cnRes = await client.query(
+      'SELECT COALESCE(SUM(total_amount), 0) AS total_credited FROM credit_notes WHERE order_id = $1 AND business_id = $2',
+      [orderId, businessId]
+    );
+    const totalCredited = Number(cnRes.rows[0]?.total_credited || 0);
+    if (totalCredited > 0 && grandTotal < totalCredited) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({
+        error: `New invoice total (₹${grandTotal}) cannot be less than already credited return amount (₹${totalCredited.toFixed(2)}).`
+      });
+    }
+
+    // 7. Update orders record
+    const effectiveInvoiceDate = invoice_date || currentOrder.invoice_date || new Date().toISOString().split('T')[0];
+    const isPaidNow = (payment_status === 'paid');
+    const newPaymentStatus = isPaidNow ? 'paid' : (payment_status || currentOrder.payment_status || 'pending');
+
+    await client.query(
+      `UPDATE orders
+       SET contact_id = $1,
+           invoice_number = $2,
+           invoice_date = $3,
+           order_ref = $4,
+           notes = $5,
+           place_of_supply = $6,
+           tax_mode = $7,
+           round_off = $8,
+           payment_status = $9,
+           payment_method = COALESCE($10, payment_method),
+           updated_at = now()
+       WHERE id = $11 AND business_id = $12`,
+      [
+        contact.id,
+        finalInvoiceNumber || null,
+        effectiveInvoiceDate,
+        order_ref !== undefined ? (order_ref ? order_ref.trim() : null) : currentOrder.order_ref,
+        notes !== undefined ? (notes ? notes.trim() : null) : currentOrder.notes,
+        effectivePlaceOfSupply,
+        effectiveTaxMode,
+        effectiveRoundOff,
+        newPaymentStatus,
+        payment_method || null,
+        orderId,
+        businessId,
+      ]
+    );
+
+    // 8. Replace items atomically
+    await client.query('DELETE FROM order_items WHERE order_id = $1', [orderId]);
+    for (const item of items) {
+      await client.query(
+        `INSERT INTO order_items (order_id, product_name, quantity, unit_price, gst_rate)
+         VALUES ($1, $2, $3, $4, $5)`,
+        [orderId, item.product_name, item.quantity, item.unit_price, item.gst_rate || null]
+      );
+    }
+
+    // 9. Payment adjustments (MyBillBook style)
+    const existingPayments = await client.query(
+      'SELECT id, amount, notes FROM payments WHERE order_id = $1 AND business_id = $2 ORDER BY id ASC',
+      [orderId, businessId]
+    );
+
+    if (isPaidNow) {
+      // If there is an existing payment record, update its amount to match the new invoice grand total
+      if (existingPayments.rows.length === 1) {
+        await client.query('UPDATE payments SET amount = $1, contact_id = $2 WHERE id = $3', [
+          grandTotal,
+          contact.id,
+          existingPayments.rows[0].id,
+        ]);
+      } else if (existingPayments.rows.length === 0 && grandTotal > 0) {
+        // No payment record existed, insert a settlement payment
+        const seqRes = await client.query(
+          `SELECT COALESCE(MAX(NULLIF(regexp_replace(receipt_number, '\\D', '', 'g'), '')::INT), 0) + 1 AS next_seq
+           FROM payments WHERE business_id = $1 AND receipt_number IS NOT NULL`,
+          [businessId]
+        );
+        const receiptNum = `REC-${String(seqRes.rows[0]?.next_seq || 1).padStart(4, '0')}`;
+        await client.query(
+          `INSERT INTO payments (order_id, contact_id, amount, payment_mode, method, paid_at, notes, receipt_number, business_id)
+           VALUES ($1, $2, $3, $4, $4, now(), $5, $6, $7)`,
+          [
+            orderId,
+            contact.id,
+            grandTotal,
+            payment_method || 'cash',
+            finalInvoiceNumber ? `Paid at invoice ${finalInvoiceNumber}` : `Paid at order ${currentOrder.order_number}`,
+            receiptNum,
+            businessId,
+          ]
+        );
+      }
+      await client.query('UPDATE orders SET paid_at = COALESCE(paid_at, now()) WHERE id = $1', [orderId]);
+    } else {
+      // If not marked full paid, calculate total payments made vs grand total
+      const totalPaid = existingPayments.rows.reduce((sum, p) => sum + Number(p.amount || 0), 0);
+      if (totalPaid >= grandTotal && grandTotal > 0) {
+        await client.query("UPDATE orders SET payment_status = 'paid' WHERE id = $1", [orderId]);
+      } else if (totalPaid > 0.01) {
+        await client.query("UPDATE orders SET payment_status = 'partially_paid' WHERE id = $1", [orderId]);
+      } else {
+        await client.query("UPDATE orders SET payment_status = 'pending' WHERE id = $1", [orderId]);
+      }
+    }
+
+    await client.query('COMMIT');
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('Invoice edit error:', err);
+    return res.status(500).json({ error: err.message || 'Failed to update invoice' });
+  } finally {
+    client.release();
+  }
+
+  // 10. Invalidate old cached PDFs in R2 and re-sync
+  const full = await pool.query(`${ORDER_SELECT} WHERE orders.id = $1 AND orders.business_id = $2`, [orderId, businessId]);
+  const updatedOrder = full.rows[0];
+
+  if (updatedOrder) {
+    const invNum = updatedOrder.invoice_number || updatedOrder.order_number || updatedOrder.id;
+    const business = await loadBusinessProfile(businessId);
+    for (const paidFlag of ['', '-paid']) {
+      const filename = `Tax-Invoice-${invNum}${paidFlag}.pdf`;
+      const primaryKey = getDocumentStorageKey({ business, contactName: updatedOrder.name, docType: 'invoices', filename });
+      const fallbackKeys = getDocumentFallbackKeys({ business, contactName: updatedOrder.name, docType: 'invoices', filename });
+      for (const k of [primaryKey, ...fallbackKeys]) {
+        storageService.deleteFile(k).catch(() => {});
+      }
+    }
+    setImmediate(() => {
+      syncInvoicePdf(updatedOrder.id).catch((e) => console.warn('[Storage] Background updated invoice PDF upload failed:', e.message));
+    });
+  }
+
+  res.json(updatedOrder);
+});
+
+// DELETE /api/orders/:id — completely delete an invoice and its associated records
+router.delete('/:id', async (req, res) => {
+  const businessId = req.businessId || 1;
+  const orderId = req.params.id;
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    // 1. Verify order exists
+    const orderRes = await client.query(
+      `SELECT o.*, c.name AS contact_name
+       FROM orders o
+       JOIN contacts c ON c.id = o.contact_id
+       WHERE o.id = $1 AND o.business_id = $2`,
+      [orderId, businessId]
+    );
+    if (orderRes.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Invoice / Order not found' });
+    }
+    const order = orderRes.rows[0];
+
+    // 2. Guard: Check for linked Credit Notes (Sales Returns)
+    const cnRes = await client.query(
+      'SELECT id, credit_note_number FROM credit_notes WHERE order_id = $1 AND business_id = $2',
+      [orderId, businessId]
+    );
+    if (cnRes.rows.length > 0) {
+      const cns = cnRes.rows.map(r => r.credit_note_number || `#${r.id}`).join(', ');
+      await client.query('ROLLBACK');
+      return res.status(400).json({
+        error: `Cannot delete invoice because Credit Note(s) (${cns}) are linked to it. Please delete the credit note first.`
+      });
+    }
+
+    // 3. Delete linked payments (reverses customer balance cleanly)
+    await client.query('DELETE FROM payments WHERE order_id = $1 AND business_id = $2', [orderId, businessId]);
+
+    // 4. Unlink any converted quotation (revert status back to 'accepted')
+    await client.query(
+      `UPDATE quotations
+       SET converted_order_id = NULL,
+           status = CASE WHEN status = 'converted' THEN 'accepted' ELSE status END
+       WHERE converted_order_id = $1 AND business_id = $2`,
+      [orderId, businessId]
+    );
+
+    // 5. Delete followups linked to this order
+    await client.query('DELETE FROM followups WHERE order_id = $1 AND business_id = $2', [orderId, businessId]);
+
+    // 6. Delete order_items
+    await client.query('DELETE FROM order_items WHERE order_id = $1', [orderId]);
+
+    // 7. Delete order record
+    await client.query('DELETE FROM orders WHERE id = $1 AND business_id = $2', [orderId, businessId]);
+
+    await client.query('COMMIT');
+
+    // 8. Delete cached PDFs from Cloud Storage / R2
+    const invNum = order.invoice_number || order.order_number || order.id;
+    const business = await loadBusinessProfile(businessId);
+    for (const paidFlag of ['', '-paid']) {
+      const filename = `Tax-Invoice-${invNum}${paidFlag}.pdf`;
+      const primaryKey = getDocumentStorageKey({ business, contactName: order.contact_name, docType: 'invoices', filename });
+      const fallbackKeys = getDocumentFallbackKeys({ business, contactName: order.contact_name, docType: 'invoices', filename });
+      for (const k of [primaryKey, ...fallbackKeys]) {
+        storageService.deleteFile(k).catch(() => {});
+      }
+    }
+
+    res.json({ success: true, message: `Invoice ${invNum} deleted successfully.` });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('Invoice delete error:', err);
+    res.status(500).json({ error: 'Failed to delete invoice' });
+  } finally {
+    client.release();
+  }
+});
+
+
 export async function loadFullOrder(id, businessId = null) {
   const where = businessId ? 'WHERE orders.id = $1 AND orders.business_id = $2' : 'WHERE orders.id = $1';
   const params = businessId ? [id, businessId] : [id];

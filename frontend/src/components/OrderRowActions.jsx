@@ -2,7 +2,17 @@ import { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { api } from '../api';
 import { NEXT_FULFILLMENT, NEXT_FULFILLMENT_LABEL } from '../orderStatus';
-import { MoreVerticalIcon, FileTextIcon, WhatsAppIcon } from './Icons';
+import {
+  MoreVerticalIcon,
+  FileTextIcon,
+  WhatsAppIcon,
+  EditIcon,
+  TagIcon,
+  TruckIcon,
+  TrashIcon,
+  CreditNoteIcon,
+  PaymentInIcon,
+} from './Icons';
 
 export default function OrderRowActions({
   order,
@@ -13,6 +23,8 @@ export default function OrderRowActions({
   advanceFulfillment,
   cancelOrder,
   onIssueCreditNote,
+  onEditOrder,
+  onDeleteOrder,
 }) {
   const [open, setOpen] = useState(false);
   const [style, setStyle] = useState({});
@@ -30,11 +42,11 @@ export default function OrderRowActions({
     const rect = triggerRef.current.getBoundingClientRect();
     const spaceBelow = window.innerHeight - rect.bottom;
     const spaceAbove = rect.top;
-    const menuWidth = 240;
+    const menuWidth = 260;
     const left = Math.max(10, Math.min(rect.right - menuWidth, window.innerWidth - menuWidth - 10));
 
-    if (spaceBelow < 300 && spaceAbove > spaceBelow) {
-      const maxHeight = Math.max(160, Math.min(spaceAbove - 16, 380));
+    if (spaceBelow < 320 && spaceAbove > spaceBelow) {
+      const maxHeight = Math.max(180, Math.min(spaceAbove - 16, 420));
       setStyle({
         bottom: `${window.innerHeight - rect.top + 6}px`,
         left: `${left}px`,
@@ -42,7 +54,7 @@ export default function OrderRowActions({
         width: `${menuWidth}px`,
       });
     } else {
-      const maxHeight = Math.max(160, Math.min(spaceBelow - 16, 380));
+      const maxHeight = Math.max(180, Math.min(spaceBelow - 16, 420));
       setStyle({
         top: `${rect.bottom + 6}px`,
         left: `${left}px`,
@@ -84,72 +96,98 @@ export default function OrderRowActions({
     onChanged();
   }
 
+  const baseBtnStyle = {
+    background: '#ffffff',
+    color: '#475569',
+    border: '1px solid var(--border, #e2e8f0)',
+    width: '30px',
+    height: '28px',
+    borderRadius: '6px',
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    cursor: 'pointer',
+    textDecoration: 'none',
+    padding: 0,
+    transition: 'all 0.15s ease',
+    boxShadow: '0 1px 2px rgba(0, 0, 0, 0.03)',
+  };
+
   return (
-    <div className="order-actions-cell" style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', justifyContent: 'flex-end', whiteSpace: 'nowrap' }}>
-      {/* 1. TAX INVOICE PDF ICON */}
+    <div
+      className="order-actions-cell"
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: '6px',
+        justifyContent: 'flex-end',
+        whiteSpace: 'nowrap',
+      }}
+    >
+      {/* 1. EDIT INVOICE (CLEAN ENTERPRISE OUTLINE) */}
+      {onEditOrder && (
+        <button
+          type="button"
+          onClick={() => onEditOrder(order)}
+          title={`Edit Invoice (${order.invoice_number || order.order_number})`}
+          style={{
+            ...baseBtnStyle,
+            color: '#1d4ed8',
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.background = '#eff6ff';
+            e.currentTarget.style.borderColor = '#bfdbfe';
+            e.currentTarget.style.color = '#1e40af';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.background = '#ffffff';
+            e.currentTarget.style.borderColor = 'var(--border, #e2e8f0)';
+            e.currentTarget.style.color = '#1d4ed8';
+          }}
+        >
+          <EditIcon size={14} color="#1d4ed8" />
+        </button>
+      )}
+
+      {/* 2. TAX INVOICE PDF DOWNLOAD (UNIFORM ENTERPRISE OUTLINE) */}
       <a
         href={api.orderPdfUrl(order.id)}
         target="_blank"
         rel="noreferrer"
         title="Download Tax Invoice PDF"
         style={{
-          background: 'transparent',
-          color: 'var(--accent, #2563eb)',
-          border: '1px solid var(--border, #cbd5e1)',
-          width: '28px',
-          height: '26px',
-          borderRadius: '5px',
-          display: 'inline-flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          textDecoration: 'none',
-          cursor: 'pointer',
+          ...baseBtnStyle,
+          color: '#2563eb',
+        }}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.background = '#eff6ff';
+          e.currentTarget.style.borderColor = '#bfdbfe';
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.background = '#ffffff';
+          e.currentTarget.style.borderColor = 'var(--border, #e2e8f0)';
         }}
       >
         <FileTextIcon size={14} color="#2563eb" />
       </a>
 
-      {/* 1b. PRINT TRANSPORT PARCEL LABEL (1/3 A4) */}
-      <a
-        href={api.orderShippingLabelUrl(order.id)}
-        target="_blank"
-        rel="noreferrer"
-        title="Print Shipping Label"
-        style={{
-          background: '#f0fdfa',
-          color: '#0f766e',
-          border: '1px solid #99f6e4',
-          width: '28px',
-          height: '26px',
-          borderRadius: '5px',
-          display: 'inline-flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          fontSize: '12px',
-          textDecoration: 'none',
-          cursor: 'pointer',
-        }}
-      >
-        🏷️
-      </a>
-
-      {/* 2. SEND TAX INVOICE VIA WHATSAPP ICON */}
+      {/* 2. SEND TAX INVOICE VIA WHATSAPP (UNIFORM ENTERPRISE OUTLINE) */}
       <button
         type="button"
         onClick={() => handleSendWhatsApp(order)}
         disabled={sendingWhatsappId === order.id}
-        title="Send Tax Invoice via WhatsApp"
+        title="Send Invoice via WhatsApp"
         style={{
-          background: '#f0fdf4',
-          border: '1px solid #bbf7d0',
-          width: '28px',
-          height: '26px',
-          borderRadius: '5px',
-          display: 'inline-flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          cursor: 'pointer',
-          padding: 0,
+          ...baseBtnStyle,
+          color: '#16a34a',
+        }}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.background = '#f0fdf4';
+          e.currentTarget.style.borderColor = '#bbf7d0';
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.background = '#ffffff';
+          e.currentTarget.style.borderColor = 'var(--border, #e2e8f0)';
         }}
       >
         {sendingWhatsappId === order.id ? (
@@ -159,33 +197,7 @@ export default function OrderRowActions({
         )}
       </button>
 
-      {/* 3. QUICK SETTLE BUTTON (IF UNPAID / PARTIAL) */}
-      {isUnpaid && onSettle && (
-        <button
-          type="button"
-          onClick={() => onSettle(order)}
-          title={`Record Payment / Settle (${order.invoice_number || order.order_number})`}
-          style={{
-            background: '#ecfdf5',
-            color: '#047857',
-            border: '1px solid #6ee7b7',
-            fontWeight: 800,
-            fontSize: '13px',
-            width: '28px',
-            height: '26px',
-            borderRadius: '5px',
-            display: 'inline-flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            cursor: 'pointer',
-            padding: 0,
-          }}
-        >
-          ₹
-        </button>
-      )}
-
-      {/* 4. MORE ACTIONS TRIGGER (•••) */}
+      {/* 3. CONTEXTUAL MORE OPTIONS (•••) */}
       <button
         ref={triggerRef}
         type="button"
@@ -193,38 +205,90 @@ export default function OrderRowActions({
         title="More Actions"
         aria-label="More actions"
         style={{
-          background: open ? 'var(--hover-bg, #f1f5f9)' : 'transparent',
-          border: '1px solid var(--border, #cbd5e1)',
-          borderRadius: '5px',
-          width: '28px',
-          height: '26px',
-          display: 'inline-flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          cursor: 'pointer',
-          color: 'var(--muted, #64748b)',
-          padding: 0,
+          ...baseBtnStyle,
+          background: open ? 'var(--hover-bg, #f1f5f9)' : '#ffffff',
+          borderColor: open ? '#cbd5e1' : 'var(--border, #e2e8f0)',
+          color: open ? '#0f172a' : '#64748b',
+        }}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.background = '#f8fafc';
+          e.currentTarget.style.borderColor = '#cbd5e1';
+          e.currentTarget.style.color = '#0f172a';
+        }}
+        onMouseLeave={(e) => {
+          if (!open) {
+            e.currentTarget.style.background = '#ffffff';
+            e.currentTarget.style.borderColor = 'var(--border, #e2e8f0)';
+            e.currentTarget.style.color = '#64748b';
+          }
         }}
       >
-        <MoreVerticalIcon size={14} />
+        <MoreVerticalIcon size={15} />
       </button>
 
-      {/* DROPDOWN MENU PORTAL */}
+      {/* DROPDOWN MENU PORTAL (CLEAN ENTERPRISE LAYOUT) */}
       {open &&
         createPortal(
           <div ref={panelRef} className="payment-menu-panel" style={{ ...style, zIndex: 9999 }}>
-            <div style={{ padding: '4px 8px 6px', borderBottom: '1px solid var(--border)', marginBottom: '4px' }}>
-              <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--muted)' }}>
-                Tax Invoice: {order.invoice_number || order.order_number}
+            {/* INVOICE & CUSTOMER HEADER */}
+            <div style={{ padding: '6px 10px 8px', borderBottom: '1px solid var(--border, #e2e8f0)', marginBottom: '4px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '6px' }}>
+                <span style={{ fontSize: '11.5px', fontWeight: 700, color: 'var(--color-primary, #1d4ed8)' }}>
+                  {order.invoice_number || order.order_number}
+                </span>
+                <span
+                  style={{
+                    fontSize: '10.5px',
+                    fontWeight: 600,
+                    textTransform: 'capitalize',
+                    padding: '1px 5px',
+                    borderRadius: '4px',
+                    background: order.payment_status === 'paid' ? '#dcfce7' : '#fef3c7',
+                    color: order.payment_status === 'paid' ? '#15803d' : '#92400e',
+                  }}
+                >
+                  {order.payment_status === 'partially_paid' ? 'Partially Paid' : order.payment_status}
+                </span>
               </div>
               {order.name && (
-                <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                <div style={{ fontSize: '12px', fontWeight: 600, color: '#334155', marginTop: '2px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                   {order.name}
                 </div>
               )}
             </div>
 
+            {/* PRIMARY ACTIONS: EDIT & SHIPPING LABEL */}
+            {onEditOrder && (
+              <button
+                type="button"
+                className="payment-menu-item"
+                onClick={() => {
+                  setOpen(false);
+                  onEditOrder(order);
+                }}
+                style={{ color: '#1d4ed8', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '8px' }}
+              >
+                <EditIcon size={14} color="#1d4ed8" />
+                <span>Edit Invoice Details</span>
+              </button>
+            )}
+
+            <a
+              className="payment-menu-item"
+              href={api.orderShippingLabelUrl(order.id)}
+              target="_blank"
+              rel="noreferrer"
+              onClick={() => setOpen(false)}
+              style={{ display: 'flex', alignItems: 'center', gap: '8px', textDecoration: 'none', color: '#0f766e', fontWeight: 500 }}
+            >
+              <TagIcon size={14} color="#0f766e" />
+              <span>Print Shipping Label (1/3 A4)</span>
+            </a>
+
+            {/* DOCUMENTS */}
+            <div className="payment-menu-divider" />
             <div className="payment-menu-label">Tax Invoice Documents</div>
+
             <a
               className="payment-menu-item"
               href={api.orderPdfUrl(order.id)}
@@ -233,7 +297,8 @@ export default function OrderRowActions({
               onClick={() => setOpen(false)}
               style={{ display: 'flex', alignItems: 'center', gap: '8px', textDecoration: 'none' }}
             >
-              <span>📄</span> Download Tax Invoice (Standard)
+              <FileTextIcon size={14} color="#2563eb" />
+              <span>Download Invoice (Standard)</span>
             </a>
 
             {(order.payment_status === 'paid' || order.payment_status === 'partially_paid') && (
@@ -245,26 +310,16 @@ export default function OrderRowActions({
                 onClick={() => setOpen(false)}
                 style={{ display: 'flex', alignItems: 'center', gap: '8px', textDecoration: 'none' }}
               >
-                <span>🧾</span> Download Tax Invoice + Payment History
+                <span style={{ fontSize: '13px' }}>🧾</span>
+                <span>Invoice + Payment History</span>
               </a>
             )}
 
-            <a
-              className="payment-menu-item"
-              href={api.orderShippingLabelUrl(order.id)}
-              target="_blank"
-              rel="noreferrer"
-              onClick={() => setOpen(false)}
-              style={{ display: 'flex', alignItems: 'center', gap: '8px', textDecoration: 'none', color: '#0f766e', fontWeight: 600 }}
-            >
-              <span>🏷️</span> Print Shipping Label
-            </a>
-
-            {/* PAYMENT OPTIONS */}
+            {/* PAYMENTS & SETTLEMENT */}
             {onSettle && isUnpaid && (
               <>
                 <div className="payment-menu-divider" />
-                <div className="payment-menu-label">Payments & Settle</div>
+                <div className="payment-menu-label">Payments &amp; Settlement</div>
                 <button
                   type="button"
                   className="payment-menu-item"
@@ -274,7 +329,8 @@ export default function OrderRowActions({
                   }}
                   style={{ color: '#15803d', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '8px' }}
                 >
-                  <span>₹</span> Record Payment In (Settle)
+                  <PaymentInIcon size={14} color="#15803d" />
+                  <span>Record Payment In (Settle)</span>
                 </button>
               </>
             )}
@@ -333,12 +389,13 @@ export default function OrderRowActions({
                   }}
                   style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
                 >
-                  <span>🚚</span> {NEXT_FULFILLMENT_LABEL[order.fulfillment_status]}
+                  <TruckIcon size={14} color="#475569" />
+                  <span>{NEXT_FULFILLMENT_LABEL[order.fulfillment_status]}</span>
                 </button>
               </>
             )}
 
-            {/* SALES RETURN & CREDIT NOTE */}
+            {/* RETURNS & CREDIT NOTES */}
             {onIssueCreditNote && (
               <>
                 <div className="payment-menu-divider" />
@@ -352,23 +409,40 @@ export default function OrderRowActions({
                     onIssueCreditNote(order);
                   }}
                 >
-                  <span>↩</span> Issue Credit Note / Return
+                  <CreditNoteIcon size={14} color="#7c3aed" />
+                  <span>Issue Credit Note / Return</span>
                 </button>
               </>
             )}
 
-            {/* DANGER: CANCEL */}
+            {/* DANGER ZONE: DELETE & CANCEL */}
             <div className="payment-menu-divider" />
+            {onDeleteOrder && (
+              <button
+                type="button"
+                className="payment-menu-item"
+                style={{ color: '#dc2626', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '8px' }}
+                onClick={() => {
+                  setOpen(false);
+                  onDeleteOrder(order);
+                }}
+              >
+                <TrashIcon size={14} color="#dc2626" />
+                <span>Delete Invoice Completely</span>
+              </button>
+            )}
+
             <button
               type="button"
               className="payment-menu-item"
-              style={{ color: '#dc2626', display: 'flex', alignItems: 'center', gap: '8px' }}
+              style={{ color: '#64748b', display: 'flex', alignItems: 'center', gap: '8px' }}
               onClick={() => {
                 setOpen(false);
                 cancelOrder(order);
               }}
             >
-              <span>✕</span> Cancel Order
+              <span style={{ fontSize: '12px' }}>✕</span>
+              <span>Cancel Order</span>
             </button>
           </div>,
           document.body

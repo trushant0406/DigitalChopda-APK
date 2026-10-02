@@ -110,6 +110,9 @@ export default function OrderItemsEditor({ items, onChange }) {
                   onChange={(e) => handleProductSelect(index, e.target.value)}
                 >
                   <option value="" disabled>Select product…</option>
+                  {item.product_name && !products.some((p) => p.name === item.product_name) && (
+                    <option value={item.product_name}>{item.product_name}</option>
+                  )}
                   {products.map((p) => (
                     <option key={p.id} value={p.name}>
                       {p.name} (₹{Number(p.default_price).toFixed(0)})
