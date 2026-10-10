@@ -20,7 +20,7 @@ function readFileAsDataUrl(file) {
   });
 }
 
-export default function SettingsPage() {
+export default function SettingsPage({ refreshKey }) {
   const [status, setStatus] = useState(null);
   const [pushState, setPushState] = useState('idle');
   const [error, setError] = useState(null);
@@ -31,11 +31,14 @@ export default function SettingsPage() {
   const [profileSaved, setProfileSaved] = useState(false);
 
   useEffect(() => {
+    api.getBusinessProfile().then((p) => p && setProfile({ ...emptyProfile, ...p })).catch(() => {});
+  }, [refreshKey]);
+
+  useEffect(() => {
     function checkStatus() {
       api.settingsStatus().then(setStatus).catch(() => {});
     }
     checkStatus();
-    api.getBusinessProfile().then((p) => p && setProfile({ ...emptyProfile, ...p })).catch(() => {});
 
     const interval = setInterval(checkStatus, 2000);
     return () => clearInterval(interval);

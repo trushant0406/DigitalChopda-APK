@@ -1553,12 +1553,24 @@ tbody tr.row-today td.sticky-col-right {
   width: 100%;
   display: flex;
   align-items: center;
-  justify-content: flex-start;
+  justify-content: space-between;
   background: rgba(63, 94, 251, 0.08);
   border: 1px solid rgba(63, 94, 251, 0.22);
   border-radius: 9px;
   padding: 0.55rem 0.75rem;
   box-sizing: border-box;
+  text-align: left;
+  font-family: inherit;
+  transition: all 0.15s ease;
+}
+
+.company-switcher-trigger.clickable {
+  cursor: pointer;
+}
+
+.company-switcher-trigger.clickable:hover {
+  background: rgba(63, 94, 251, 0.15);
+  border-color: rgba(63, 94, 251, 0.45);
 }
 
 .company-switcher-left {
@@ -1566,7 +1578,8 @@ tbody tr.row-today td.sticky-col-right {
   align-items: center;
   gap: 0.6rem;
   overflow: hidden;
-  width: 100%;
+  flex: 1;
+  min-width: 0;
 }
 
 .company-switcher-badge {

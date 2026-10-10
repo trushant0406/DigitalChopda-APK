@@ -16,7 +16,25 @@ const NAV = [
 ];
 
 export default function Sidebar({ active, onNavigate }) {
-  const { user, logout, activeBusiness } = useAuth();
+  const { user, logout, activeBusiness, businesses, switchBusiness } = useAuth();
+  const [dropdownOpen, setDropdownOpen] = useState(false);
+  const dropdownRef = useRef(null);
+
+  const hasMultipleCompanies = Boolean(businesses && businesses.length > 1);
+
+  useEffect(() => {
+    function handleClickOutside(event) {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+        setDropdownOpen(false);
+      }
+    }
+    if (dropdownOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [dropdownOpen]);
 
   return (
     <nav className="sidebar">
@@ -26,19 +44,72 @@ export default function Sidebar({ active, onNavigate }) {
           <span className="brand-name">DigitalChopda.in</span>
         </div>
 
-        {/* Active Business Badge (Static display — no tenant switching) */}
-        <div className="company-switcher-wrapper">
-          <div className="company-switcher-trigger" style={{ cursor: 'default' }}>
+        {/* Multi-Company Switcher (Vyapar / MyBillBook style) */}
+        <div className="company-switcher-wrapper" ref={dropdownRef}>
+          <button
+            type="button"
+            className={`company-switcher-trigger ${hasMultipleCompanies ? 'clickable' : ''}`}
+            onClick={() => hasMultipleCompanies && setDropdownOpen((prev) => !prev)}
+            aria-expanded={dropdownOpen}
+            aria-haspopup={hasMultipleCompanies ? 'menu' : undefined}
+            title={hasMultipleCompanies ? 'Click to switch company' : (activeBusiness?.name || '')}
+            style={{ cursor: hasMultipleCompanies ? 'pointer' : 'default' }}
+          >
             <div className="company-switcher-left">
               <span className="company-switcher-badge">🏢</span>
               <div className="company-switcher-texts">
                 <span className="company-switcher-name" title={activeBusiness?.name || user?.name || ''}>
                   {activeBusiness?.name || (user?.role !== 'admin' && user?.name ? user.name : 'My Business')}
                 </span>
-                <span className="company-switcher-tag">Active Company</span>
+                <span className="company-switcher-tag">
+                  {hasMultipleCompanies ? 'Switch Company' : 'Active Company'}
+                </span>
               </div>
             </div>
-          </div>
+            {hasMultipleCompanies && (
+              <span
+                className="company-switcher-caret"
+                style={{
+                  transform: dropdownOpen ? 'rotate(180deg)' : 'rotate(0deg)',
+                  transition: 'transform 0.18s ease',
+                  fontSize: '0.75rem',
+                }}
+              >
+                ▼
+              </span>
+            )}
+          </button>
+
+          {dropdownOpen && hasMultipleCompanies && (
+            <div className="company-switcher-menu" role="menu">
+              <div className="company-menu-label">COMPANIES ({businesses.length})</div>
+              <div className="company-menu-list">
+                {businesses.map((biz) => {
+                  const isActive = activeBusiness?.id === biz.id;
+                  return (
+                    <button
+                      key={biz.id}
+                      type="button"
+                      className={`company-menu-item ${isActive ? 'active' : ''}`}
+                      onClick={() => {
+                        switchBusiness(biz.id);
+                        setDropdownOpen(false);
+                      }}
+                      role="menuitem"
+                    >
+                      <div className="company-menu-item-info">
+                        <span className="company-menu-item-name">{biz.name}</span>
+                        <span className="company-menu-item-sub">
+                          {biz.trade_name ? biz.trade_name : (biz.invoice_prefix ? `Prefix: ${biz.invoice_prefix}` : 'Active')}
+                        </span>
+                      </div>
+                      {isActive && <span className="company-menu-item-check" aria-label="Active">✓</span>}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
         </div>
 
         <ul>

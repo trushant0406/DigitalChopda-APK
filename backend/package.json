@@ -7,6 +7,8 @@
     "dev": "node --watch src/index.js",
     "start": "node src/index.js",
     "migrate": "node src/migrate.js",
+    "onboard": "node scripts/onboard-tenant.js",
+    "assign-company": "node scripts/assign-company.js",
     "postinstall": "node scripts/patch-wwebjs.js"
   },
   "dependencies": {

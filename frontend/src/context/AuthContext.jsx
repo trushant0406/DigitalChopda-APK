@@ -44,12 +44,7 @@ export function AuthProvider({ children }) {
           setBusinesses(bizList);
 
           const storedBizId = localStorage.getItem('ci_business_id');
-          let currentActive;
-          if (res.user?.role === 'admin' && storedBizId) {
-            currentActive = resolveActiveBusiness(bizList, storedBizId);
-          } else {
-            currentActive = res.activeBusiness || bizList[0] || null;
-          }
+          const currentActive = resolveActiveBusiness(bizList, storedBizId) || res.activeBusiness || bizList[0] || null;
           if (currentActive) {
             localStorage.setItem('ci_business_id', String(currentActive.id));
             setActiveBusiness(currentActive);
@@ -74,7 +69,8 @@ export function AuthProvider({ children }) {
 
     const bizList = res.businesses || [];
     setBusinesses(bizList);
-    const active = res.activeBusiness || bizList[0] || null;
+    const storedBizId = localStorage.getItem('ci_business_id');
+    const active = resolveActiveBusiness(bizList, storedBizId) || res.activeBusiness || bizList[0] || null;
     if (active) {
       localStorage.setItem('ci_business_id', String(active.id));
       setActiveBusiness(active);

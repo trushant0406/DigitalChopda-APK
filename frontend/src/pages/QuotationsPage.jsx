@@ -7,7 +7,7 @@ import ConvertQuotationModal from '../components/ConvertQuotationModal';
 import { formatDate, formatTime } from '../dateFormat';
 import { FileTextIcon, WhatsAppIcon, ZapIcon, InvoiceCheckIcon } from '../components/Icons';
 
-export default function QuotationsPage({ presetContact }) {
+export default function QuotationsPage({ presetContact, refreshKey }) {
   const navigate = useNavigate();
   const [quotations, setQuotations] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -35,7 +35,7 @@ export default function QuotationsPage({ presetContact }) {
 
   useEffect(() => {
     load();
-  }, []);
+  }, [refreshKey]);
 
   useEffect(() => {
     if (presetContact) {

@@ -58,10 +58,7 @@ router.post('/login', async (req, res) => {
         [user.id]
       );
 
-  let businesses = bizRes.rows;
-  if (user.role !== 'admin' && businesses.some((b) => b.id !== 1)) {
-    businesses = businesses.filter((b) => b.id !== 1);
-  }
+  const businesses = bizRes.rows;
 
   const token = generateToken(user);
   res.json({
@@ -98,10 +95,7 @@ router.get('/me', async (req, res) => {
         [user.id]
       );
 
-  let businesses = bizRes.rows;
-  if (user.role !== 'admin' && businesses.some((b) => b.id !== 1)) {
-    businesses = businesses.filter((b) => b.id !== 1);
-  }
+  const businesses = bizRes.rows;
 
   res.json({
     user,

@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { api } from '../api';
 import DataTable from '../components/DataTable';
 
-export default function ProductsPage() {
+export default function ProductsPage({ refreshKey }) {
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [name, setName] = useState('');
@@ -31,7 +31,7 @@ export default function ProductsPage() {
 
   useEffect(() => {
     load();
-  }, []);
+  }, [refreshKey]);
 
   async function handleSubmit(e) {
     e.preventDefault();

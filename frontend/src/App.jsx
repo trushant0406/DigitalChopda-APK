@@ -65,10 +65,10 @@ function MainLayout() {
           <Route path="/orders" element={<OrdersPage refreshKey={refreshKey} onLogged={bump} initialFilter={ordersFilter} />} />
           <Route path="/invoices" element={<InvoicesPage refreshKey={refreshKey} />} />
           <Route path="/sales-returns" element={<SalesReturnsPage refreshKey={refreshKey} />} />
-          <Route path="/products" element={<ProductsPage />} />
-          <Route path="/quotations" element={<QuotationsPage presetContact={quotationPresetContact} />} />
+          <Route path="/products" element={<ProductsPage refreshKey={refreshKey} />} />
+          <Route path="/quotations" element={<QuotationsPage refreshKey={refreshKey} presetContact={quotationPresetContact} />} />
           <Route path="/credit" element={<CreditPage refreshKey={refreshKey} />} />
-          <Route path="/settings" element={<SettingsPage />} />
+          <Route path="/settings" element={<SettingsPage refreshKey={refreshKey} />} />
         </Routes>
       </main>
     </div>

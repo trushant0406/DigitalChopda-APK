@@ -118,12 +118,12 @@ async function onboard() {
     const username = (params.username || '').trim().toLowerCase();
     const password = params.password;
 
-    if (username && password) {
+    if (username) {
       const existingUser = await client.query(`SELECT * FROM users WHERE username = $1`, [username]);
       if (existingUser.rows.length > 0) {
         merchantUser = existingUser.rows[0];
         console.log(`   Existing User Linked: @${username}`);
-      } else {
+      } else if (password) {
         const hash = hashPassword(password);
         const insUser = await client.query(
           `INSERT INTO users (username, password_hash, name, role, created_at)
@@ -133,14 +133,18 @@ async function onboard() {
         );
         merchantUser = insUser.rows[0];
         console.log(`   New Merchant User Created: @${username} (Role: user)`);
+      } else {
+        console.warn(`   ⚠️ User @${username} does not exist and no password provided. Skipping user creation.`);
       }
 
-      await client.query(
-        `INSERT INTO business_users (business_id, user_id, role, is_active, created_at)
-         VALUES ($1, $2, 'owner', true, now())
-         ON CONFLICT (business_id, user_id) DO NOTHING`,
-        [business.id, merchantUser.id]
-      );
+      if (merchantUser) {
+        await client.query(
+          `INSERT INTO business_users (business_id, user_id, role, is_active, created_at)
+           VALUES ($1, $2, 'owner', true, now())
+           ON CONFLICT (business_id, user_id) DO NOTHING`,
+          [business.id, merchantUser.id]
+        );
+      }
     }
 
     await client.query('COMMIT');
