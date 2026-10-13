@@ -98,6 +98,7 @@ fun DigitalChopdaNavGraph(
         composable(Screen.LoginRegister.route) {
             LoginRegisterScreen(
                 authRepository = app.authRepository,
+                languageManager = app.languageManager,
                 onLoginSuccess = {
                     navController.navigate(Screen.Dashboard.route) {
                         popUpTo(Screen.LoginRegister.route) { inclusive = true }

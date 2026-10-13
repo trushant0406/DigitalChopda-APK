@@ -118,7 +118,30 @@ data class AppStrings(
     val saveToChopda: String,
     val activeAccountBadge: String,
     val downloadPdfStatement: String,
-    val lastTransactionLabel: String
+    val lastTransactionLabel: String,
+
+    // Auth & Login
+    val loginTab: String = "LOGIN",
+    val registerTab: String = "REGISTER",
+    val usernameOrMobileLabel: String = "Username or Mobile Number",
+    val mobileNumberLabel: String = "Mobile Number",
+    val passwordLabel: String = "Password",
+    val businessFirmNameLabel: String = "Business / Firm Name",
+    val ownerMerchantNameLabel: String = "Owner / Merchant Name",
+    val rememberMeLabel: String = "Remember Me",
+    val forgotPasswordLabel: String = "Forgot Password?",
+    val loginButtonText: String = "LOG IN  ›",
+    val registerButtonText: String = "CREATE ACCOUNT  ›",
+    val orContinueWithLabel: String = "OR CONTINUE WITH",
+    val loginViaOtpLabel: String = "Login via OTP",
+    val googleSignInLabel: String = "Google Sign-In",
+    val dpdpConsentLabel: String = "I agree to Terms & DPDP 2023 Data Privacy Rules",
+    val enterUsernameOrMobileError: String = "Please enter username or mobile number",
+    val enterPasswordError: String = "Please enter password",
+    val quickFillLabel: String = "Demo Quick-Fill",
+    val adminDemoUser: String = "Admin",
+    val merchantDemoUser: String = "Merchant",
+    val centralDepotStatus: String = "Central Depot: 100.99.250.0:4000 (Tailscale)"
 )
 
 val EnglishStrings = AppStrings(
@@ -336,7 +359,30 @@ val GujaratiStrings = AppStrings(
     saveToChopda = "ચોપડામાં સાચવો",
     activeAccountBadge = "સક્રિય ખાતું",
     downloadPdfStatement = "PDF સ્ટેટમેન્ટ",
-    lastTransactionLabel = "છેલ્લી લેવડ-દેવડ"
+    lastTransactionLabel = "છેલ્લી લેવડ-દેવડ",
+
+    // Auth & Login
+    loginTab = "પ્રવેશ કરો",
+    registerTab = "નવું ખાતું બનાવો",
+    usernameOrMobileLabel = "વપરાશકર્તા નામ અથવા મોબાઈલ",
+    mobileNumberLabel = "મોબાઈલ નંબર",
+    passwordLabel = "પાસવર્ડ",
+    businessFirmNameLabel = "પેઢી / દુકાનનું નામ",
+    ownerMerchantNameLabel = "વેપારીનું નામ",
+    rememberMeLabel = "મને યાદ રાખો",
+    forgotPasswordLabel = "પાસવર્ડ ભૂલી ગયા?",
+    loginButtonText = "પ્રવેશ કરો  ›",
+    registerButtonText = "ખાતું બનાવો  ›",
+    orContinueWithLabel = "અથવા આનાથી આગળ વધો",
+    loginViaOtpLabel = "OTP દ્વારા લોગિન",
+    googleSignInLabel = "ગૂગલ સાઇન-ઇન",
+    dpdpConsentLabel = "હું નિયમો અને DPDP ૨૦૨૩ પ્રાઇવસી શરતો સ્વીકારું છું",
+    enterUsernameOrMobileError = "કૃપા કરીને વપરાશકર્તા નામ અથવા મોબાઈલ દાખલ કરો",
+    enterPasswordError = "કૃપા કરીને પાસવર્ડ દાખલ કરો",
+    quickFillLabel = "ઝડપી ડેમો લોગિન",
+    adminDemoUser = "એડમિન",
+    merchantDemoUser = "વેપારી",
+    centralDepotStatus = "મુખ્ય ડેપો: 100.99.250.0:4000 (Tailscale ઓનલાઇન)"
 )
 
 val HindiStrings = AppStrings(
@@ -445,7 +491,30 @@ val HindiStrings = AppStrings(
     saveToChopda = "चोपड़ा में सहेजें",
     activeAccountBadge = "सक्रिय खाता",
     downloadPdfStatement = "PDF स्टेटमेंट",
-    lastTransactionLabel = "अंतिम लेन-देन"
+    lastTransactionLabel = "अंतिम लेन-देन",
+
+    // Auth & Login
+    loginTab = "लॉग इन",
+    registerTab = "नया खाता बनाएं",
+    usernameOrMobileLabel = "उपयोगकर्ता नाम या मोबाइल",
+    mobileNumberLabel = "मोबाइल नंबर",
+    passwordLabel = "पासवर्ड",
+    businessFirmNameLabel = "व्यापार / फर्म का नाम",
+    ownerMerchantNameLabel = "व्यापारी का नाम",
+    rememberMeLabel = "मुझे याद रखें",
+    forgotPasswordLabel = "पासवर्ड भूल गए?",
+    loginButtonText = "लॉग इन करें  ›",
+    registerButtonText = "खाता बनाएं  ›",
+    orContinueWithLabel = "या इससे आगे बढ़ें",
+    loginViaOtpLabel = "OTP से लॉग इन",
+    googleSignInLabel = "गूगल साइन-इन",
+    dpdpConsentLabel = "मैं नियमों और DPDP 2023 डेटा गोपनीयता से सहमत हूँ",
+    enterUsernameOrMobileError = "कृपया उपयोगकर्ता नाम या मोबाइल दर्ज करें",
+    enterPasswordError = "कृपया पासवर्ड दर्ज करें",
+    quickFillLabel = "त्वरित डेमो लॉगिन",
+    adminDemoUser = "एडमिन",
+    merchantDemoUser = "व्यापारी",
+    centralDepotStatus = "केंद्रीय डिपो: 100.99.250.0:4000 (Tailscale ऑनलाइन)"
 )
 
 fun AppLanguage.getStrings(): AppStrings {

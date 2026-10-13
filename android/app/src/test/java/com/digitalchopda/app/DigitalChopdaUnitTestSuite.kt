@@ -380,6 +380,13 @@ class DigitalChopdaUnitTestSuite {
             assertTrue("$name totalStockValue must not be blank", bundle.totalStockValue.isNotBlank())
             assertTrue("$name lowStockAlert must not be blank", bundle.lowStockAlert.isNotBlank())
             assertTrue("$name biometricUnlockBtn must not be blank", bundle.biometricUnlockBtn.isNotBlank())
+            assertTrue("$name loginTab must not be blank", bundle.loginTab.isNotBlank())
+            assertTrue("$name registerTab must not be blank", bundle.registerTab.isNotBlank())
+            assertTrue("$name usernameOrMobileLabel must not be blank", bundle.usernameOrMobileLabel.isNotBlank())
+            assertTrue("$name passwordLabel must not be blank", bundle.passwordLabel.isNotBlank())
+            assertTrue("$name loginButtonText must not be blank", bundle.loginButtonText.isNotBlank())
+            assertTrue("$name registerButtonText must not be blank", bundle.registerButtonText.isNotBlank())
+            assertTrue("$name centralDepotStatus must not be blank", bundle.centralDepotStatus.isNotBlank())
         }
     }
 
@@ -390,15 +397,45 @@ class DigitalChopdaUnitTestSuite {
         assertTrue("Gujarati appName must contain Gujarati characters", gujaratiRegex.containsMatchIn(GujaratiStrings.appName))
         assertTrue("Gujarati navChopda must contain Gujarati characters", gujaratiRegex.containsMatchIn(GujaratiStrings.navChopda))
         assertTrue("Gujarati sacredInvocation must contain Gujarati characters", gujaratiRegex.containsMatchIn(GujaratiStrings.sacredInvocation))
+        assertTrue("Gujarati loginTab must contain Gujarati characters", gujaratiRegex.containsMatchIn(GujaratiStrings.loginTab))
 
         // Devanagari script regex (\u0900-\u097F)
         val devanagariRegex = Regex("[\\u0900-\\u097F]")
         assertTrue("Hindi appName must contain Devanagari characters", devanagariRegex.containsMatchIn(HindiStrings.appName))
         assertTrue("Hindi navChopda must contain Devanagari characters", devanagariRegex.containsMatchIn(HindiStrings.navChopda))
         assertTrue("Hindi sacredInvocation must contain Devanagari characters", devanagariRegex.containsMatchIn(HindiStrings.sacredInvocation))
+        assertTrue("Hindi loginTab must contain Devanagari characters", devanagariRegex.containsMatchIn(HindiStrings.loginTab))
 
         // English appName
         assertEquals("DigitalChopda", EnglishStrings.appName)
         assertEquals("Chopda", EnglishStrings.navChopda)
+        assertEquals("LOGIN", EnglishStrings.loginTab)
+    }
+
+    @Test
+    fun testAuthLoginValidationAndMockResilience() = runBlocking {
+        val mockApi = MockDigitalChopdaApiService()
+
+        // 1. Valid admin login
+        val adminResult = mockApi.login("admin", "admin123")
+        assertTrue(adminResult.isSuccess)
+        val adminAuth = adminResult.getOrNull()
+        assertNotNull(adminAuth)
+        assertTrue(adminAuth?.accessToken?.startsWith("m_acc_") == true)
+
+        // 2. Valid 10-digit mobile login
+        val vyapariResult = mockApi.login("9876543210", "admin123")
+        assertTrue(vyapariResult.isSuccess)
+        val vyapariAuth = vyapariResult.getOrNull()
+        assertNotNull(vyapariAuth)
+
+        // 3. OTP verification flow
+        val otpResult = mockApi.verifyOtp("9876543210", "1234")
+        assertTrue(otpResult.isSuccess)
+        assertNotNull(otpResult.getOrNull()?.accessToken)
+
+        // 4. Blank username error handling
+        val blankResult = mockApi.login("", "admin123")
+        assertTrue(blankResult.isFailure)
     }
 }
