@@ -58,7 +58,11 @@ abstract class ChopdaDatabase : RoomDatabase() {
                             super.onCreate(db)
                             // Pre-populate realistic seed data for immediate out-of-the-box experience
                             CoroutineScope(Dispatchers.IO).launch {
-                                populateSeedData(getInstance(context))
+                                try {
+                                    populateSeedData(getInstance(context))
+                                } catch (e: Exception) {
+                                    android.util.Log.e("ChopdaDatabase", "Failed to populate initial seed data", e)
+                                }
                             }
                         }
                     })

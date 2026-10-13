@@ -173,15 +173,17 @@ fun DashboardScreen(
     var voucherIsJama by remember { mutableStateOf(true) } // true = You Got (જમા), false = You Gave (ઉધાર)
 
     // Map Room entities reactively to UI party view items
-    val filteredParties: List<PartyViewItem> = filteredCustomerEntities.map { item ->
-        PartyViewItem(
-            id = item.id,
-            name = item.name,
-            phone = item.phone.ifBlank { "+91 98000 00000" },
-            balance = item.balance,
-            lastActive = if (item.address.isNotBlank()) item.address else "ચોપડા ખાતું"
-        )
-    }
+    val filteredParties: List<PartyViewItem> = filteredCustomerEntities
+        .distinctBy { it.id }
+        .map { item ->
+            PartyViewItem(
+                id = item.id,
+                name = item.name,
+                phone = item.phone.ifBlank { "+91 98000 00000" },
+                balance = item.balance,
+                lastActive = if (item.address.isNotBlank()) item.address else "ચોપડા ખાતું"
+            )
+        }
 
     fun sendWhatsAppReminder(party: PartyViewItem) {
         val cleanPhone = party.phone.replace("[^0-9]".toRegex(), "")
@@ -381,7 +383,7 @@ fun DashboardScreen(
                             }
                         }
                     } else {
-                        items(filteredParties, key = { it.id }) { party ->
+                        items(filteredParties, key = { party -> "party_${party.id}" }) { party ->
                             ChopdaPartyRow(
                                 name = party.name,
                                 phone = party.phone,

@@ -16,7 +16,7 @@ class BiometricAuthManager(private val context: Context) {
     private val prefs: SharedPreferences = context.getSharedPreferences("digital_chopda_biometric_prefs", Context.MODE_PRIVATE)
 
     private val _isBiometricEnabled = MutableStateFlow(
-        prefs.getBoolean(KEY_BIOMETRIC_ENABLED, true)
+        prefs.getBoolean(KEY_BIOMETRIC_ENABLED, false)
     )
     val isBiometricEnabled: StateFlow<Boolean> = _isBiometricEnabled.asStateFlow()
 
@@ -41,13 +41,17 @@ class BiometricAuthManager(private val context: Context) {
     }
 
     fun canAuthenticate(): Boolean {
-        val biometricManager = BiometricManager.from(context)
-        val authenticators = BiometricManager.Authenticators.BIOMETRIC_STRONG or
-                BiometricManager.Authenticators.DEVICE_CREDENTIAL
-
-        return when (biometricManager.canAuthenticate(authenticators)) {
-            BiometricManager.BIOMETRIC_SUCCESS -> true
-            else -> false
+        return try {
+            val biometricManager = BiometricManager.from(context)
+            val authenticators = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                BiometricManager.Authenticators.BIOMETRIC_STRONG or
+                        BiometricManager.Authenticators.DEVICE_CREDENTIAL
+            } else {
+                BiometricManager.Authenticators.BIOMETRIC_STRONG
+            }
+            biometricManager.canAuthenticate(authenticators) == BiometricManager.BIOMETRIC_SUCCESS
+        } catch (_: Exception) {
+            false
         }
     }
 
@@ -65,35 +69,48 @@ class BiometricAuthManager(private val context: Context) {
             return
         }
 
-        val executor = ContextCompat.getMainExecutor(activity)
-        val callback = object : BiometricPrompt.AuthenticationCallback() {
-            override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
-                super.onAuthenticationSucceeded(result)
-                isSessionAuthenticated = true
-                onSuccess()
+        try {
+            val executor = ContextCompat.getMainExecutor(activity)
+            val callback = object : BiometricPrompt.AuthenticationCallback() {
+                override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
+                    super.onAuthenticationSucceeded(result)
+                    isSessionAuthenticated = true
+                    onSuccess()
+                }
+
+                override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
+                    super.onAuthenticationError(errorCode, errString)
+                    onError(errString.toString())
+                }
+
+                override fun onAuthenticationFailed() {
+                    super.onAuthenticationFailed()
+                    // Transient biometric mismatch, user can retry immediately on prompt
+                }
             }
 
-            override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
-                super.onAuthenticationError(errorCode, errString)
-                onError(errString.toString())
+            val prompt = BiometricPrompt(activity, executor, callback)
+            val promptInfoBuilder = BiometricPrompt.PromptInfo.Builder()
+                .setTitle(title)
+                .setSubtitle(subtitle)
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                promptInfoBuilder.setAllowedAuthenticators(
+                    BiometricManager.Authenticators.BIOMETRIC_STRONG or
+                            BiometricManager.Authenticators.DEVICE_CREDENTIAL
+                )
+            } else {
+                promptInfoBuilder.setAllowedAuthenticators(
+                    BiometricManager.Authenticators.BIOMETRIC_STRONG
+                )
+                promptInfoBuilder.setNegativeButtonText("Cancel")
             }
 
-            override fun onAuthenticationFailed() {
-                super.onAuthenticationFailed()
-                // Transient biometric mismatch, user can retry immediately on prompt
-            }
+            val promptInfo = promptInfoBuilder.build()
+            prompt.authenticate(promptInfo)
+        } catch (e: Exception) {
+            android.util.Log.e("BiometricAuthManager", "Failed to invoke biometric prompt", e)
+            onError(e.message ?: "Biometric prompt unavailable")
         }
-
-        val prompt = BiometricPrompt(activity, executor, callback)
-        val promptInfo = BiometricPrompt.PromptInfo.Builder()
-            .setTitle(title)
-            .setSubtitle(subtitle)
-            .setAllowedAuthenticators(
-                BiometricManager.Authenticators.BIOMETRIC_STRONG or
-                        BiometricManager.Authenticators.DEVICE_CREDENTIAL
-            )
-            .build()
-
-        prompt.authenticate(promptInfo)
     }
 }

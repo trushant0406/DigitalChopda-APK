@@ -95,17 +95,25 @@ class DashboardViewModel(
 
     fun refresh() {
         viewModelScope.launch {
-            val company = companyRepository.getActiveCompany()
-            _activeCompany.value = company
-            loadInvoiceStats(company.id)
+            try {
+                val company = companyRepository.getActiveCompany()
+                _activeCompany.value = company
+                loadInvoiceStats(company.id)
+            } catch (e: Exception) {
+                android.util.Log.e("DashboardViewModel", "Error in refresh()", e)
+            }
         }
     }
 
     private suspend fun loadInvoiceStats(companyId: Long) {
-        val invoices = billingRepository.getRecentInvoices(companyId, limit = 10)
-        _recentInvoices.value = invoices
-        _totalSales.value = billingRepository.getTotalSales(companyId)
-        _invoiceCount.value = billingRepository.getInvoiceCount(companyId)
+        try {
+            val invoices = billingRepository.getRecentInvoices(companyId, limit = 10)
+            _recentInvoices.value = invoices
+            _totalSales.value = billingRepository.getTotalSales(companyId)
+            _invoiceCount.value = billingRepository.getInvoiceCount(companyId)
+        } catch (e: Exception) {
+            android.util.Log.e("DashboardViewModel", "Error in loadInvoiceStats()", e)
+        }
     }
 
     fun setSearchQuery(query: String) {
@@ -123,23 +131,27 @@ class DashboardViewModel(
         note: String
     ) {
         viewModelScope.launch {
-            val companyId = _activeCompany.value.id
-            val currentList = rawCustomers.value
-            val existing = currentList.firstOrNull { it.name.equals(partyName.trim(), ignoreCase = true) }
-            val delta = if (isJama) amount else -amount
+            try {
+                val companyId = _activeCompany.value.id
+                val currentList = rawCustomers.value
+                val existing = currentList.firstOrNull { it.name.equals(partyName.trim(), ignoreCase = true) }
+                val delta = if (isJama) amount else -amount
 
-            if (existing != null) {
-                customerRepository.updateBalance(existing.id, delta)
-            } else {
-                customerRepository.addCustomer(
-                    CustomerEntity(
-                        companyId = companyId,
-                        name = partyName.trim(),
-                        phone = "",
-                        balance = delta,
-                        address = note
+                if (existing != null) {
+                    customerRepository.updateBalance(existing.id, delta)
+                } else {
+                    customerRepository.addCustomer(
+                        CustomerEntity(
+                            companyId = companyId,
+                            name = partyName.trim(),
+                            phone = "",
+                            balance = delta,
+                            address = note
+                        )
                     )
-                )
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("DashboardViewModel", "Error in addQuickVoucher()", e)
             }
         }
     }

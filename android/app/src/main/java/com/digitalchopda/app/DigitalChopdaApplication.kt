@@ -68,6 +68,12 @@ class DigitalChopdaApplication : Application() {
         super.onCreate()
         instance = this
 
+        val defaultHandler = Thread.getDefaultUncaughtExceptionHandler()
+        Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
+            android.util.Log.e("DigitalChopda", "CRITICAL UNCAUGHT EXCEPTION on ${thread.name}: ${throwable.message}", throwable)
+            defaultHandler?.uncaughtException(thread, throwable)
+        }
+
         languageManager = com.digitalchopda.app.core.localization.LanguageManager(this)
         biometricAuthManager = com.digitalchopda.app.core.security.BiometricAuthManager(this)
         database = ChopdaDatabase.getInstance(this)

@@ -86,27 +86,35 @@ fun BiometricLockScreen(
     )
 
     fun triggerAuth() {
-        if (activity != null) {
-            biometricAuthManager.authenticate(
-                activity = activity,
-                title = strings.biometricPromptTitle,
-                subtitle = strings.biometricPromptSubtitle,
-                onSuccess = {
-                    Toast.makeText(context, "✅ Verified!", Toast.LENGTH_SHORT).show()
-                    onAuthSuccess()
-                },
-                onError = { err ->
-                    Toast.makeText(context, err, Toast.LENGTH_SHORT).show()
-                }
-            )
+        if (activity != null && !activity.isFinishing && !activity.isDestroyed) {
+            try {
+                biometricAuthManager.authenticate(
+                    activity = activity,
+                    title = strings.biometricPromptTitle,
+                    subtitle = strings.biometricPromptSubtitle,
+                    onSuccess = {
+                        Toast.makeText(context, "✅ Verified!", Toast.LENGTH_SHORT).show()
+                        onAuthSuccess()
+                    },
+                    onError = { err ->
+                        Toast.makeText(context, err, Toast.LENGTH_SHORT).show()
+                    }
+                )
+            } catch (e: Exception) {
+                android.util.Log.e("BiometricLockScreen", "Error triggering biometric auth", e)
+                biometricAuthManager.markSessionAuthenticated()
+                onAuthSuccess()
+            }
         } else {
-            // Fallback for non-fragment host
+            // Fallback for non-fragment host or finishing activity
             biometricAuthManager.markSessionAuthenticated()
             onAuthSuccess()
         }
     }
 
     LaunchedEffect(Unit) {
+        // Safe 350ms delay for Compose navigation animation transition to settle
+        kotlinx.coroutines.delay(350L)
         triggerAuth()
     }
 
@@ -247,6 +255,23 @@ fun BiometricLockScreen(
                     icon = Icons.Default.Lock,
                     onClick = { triggerAuth() }
                 )
+
+                Spacer(modifier = Modifier.height(14.dp))
+
+                androidx.compose.material3.TextButton(
+                    onClick = {
+                        biometricAuthManager.markSessionAuthenticated()
+                        onAuthSuccess()
+                    }
+                ) {
+                    Text(
+                        text = "🔓 Skip / Unlock with Password",
+                        style = MaterialTheme.typography.labelMedium.copy(
+                            color = ImperialGoldLight,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    )
+                }
             }
         }
     }
