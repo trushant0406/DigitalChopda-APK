@@ -1,0 +1,9 @@
+<resources>
+    <string name="app_name">DigitalChopda</string>
+    <string name="tagline">Sovereign Khata &amp; Cashbook Ledger</string>
+    <string name="you_will_give">You\'ll Give (તમે આપશો)</string>
+    <string name="you_will_get">You\'ll Get (તમે લેશો)</string>
+    <string name="add_customer">Add Customer (ગ્રાહક ઉમેરો)</string>
+    <string name="cashbook">Cashbook (રોકડ મેળ)</string>
+    <string name="search_parties">Search customer or vendor...</string>
+</resources>

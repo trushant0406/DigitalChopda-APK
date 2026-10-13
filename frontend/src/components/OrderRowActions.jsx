@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { api } from '../api';
-import { NEXT_FULFILLMENT, NEXT_FULFILLMENT_LABEL } from '../orderStatus';
+import { NEXT_FULFILLMENT } from '../orderStatus';
 import {
   MoreVerticalIcon,
   FileTextIcon,
@@ -30,6 +30,31 @@ export default function OrderRowActions({
   const [style, setStyle] = useState({});
   const triggerRef = useRef(null);
   const panelRef = useRef(null);
+
+  useEffect(() => {
+    if (!open) return;
+    function handlePointerDown(e) {
+      if (triggerRef.current?.contains(e.target) || panelRef.current?.contains(e.target)) return;
+      setOpen(false);
+    }
+    function handleKey(e) {
+      if (e.key === 'Escape') setOpen(false);
+    }
+    function handleScroll(e) {
+      if (panelRef.current?.contains(e.target)) return;
+      setOpen(false);
+    }
+    document.addEventListener('mousedown', handlePointerDown);
+    document.addEventListener('keydown', handleKey);
+    window.addEventListener('scroll', handleScroll, true);
+    window.addEventListener('resize', handleScroll);
+    return () => {
+      document.removeEventListener('mousedown', handlePointerDown);
+      document.removeEventListener('keydown', handleKey);
+      window.removeEventListener('scroll', handleScroll, true);
+      window.removeEventListener('resize', handleScroll);
+    };
+  }, [open]);
 
   if (order.status === 'cancelled') {
     return <span className="badge neutral">Cancelled</span>;
@@ -64,31 +89,6 @@ export default function OrderRowActions({
     }
     setOpen(true);
   }
-
-  useEffect(() => {
-    if (!open) return;
-    function handlePointerDown(e) {
-      if (triggerRef.current?.contains(e.target) || panelRef.current?.contains(e.target)) return;
-      setOpen(false);
-    }
-    function handleKey(e) {
-      if (e.key === 'Escape') setOpen(false);
-    }
-    function handleScroll(e) {
-      if (panelRef.current?.contains(e.target)) return;
-      setOpen(false);
-    }
-    document.addEventListener('mousedown', handlePointerDown);
-    document.addEventListener('keydown', handleKey);
-    window.addEventListener('scroll', handleScroll, true);
-    window.addEventListener('resize', handleScroll);
-    return () => {
-      document.removeEventListener('mousedown', handlePointerDown);
-      document.removeEventListener('keydown', handleKey);
-      window.removeEventListener('scroll', handleScroll, true);
-      window.removeEventListener('resize', handleScroll);
-    };
-  }, [open]);
 
   async function markPaid(method) {
     setOpen(false);

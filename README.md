@@ -129,3 +129,14 @@ Instead of accessing `localhost:5173`, you can bind a custom domain name:
 - **Orders & Quotations**: Order management, GST calculations, downloadable PDF quotations, and payment actions.
 - **Credit (Khata)**: Customer ledger tracking, partial collections, over-limit badges, and auto-settlement upon full collection.
 - **WhatsApp Web Integration**: Direct tokenless WhatsApp PDF attachments via QR code linking (`SettingsPage`).
+- **Native Android App (`android/`)**: Offline-first Room SQLite mobile client with Biometric security, ESC/POS Bluetooth thermal printing, and GST invoicing.
+
+---
+
+## 📱 Native Android App (Build & Run)
+
+```bash
+cd android
+./gradlew assembleDebug
+```
+Built APK output: `android/app/build/outputs/apk/debug/app-debug.apk` (or convenient shortcut in `apk/DigitalChopda-debug.apk`).

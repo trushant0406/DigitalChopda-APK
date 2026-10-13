@@ -14,3 +14,5 @@ scratch/
 !package-lock.json
 !tsconfig.json
 !jsconfig.json
+apk/
+*.apk

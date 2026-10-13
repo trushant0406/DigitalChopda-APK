@@ -48,6 +48,8 @@ services:
       - ./backend/starry-district-319705-b9a9e523a82e.json:/app/starry-district-319705-b9a9e523a82e.json:ro
     expose:
       - "4000"
+    ports:
+      - "4000:4000"
 
   frontend:
     build:

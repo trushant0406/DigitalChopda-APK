@@ -1,0 +1,11 @@
+{
+  "name": "@gatistvam/digitalchopda-android",
+  "version": "1.0.0",
+  "description": "DigitalChopda Sovereign Native Android Application (Jetpack Compose & Room DB)",
+  "private": true,
+  "scripts": {
+    "build": "./gradlew assembleDebug",
+    "test": "./gradlew test",
+    "lint": "./gradlew lint"
+  }
+}
