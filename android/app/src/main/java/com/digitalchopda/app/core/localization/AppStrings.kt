@@ -140,8 +140,7 @@ data class AppStrings(
     val enterPasswordError: String = "Please enter password",
     val quickFillLabel: String = "Demo Quick-Fill",
     val adminDemoUser: String = "Admin",
-    val merchantDemoUser: String = "Merchant",
-    val centralDepotStatus: String = "Central Depot: 100.99.250.0:4000 (Tailscale)"
+    val merchantDemoUser: String = "Merchant"
 )
 
 val EnglishStrings = AppStrings(
@@ -381,8 +380,7 @@ val GujaratiStrings = AppStrings(
     enterPasswordError = "કૃપા કરીને પાસવર્ડ દાખલ કરો",
     quickFillLabel = "ઝડપી ડેમો લોગિન",
     adminDemoUser = "એડમિન",
-    merchantDemoUser = "વેપારી",
-    centralDepotStatus = "મુખ્ય ડેપો: 100.99.250.0:4000 (Tailscale ઓનલાઇન)"
+    merchantDemoUser = "વેપારી"
 )
 
 val HindiStrings = AppStrings(
@@ -513,8 +511,7 @@ val HindiStrings = AppStrings(
     enterPasswordError = "कृपया पासवर्ड दर्ज करें",
     quickFillLabel = "त्वरित डेमो लॉगिन",
     adminDemoUser = "एडमिन",
-    merchantDemoUser = "व्यापारी",
-    centralDepotStatus = "केंद्रीय डिपो: 100.99.250.0:4000 (Tailscale ऑनलाइन)"
+    merchantDemoUser = "व्यापारी"
 )
 
 fun AppLanguage.getStrings(): AppStrings {

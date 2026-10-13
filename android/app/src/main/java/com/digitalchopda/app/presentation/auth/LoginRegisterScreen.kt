@@ -736,29 +736,6 @@ fun LoginRegisterScreen(
                             }
                         }
                     }
-
-                    Spacer(modifier = Modifier.height(18.dp))
-
-                    // Server Connectivity Pill
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.Center
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(7.dp)
-                                .clip(RoundedCornerShape(4.dp))
-                                .background(Color(0xFF10B981))
-                        )
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text(
-                            text = strings.centralDepotStatus,
-                            style = MaterialTheme.typography.labelSmall.copy(
-                                color = TextMuted,
-                                fontSize = 11.sp
-                            )
-                        )
-                    }
                 }
             }
         }

@@ -386,7 +386,6 @@ class DigitalChopdaUnitTestSuite {
             assertTrue("$name passwordLabel must not be blank", bundle.passwordLabel.isNotBlank())
             assertTrue("$name loginButtonText must not be blank", bundle.loginButtonText.isNotBlank())
             assertTrue("$name registerButtonText must not be blank", bundle.registerButtonText.isNotBlank())
-            assertTrue("$name centralDepotStatus must not be blank", bundle.centralDepotStatus.isNotBlank())
         }
     }
 
