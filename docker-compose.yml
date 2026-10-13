@@ -46,6 +46,7 @@ services:
       - backend_wwebjs:/app/.wwebjs_auth
       - ./db/migrations:/app/db/migrations:ro
       - ./backend/starry-district-319705-b9a9e523a82e.json:/app/starry-district-319705-b9a9e523a82e.json:ro
+      - ./apk:/app/apk:ro
     expose:
       - "4000"
     ports:
@@ -58,6 +59,8 @@ services:
     restart: unless-stopped
     depends_on:
       - backend
+    volumes:
+      - ./apk:/usr/share/nginx/html/apk:ro
     ports:
       - "${PORT_HTTP:-3000}:80"
 

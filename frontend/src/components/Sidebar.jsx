@@ -13,6 +13,7 @@ const NAV = [
   { key: 'products', label: 'Products', icon: '▤' },
   { key: 'credit', label: 'Credit (Khata)', icon: '₹' },
   { key: 'settings', label: 'Settings', icon: '⚙' },
+  { key: 'download', label: 'Android App', icon: '📱' },
 ];
 
 export default function Sidebar({ active, onNavigate }) {

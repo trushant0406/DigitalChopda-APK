@@ -61,6 +61,26 @@ export default function LoginPage() {
             {loading ? 'Signing in…' : 'Sign in'}
           </button>
         </form>
+
+        <div className="login-footer-apk" style={{ marginTop: '20px', paddingTop: '16px', borderTop: '1px solid #e2e8f0', textAlign: 'center' }}>
+          <a
+            href="/download"
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '8px',
+              color: '#3f5efb',
+              fontWeight: 600,
+              fontSize: '0.88rem',
+              textDecoration: 'none',
+              padding: '6px 12px',
+              borderRadius: '6px',
+              transition: 'background 0.15s ease'
+            }}
+          >
+            <span>📱</span> Download Android APK
+          </a>
+        </div>
       </div>
     </div>
   );

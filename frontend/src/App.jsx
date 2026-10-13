@@ -14,6 +14,7 @@ import ProductsPage from './pages/ProductsPage';
 import QuotationsPage from './pages/QuotationsPage';
 import CreditPage from './pages/CreditPage';
 import SettingsPage from './pages/SettingsPage';
+import DownloadApkPage from './pages/DownloadApkPage';
 import './App.css';
 
 function MainLayout() {
@@ -69,6 +70,8 @@ function MainLayout() {
           <Route path="/quotations" element={<QuotationsPage refreshKey={refreshKey} presetContact={quotationPresetContact} />} />
           <Route path="/credit" element={<CreditPage refreshKey={refreshKey} />} />
           <Route path="/settings" element={<SettingsPage refreshKey={refreshKey} />} />
+          <Route path="/download" element={<DownloadApkPage />} />
+          <Route path="/apk" element={<DownloadApkPage />} />
         </Routes>
       </main>
     </div>
@@ -77,6 +80,8 @@ function MainLayout() {
 
 function AppContent() {
   const { user, loading } = useAuth();
+  const location = useLocation();
+  const isDownloadRoute = location.pathname === '/download' || location.pathname === '/apk';
 
   if (loading) {
     return (
@@ -85,6 +90,10 @@ function AppContent() {
         <p>Loading DigitalChopda.in…</p>
       </div>
     );
+  }
+
+  if (isDownloadRoute && !user) {
+    return <DownloadApkPage isPublic={true} />;
   }
 
   if (!user) {

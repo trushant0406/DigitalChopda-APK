@@ -23,6 +23,7 @@ import { startScheduler, stopScheduler } from './scheduler.js';
 import { initWhatsAppWebClient, destroyWhatsAppWebClient, getWhatsAppWebStatus } from './notify/whatsappWebClient.js';
 import { pool } from './db.js';
 import { getPdfRendererStatus } from './pdf/renderPdf.js';
+import QRCode from 'qrcode';
 
 dotenv.config();
 
@@ -60,6 +61,81 @@ app.use('/api/credit', creditRouter);
 app.use('/api/payments', creditRouter);
 app.use('/api/credit-notes', creditNotesRouter);
 app.use('/api/auth', authRouter);
+
+// Android APK Download & Telemetry Endpoint
+app.get('/api/app/apk', (req, res) => {
+  const possiblePaths = [
+    path.join(process.cwd(), 'apk', 'DigitalChopda.apk'),
+    path.join(process.cwd(), 'apk', 'DigitalChopda-debug.apk'),
+    path.join(process.cwd(), '..', 'apk', 'DigitalChopda.apk'),
+    path.join(process.cwd(), '..', 'apk', 'DigitalChopda-debug.apk'),
+    path.join('/app', 'apk', 'DigitalChopda.apk'),
+    path.join('/app', 'apk', 'DigitalChopda-debug.apk'),
+  ];
+  for (const apkPath of possiblePaths) {
+    if (fs.existsSync(apkPath)) {
+      res.setHeader('Content-Type', 'application/vnd.android.package-archive');
+      return res.download(apkPath, 'DigitalChopda.apk');
+    }
+  }
+  return res.status(404).json({ error: 'APK package not found on server.' });
+});
+
+app.get('/api/app/info', async (req, res) => {
+  const possiblePaths = [
+    path.join(process.cwd(), 'apk', 'DigitalChopda.apk'),
+    path.join(process.cwd(), 'apk', 'DigitalChopda-debug.apk'),
+    path.join(process.cwd(), '..', 'apk', 'DigitalChopda.apk'),
+    path.join(process.cwd(), '..', 'apk', 'DigitalChopda-debug.apk'),
+    path.join('/app', 'apk', 'DigitalChopda.apk'),
+    path.join('/app', 'apk', 'DigitalChopda-debug.apk'),
+  ];
+  let sizeMb = '20.0';
+  let updatedAt = new Date();
+  let found = false;
+
+  for (const p of possiblePaths) {
+    if (fs.existsSync(p)) {
+      const stat = fs.statSync(p);
+      sizeMb = (stat.size / (1024 * 1024)).toFixed(1);
+      updatedAt = stat.mtime;
+      found = true;
+      break;
+    }
+  }
+
+  const host = req.get('host') || '100.99.250.0:3000';
+  const protocol = req.protocol || 'http';
+  const downloadUrl = `${protocol}://${host}/download`;
+
+  let qrDataUrl = '';
+  try {
+    qrDataUrl = await QRCode.toDataURL(downloadUrl, {
+      margin: 2,
+      width: 280,
+      color: {
+        dark: '#1e293b',
+        light: '#ffffff',
+      },
+    });
+  } catch (err) {
+    console.error('[QRCode]', err.message);
+  }
+
+  res.json({
+    available: found,
+    appName: 'DigitalChopda Android Client',
+    version: '1.0.0',
+    packageName: 'com.digitalchopda.app',
+    sizeMb: `${sizeMb} MB`,
+    updatedAt,
+    tailscaleServerUrl: 'http://100.99.250.0:4000/api/',
+    downloadUrl,
+    directApkUrl: '/apk/DigitalChopda.apk',
+    apiApkUrl: '/api/app/apk',
+    qrDataUrl,
+  });
+});
 
 // Comprehensive Enterprise Health & Diagnostics
 app.get('/api/health', async (req, res) => {

@@ -140,4 +140,5 @@ export const api = {
   subscribePush: (subscription) => request('/push/subscribe', json(subscription)),
   settingsStatus: () => request('/settings/status'),
   reconnectWhatsAppWeb: (forceReset) => request('/settings/whatsapp-web/reconnect', json({ forceReset })),
+  getAppInfo: () => request('/app/info'),
 };
