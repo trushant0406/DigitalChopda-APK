@@ -485,8 +485,15 @@ class AuthRepository(
                         )
                     )
                 } else {
-                    val err = res.body()?.error ?: "Invalid credentials (Code ${res.code()})"
-                    return Result.failure(IllegalArgumentException(err))
+                    val parsedError = try {
+                        val errorString = res.errorBody()?.string()
+                        if (!errorString.isNullOrBlank()) {
+                            org.json.JSONObject(errorString).optString("error", "")
+                        } else ""
+                    } catch (_: Exception) { "" }.ifBlank {
+                        res.body()?.error ?: "Invalid credentials (Code ${res.code()})"
+                    }
+                    return Result.failure(IllegalArgumentException(parsedError))
                 }
             } catch (e: Exception) {
                 // If live backend fails, fall back to mock service for offline resilience

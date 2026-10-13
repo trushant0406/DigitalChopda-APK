@@ -500,6 +500,24 @@ fun LoginRegisterScreen(
                     }
                 }
             }
+
+            Spacer(modifier = Modifier.height(20.dp))
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(6.dp)
+                        .clip(RoundedCornerShape(3.dp))
+                        .background(Color(0xFF10B981))
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(
+                    text = "Central Depot: 100.99.250.0:4000 (Tailscale)",
+                    style = MaterialTheme.typography.labelSmall.copy(color = TextMuted)
+                )
+            }
         }
     }
 }

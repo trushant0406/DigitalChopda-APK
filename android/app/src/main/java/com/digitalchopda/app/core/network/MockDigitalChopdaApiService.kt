@@ -70,9 +70,13 @@ class MockDigitalChopdaApiService {
     private var sequenceCounter = 1000L
 
     suspend fun login(mobile: String, password: String?): Result<AuthResponse> {
-        delay(400) // realistic network simulation
-        if (mobile.length != 10) {
-            return Result.failure(IllegalArgumentException("Please enter a valid 10-digit mobile number"))
+        delay(300) // realistic network simulation
+        val input = mobile.trim()
+        if (input.isBlank()) {
+            return Result.failure(IllegalArgumentException("Please enter username or mobile number"))
+        }
+        if (password.isNullOrBlank()) {
+            return Result.failure(IllegalArgumentException("Please enter password"))
         }
 
         val accessToken = "m_acc_" + UUID.randomUUID().toString().take(16)
@@ -121,13 +125,16 @@ class MockDigitalChopdaApiService {
             )
         )
 
+        val resolvedOwner = if (input.equals("admin", ignoreCase = true)) "Savan Admin" else if (input.all { it.isDigit() }) "Merchant" else input.replaceFirstChar { it.uppercase() }
+        val resolvedUserId = if (input.equals("admin", ignoreCase = true)) "1" else "usr_merchant_${UUID.randomUUID().toString().take(6)}"
+
         return Result.success(
             AuthResponse(
                 success = true,
                 accessToken = accessToken,
                 refreshToken = refreshToken,
-                userId = "usr_amit_sharma_987",
-                ownerName = "Amit Sharma",
+                userId = resolvedUserId,
+                ownerName = resolvedOwner,
                 companies = defaultCompanies
             )
         )

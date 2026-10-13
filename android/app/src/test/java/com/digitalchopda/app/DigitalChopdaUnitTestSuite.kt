@@ -163,7 +163,7 @@ class DigitalChopdaUnitTestSuite {
     fun testMockBackendApiEndToEnd() = runBlocking {
         val mockApi = MockDigitalChopdaApiService()
 
-        // 1. Test Login
+        // 1. Test Login with 10-digit mobile and username 'admin'
         val loginRes = mockApi.login("9876543210", "123456")
         assertTrue(loginRes.isSuccess)
         val auth = loginRes.getOrThrow()
@@ -172,6 +172,12 @@ class DigitalChopdaUnitTestSuite {
         assertEquals("Sharma Traders", auth.companies[0].firmName)
         assertEquals("Sharma Electronics & Mobile", auth.companies[1].firmName)
         assertEquals("Gujarat Super Mart", auth.companies[2].firmName)
+
+        val adminLoginRes = mockApi.login("admin", "admin123")
+        assertTrue(adminLoginRes.isSuccess)
+        val adminAuth = adminLoginRes.getOrThrow()
+        assertEquals("Savan Admin", adminAuth.ownerName)
+        assertEquals("1", adminAuth.userId)
 
         // 2. Test Rule 46 Sequence Lease replenishment
         val leaseRes = mockApi.requestInvoiceLease(
