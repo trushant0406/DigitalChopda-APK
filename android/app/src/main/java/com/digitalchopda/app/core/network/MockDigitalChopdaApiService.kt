@@ -57,7 +57,10 @@ data class GstReportData(
     val netGstPayable: Double,
     val gstr1Status: String,
     val gstr3bStatus: String,
-    val gstr2bStatus: String
+    val gstr2bStatus: String,
+    val b2bCount: Int = 12,
+    val b2cCount: Int = 6,
+    val totalInvoices: Int = 18
 )
 
 /**

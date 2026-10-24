@@ -1,0 +1,51 @@
+appId: com.digitalchopda.app
+---
+# Flow 2: Add Customer Flow
+- launchApp:
+    clearState: false
+
+# Return to root screen if currently inside a detail screen
+- runFlow:
+    when:
+      visible: ".*Passbook.*|.*TRANSACTION LEDGER.*"
+    commands:
+      - back
+
+# 1. Switch to Party tab on bottom navigation dock
+- tapOn:
+    text: "^Party$"
+
+# 2. Wait for Party Screen and tap Add Party
+- extendedWaitUntil:
+    visible: ".*Add Party.*"
+    timeout: 8000
+
+- tapOn:
+    text: ".*Add Party.*"
+
+# 3. Fill in Customer Details in Dialog
+- extendedWaitUntil:
+    visible: "(?i).*Add New Party.*|.*Party Name.*"
+    timeout: 8000
+
+- tapOn:
+    text: ".*Party Name.*"
+- inputText: "Ramesh Bhai Patel"
+
+- tapOn:
+    text: ".*Mobile Phone.*"
+- inputText: "9876543210"
+
+- scroll
+
+# 4. Save the Party
+- tapOn:
+    text: ".*SAVE PARTY.*"
+
+# 5. Verify newly added customer is present in party list
+- extendedWaitUntil:
+    visible: ".*Ramesh Bhai Patel.*"
+    timeout: 10000
+
+- assertVisible: ".*Ramesh Bhai Patel.*"
+- takeScreenshot: "02_customer_added_success"

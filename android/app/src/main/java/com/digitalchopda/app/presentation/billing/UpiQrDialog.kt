@@ -46,6 +46,9 @@ import com.google.zxing.BarcodeFormat
 import com.google.zxing.qrcode.QRCodeWriter
 import java.util.Locale
 
+import com.digitalchopda.app.core.designsystem.BorderStrokeDark
+import com.digitalchopda.app.core.designsystem.ChopdaModalDialog
+
 @Composable
 fun UpiQrDialog(
     upiVpa: String,
@@ -67,119 +70,116 @@ fun UpiQrDialog(
         generateQrBitmap(upiUri, size = 512)
     }
 
-    AlertDialog(
+    androidx.compose.runtime.DisposableEffect(qrBitmap) {
+        onDispose {
+            try {
+                if (qrBitmap != null && !qrBitmap.isRecycled) {
+                    qrBitmap.recycle()
+                }
+            } catch (_: Exception) {}
+        }
+    }
+
+    ChopdaModalDialog(
         onDismissRequest = onDismiss,
-        containerColor = MaterialTheme.colorScheme.surface,
-        title = {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        imageVector = Icons.Default.QrCode2,
-                        contentDescription = null,
-                        tint = BrandPrimaryBlue,
-                        modifier = Modifier.size(24.dp)
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = "Instant Counter UPI",
-                        style = MaterialTheme.typography.titleMedium.copy(
-                            fontWeight = FontWeight.Bold,
-                            color = TextWhite
-                        )
-                    )
-                }
-                IconButton(onClick = onDismiss) {
-                    Icon(imageVector = Icons.Default.Close, contentDescription = "Close", tint = TextMuted)
-                }
-            }
-        },
-        text = {
+        title = "Instant Counter UPI",
+        subtitle = "Invoice $invoiceNumber",
+        icon = Icons.Default.QrCode2,
+        iconTint = BrandPrimaryBlue,
+        widthFraction = 0.94f,
+        maxHeightFraction = 0.88f,
+        scrollable = true,
+        buttons = {
             Column(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalAlignment = Alignment.CenterHorizontally
+                verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Text(
-                    text = firmName,
-                    style = MaterialTheme.typography.titleSmall.copy(
-                        fontWeight = FontWeight.Bold,
-                        color = TextWhite
-                    )
-                )
-                Text(
-                    text = "VPA: ${upiVpa.ifBlank { "merchant@upi" }}",
-                    style = MaterialTheme.typography.bodySmall.copy(color = TextMuted)
-                )
-
-                Spacer(modifier = Modifier.height(14.dp))
-
-                // White paper container for high optical contrast scanner reliability
-                Box(
+                Button(
+                    onClick = onPaymentConfirmed,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = SuccessGreen,
+                        contentColor = Color.White
+                    ),
+                    shape = RoundedCornerShape(10.dp),
                     modifier = Modifier
-                        .size(220.dp)
-                        .clip(RoundedCornerShape(16.dp))
-                        .background(Color.White)
-                        .border(1.dp, Color(0xFFDDE1E6), RoundedCornerShape(16.dp))
-                        .padding(12.dp),
-                    contentAlignment = Alignment.Center
+                        .fillMaxWidth()
+                        .height(48.dp)
                 ) {
-                    if (qrBitmap != null) {
-                        Image(
-                            bitmap = qrBitmap.asImageBitmap(),
-                            contentDescription = "UPI Payment QR",
-                            modifier = Modifier.size(196.dp)
-                        )
-                    } else {
-                        Text("QR Generation Error", color = Color.Red, fontSize = 12.sp)
-                    }
+                    Icon(imageVector = Icons.Default.Check, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = "PAYMENT RECEIVED",
+                        style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold)
+                    )
                 }
 
-                Spacer(modifier = Modifier.height(14.dp))
-
-                Text(
-                    text = "₹ %.2f".format(amount),
-                    style = MaterialTheme.typography.headlineMedium.copy(
-                        fontWeight = FontWeight.Black,
-                        color = BrandPrimaryBlue
-                    )
-                )
-                Text(
-                    text = "Invoice: $invoiceNumber • Scan with any UPI app",
-                    style = MaterialTheme.typography.labelSmall.copy(color = TextMuted)
-                )
-            }
-        },
-        confirmButton = {
-            Button(
-                onClick = onPaymentConfirmed,
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = SuccessGreen,
-                    contentColor = Color.White
-                ),
-                shape = RoundedCornerShape(10.dp),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Icon(imageVector = Icons.Default.Check, contentDescription = null, modifier = Modifier.size(18.dp))
-                Spacer(modifier = Modifier.width(6.dp))
-                Text(
-                    text = "PAYMENT RECEIVED",
-                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold)
-                )
-            }
-        },
-        dismissButton = {
-            OutlinedButton(
-                onClick = onDismiss,
-                shape = RoundedCornerShape(10.dp),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text(text = "CANCEL", color = TextMuted)
+                OutlinedButton(
+                    onClick = onDismiss,
+                    shape = RoundedCornerShape(10.dp),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, BorderStrokeDark),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(44.dp)
+                ) {
+                    Text(text = "CANCEL", color = TextMuted, fontWeight = FontWeight.SemiBold)
+                }
             }
         }
-    )
+    ) {
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text(
+                text = firmName,
+                style = MaterialTheme.typography.titleSmall.copy(
+                    fontWeight = FontWeight.Bold,
+                    color = TextWhite
+                )
+            )
+            Text(
+                text = "VPA: ${upiVpa.ifBlank { "merchant@upi" }}",
+                style = MaterialTheme.typography.bodySmall.copy(color = TextMuted)
+            )
+
+            Spacer(modifier = Modifier.height(14.dp))
+
+            // White paper container for high optical contrast scanner reliability
+            Box(
+                modifier = Modifier
+                    .size(220.dp)
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(Color.White)
+                    .border(1.dp, Color(0xFFDDE1E6), RoundedCornerShape(16.dp))
+                    .padding(12.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                if (qrBitmap != null) {
+                    Image(
+                        bitmap = qrBitmap.asImageBitmap(),
+                        contentDescription = "UPI Payment QR",
+                        modifier = Modifier.size(196.dp)
+                    )
+                } else {
+                    Text("QR Generation Error", color = Color.Red, fontSize = 12.sp)
+                }
+            }
+
+            Spacer(modifier = Modifier.height(14.dp))
+
+            Text(
+                text = "₹ %.2f".format(amount),
+                style = MaterialTheme.typography.headlineMedium.copy(
+                    fontWeight = FontWeight.Black,
+                    color = BrandPrimaryBlue
+                )
+            )
+            Text(
+                text = "Scan with any UPI app (GPay, PhonePe, Paytm)",
+                style = MaterialTheme.typography.labelSmall.copy(color = TextMuted)
+            )
+        }
+    }
 }
 
 private fun generateQrBitmap(content: String, size: Int): Bitmap? {

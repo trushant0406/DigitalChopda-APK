@@ -11,3 +11,5 @@
 local.properties
 .kotlin
 *.apk
+*.aab
+.maestro/screenshots/

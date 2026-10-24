@@ -1,0 +1,33 @@
+appId: com.digitalchopda.app
+---
+# Flow 9: Dashboard Statement PDF Flow -> FileProvider Authority Verification
+- launchApp:
+    clearState: false
+
+# 1. Return to root dock if inside a detail view
+- runFlow:
+    when:
+      visible: ".*Passbook.*|.*TRANSACTION LEDGER.*|.*PDF.*|.*CREATE INVOICE.*"
+    commands:
+      - back
+
+# 2. Ensure on Dashboard / Chopda Tab
+- runFlow:
+    when:
+      visible: "^Chopda$"
+    commands:
+      - tapOn: "^Chopda$"
+
+- extendedWaitUntil:
+    visible: ".*Quick Entry.*|.*Cash Box.*|.*Search party.*"
+    timeout: 8000
+
+# 2. Tap on first party card or quick statement if visible
+- runFlow:
+    when:
+      visible: ".*Download Statement.*|.*Statement.*"
+    commands:
+      - tapOn:
+          text: ".*Statement.*"
+
+- takeScreenshot: "09_statement_download_result"

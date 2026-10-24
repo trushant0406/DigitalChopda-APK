@@ -1,0 +1,47 @@
+appId: com.digitalchopda.app
+---
+# Flow 8: Outbox Sync Transparency & Retail Soundbox Flow
+- launchApp:
+    clearState: false
+
+# 1. Return to root dock if inside a detail view
+- runFlow:
+    when:
+      visible: ".*Passbook.*|.*TRANSACTION LEDGER.*|.*PDF.*"
+    commands:
+      - back
+
+# 2. Verify Sync Status Pill on Dashboard Header
+- extendedWaitUntil:
+    visible: ".*Cloud Synced.*|.*Synced.*|.*Pending.*"
+    timeout: 8000
+
+- assertVisible: ".*Cloud Synced.*|.*Synced.*|.*Pending.*"
+
+# 3. Tap Sync / Notification action on Header
+- tapOn:
+    text: ".*Cloud Synced.*|.*Synced.*|.*Pending.*"
+
+# Dismiss sheet if header tap opened company switch
+- runFlow:
+    when:
+      visible: ".*MANAGE BUSINESSES.*|.*Switch Active Company.*"
+    commands:
+      - back
+
+# 4. Switch to Billing Hub tab
+- tapOn:
+    text: "^Billing.*"
+
+# 5. Wait for Billing Hub and verify SyncStatusPill in TopAppBar
+- extendedWaitUntil:
+    visible: ".*Synced.*|.*Pending.*"
+    timeout: 8000
+
+- assertVisible: ".*Synced.*|.*Pending.*"
+
+# 6. Tap SyncStatusPill in Billing Hub to initiate outbox dispatch
+- tapOn:
+    text: ".*Synced.*|.*Pending.*"
+
+- takeScreenshot: "08_sync_pill_and_outbox_success"

@@ -1,18 +1,33 @@
-node_modules/
-.env
-backend/uploads/*
-!backend/uploads/.gitkeep
-backend/.wwebjs_auth/
-.wwebjs_auth/
-backend/.wwebjs_cache/
-.wwebjs_cache/
-dist/
+# OS Artifacts
 .DS_Store
-scratch/
-*.json
-!package.json
-!package-lock.json
-!tsconfig.json
-!jsconfig.json
-apk/
+Thumbs.db
+
+# IDE & Editor files
+.idea/
+*.iml
+.vscode/
+
+# Build & Dependency Directories
+.gradle/
+build/
+*/build/
+/local.properties
+local.properties
+.externalNativeBuild/
+.cxx/
+.kotlin/
+captures/
+
+# Binary Outputs & Artifacts
 *.apk
+*.aab
+apk/
+
+# Maestro E2E
+**/.maestro/screenshots/
+
+# Environment & Scratch
+.env
+scratch/
+*.log
+*.tmp

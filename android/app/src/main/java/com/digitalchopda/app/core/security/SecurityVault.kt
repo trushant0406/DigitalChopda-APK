@@ -96,7 +96,7 @@ class TokenStorage(context: Context) {
         private const val KEY_ACTIVE_COMPANY = "active_company_id"
         private const val KEY_IS_LOGGED_IN = "is_logged_in"
         private const val KEY_SERVER_URL = "server_base_url"
-        const val DEFAULT_BASE_URL = "http://100.99.250.0:4000/api/"
+        const val DEFAULT_BASE_URL = "http://100.99.250.0:3000/api/"
     }
 
     fun getBaseUrl(): String {

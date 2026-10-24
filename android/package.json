@@ -5,6 +5,7 @@
   "private": true,
   "scripts": {
     "build": "./gradlew assembleDebug",
+    "build:release": "./gradlew assembleRelease",
     "test": "./gradlew test",
     "lint": "./gradlew lint"
   }

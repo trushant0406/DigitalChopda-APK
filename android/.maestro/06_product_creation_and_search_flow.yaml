@@ -1,0 +1,56 @@
+appId: com.digitalchopda.app
+---
+# Flow 6: Product Catalog & Fast Add Flow
+- launchApp:
+    clearState: false
+
+# 1. Return to root dock if inside a detail view
+- runFlow:
+    when:
+      visible: ".*Passbook.*|.*TRANSACTION LEDGER.*|.*PDF.*"
+    commands:
+      - back
+
+# 2. Switch to Products tab on bottom navigation dock
+- tapOn:
+    text: "^Product.*|^Products.*"
+
+# 3. Wait for Products screen and tap Add Product
+- extendedWaitUntil:
+    visible: ".*Add Product.*|.*Add item.*"
+    timeout: 8000
+
+- tapOn:
+    text: ".*Add Product.*"
+
+# 4. Fill Product Form in Bottom Sheet Dialog
+- extendedWaitUntil:
+    visible: "(?i).*Add Product.*|.*e.g. Pure Cotton.*"
+    timeout: 8000
+
+- tapOn:
+    text: ".*e.g. Pure Cotton.*"
+- inputText: "Raymond Wool Blend Blazer"
+- hideKeyboard
+
+- tapOn:
+    text: ".*e.g. 1000.*|.*Base Price.*"
+- inputText: "2500"
+- hideKeyboard
+
+# 5. Save the product
+- scrollUntilVisible:
+    element: ".*ADD PRODUCT.*"
+    direction: DOWN
+    timeout: 8000
+
+- tapOn:
+    text: ".*ADD PRODUCT.*"
+
+# 6. Verify newly created product is visible in catalog list
+- extendedWaitUntil:
+    visible: ".*Raymond Wool Blend Blazer.*"
+    timeout: 10000
+
+- assertVisible: ".*Raymond Wool Blend Blazer.*"
+- takeScreenshot: "06_product_created_success"

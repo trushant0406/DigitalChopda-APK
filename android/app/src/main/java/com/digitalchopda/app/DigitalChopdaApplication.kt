@@ -15,6 +15,10 @@ import com.digitalchopda.app.data.repository.CustomerRepository
 import com.digitalchopda.app.data.repository.InventoryRepository
 import com.digitalchopda.app.data.repository.LeadRepository
 
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+
 class DigitalChopdaApplication : Application() {
 
     lateinit var database: ChopdaDatabase
@@ -50,6 +54,18 @@ class DigitalChopdaApplication : Application() {
     lateinit var customerRepository: CustomerRepository
         private set
 
+    lateinit var quotationRepository: com.digitalchopda.app.data.repository.QuotationRepository
+        private set
+
+    lateinit var creditNoteRepository: com.digitalchopda.app.data.repository.CreditNoteRepository
+        private set
+
+    lateinit var productRepository: com.digitalchopda.app.data.repository.ProductRepository
+        private set
+
+    lateinit var purchaseRepository: com.digitalchopda.app.data.repository.PurchaseRepository
+        private set
+
     lateinit var authRepository: AuthRepository
         private set
 
@@ -77,6 +93,9 @@ class DigitalChopdaApplication : Application() {
         languageManager = com.digitalchopda.app.core.localization.LanguageManager(this)
         biometricAuthManager = com.digitalchopda.app.core.security.BiometricAuthManager(this)
         database = ChopdaDatabase.getInstance(this)
+        CoroutineScope(Dispatchers.IO).launch {
+            ChopdaDatabase.ensureSeedData(database)
+        }
         tokenStorage = TokenStorage(this)
         mockApi = MockDigitalChopdaApiService()
         apiService = NetworkClient.getApiService(tokenStorage)
@@ -88,11 +107,25 @@ class DigitalChopdaApplication : Application() {
         inventoryRepository = InventoryRepository(database, apiService, mockApi)
         leadRepository = LeadRepository(database)
         customerRepository = CustomerRepository(database, apiService)
-        authRepository = AuthRepository(tokenStorage, apiService, database, mockApi)
+        quotationRepository = com.digitalchopda.app.data.repository.QuotationRepository(database, apiService)
+        creditNoteRepository = com.digitalchopda.app.data.repository.CreditNoteRepository(database, apiService)
+        productRepository = com.digitalchopda.app.data.repository.ProductRepository(database, apiService)
+        purchaseRepository = com.digitalchopda.app.data.repository.PurchaseRepository(database, apiService)
+        authRepository = AuthRepository(
+            tokenStorage = tokenStorage,
+            apiService = apiService,
+            db = database,
+            mockApi = mockApi,
+            billingRepository = billingRepository,
+            quotationRepository = quotationRepository,
+            customerRepository = customerRepository,
+            productRepository = productRepository
+        )
 
-        // Optimization 6: Schedule Automated WorkManager Background Outbox Sync
+        // Optimization 6: Schedule Automated WorkManager Background Outbox Sync & Instant Reconnect Monitor
         try {
             com.digitalchopda.app.data.work.InvoiceSyncWorker.schedulePeriodicSync(this)
+            com.digitalchopda.app.core.network.InstantNetworkSyncMonitor.start(this)
         } catch (_: Exception) {}
     }
 }

@@ -1,142 +1,70 @@
-# DigitalChopda.in — Smart Invoicing, GST Billing & Khata Platform
+# 📱 DIGITALCHOPDA ANDROID — SOVEREIGN NATIVE BILLING & KHATA PLATFORM
 
-DigitalChopda.in is an enterprise-grade GST billing, quotation, order, sales return, call journal, and credit (khata) management platform built with Node/Express, PostgreSQL, and React (Vite).
-
----
-
-## 🔐 User Authentication & User Management
-
-The application enforces authentication on all routes.
-
-### Default Admin Credentials
-- **Username**: `admin`
-- **Password**: `admin123`
-
-### Creating New Users (Direct Database Injection)
-To maintain security, user creation is performed directly in the PostgreSQL database instead of an open signup form.
-
-#### Method 1: Command-Line One-Liner (Recommended)
-Run this command inside `backend/` to create a new user instantly:
-
-```bash
-node -e "
-const crypto = require('crypto');
-const pg = require('pg');
-const pool = new pg.Pool({ connectionString: 'postgres://callintel:callintel@localhost:5432/callintel' });
-
-const username = 'john';        // Set username
-const password = 'password123'; // Set password
-const name = 'John Doe';        // Set display name
-
-const hash = crypto.pbkdf2Sync(password, 'callintel_salt_2026', 1000, 64, 'sha512').toString('hex');
-pool.query('INSERT INTO users (username, password_hash, name, role) VALUES (\$1, \$2, \$3, \$4) RETURNING id, username, name', [username.toLowerCase(), hash, name, 'admin'])
-  .then(res => { console.log('✅ User created:', res.rows[0]); pool.end(); })
-  .catch(err => { console.error('❌ Error:', err.message); pool.end(); });
-"
-```
-
-#### Method 2: Manual SQL Query
-1. Generate the SHA-512 password hash for your password:
-   ```bash
-   node -e "console.log(require('crypto').pbkdf2Sync('YOUR_PASSWORD', 'callintel_salt_2026', 1000, 64, 'sha512').toString('hex'))"
-   ```
-2. Insert the user into PostgreSQL:
-   ```sql
-   INSERT INTO users (username, password_hash, name, role)
-   VALUES ('username_here', 'HASH_FROM_STEP_1', 'Display Name', 'admin');
-   ```
+> **Enterprise GST Invoicing, Cashbook (Rokad), Party Ledger, Products & Offline-First POS**  
+> *Target SDK: 35 (Android 15) | Kotlin: 2.0.21 | Jetpack Compose | Room SQLite v14*
 
 ---
 
-## 🚀 Setting Up on a New Machine
+## 1. ⚙️ App Architecture & Stack
 
-Follow these step-by-step instructions to run the application on a clean computer.
+DigitalChopda Android is a 100% sovereign native Android application built with modern Jetpack Compose and Room SQLite, architected for high-velocity merchants, multi-firm khata, and instant offline POS billing.
 
-### Step 1: Install Prerequisites
-1. **Node.js (v18 or v20 LTS)**: [https://nodejs.org/](https://nodejs.org/)
-2. **PostgreSQL (v15 or v16)**: [https://www.postgresql.org/download/windows/](https://www.postgresql.org/download/windows/)
-
-### Step 2: Database Initialization (`callintel`)
-Open **Command Prompt** / **psql** as Administrator:
-```bash
-psql -U postgres
-```
-
-Execute the following commands:
-```sql
-CREATE USER callintel WITH PASSWORD 'callintel';
-CREATE DATABASE callintel OWNER callintel;
-GRANT ALL PRIVILEGES ON DATABASE callintel TO callintel;
-```
-
-### Step 3: Backend Configuration & Migrations
-Navigate to `backend/`:
-```bash
-cd backend
-```
-
-Create a `.env` file (copy from `env.sample`):
-```env
-DATABASE_URL=postgres://callintel:callintel@localhost:5432/callintel
-PORT=4000
-
-VAPID_PUBLIC_KEY=BAzn7LGy6dGVKArSZuhkP_4OTCePSwEMCZ1v1yflIRiywwIp56tfMq45W7OiNrhB4EP_T4TPpm-sA-jZ2kwwhDg
-VAPID_PRIVATE_KEY=XkwbRSCeiQtrF9ulQBKgb7verKDMD68N0AeUIlIAceQ
-VAPID_SUBJECT=mailto:admin@example.com
-
-REMINDER_POLL_SECONDS=60
-```
-
-Install dependencies & execute migrations:
-```bash
-npm install
-npm run migrate
-```
-*(Optionally restore full database dump: `psql -U callintel -d callintel -f ../callintel.sql`).*
-
-### Step 4: Frontend Setup & Dev Server
-Navigate to `frontend/`:
-```bash
-cd frontend
-npm install
-npm run dev
-```
-
-Open your browser at `http://localhost:5173`.
+* **Package**: `com.digitalchopda.app`
+* **Entry Activity**: `com.digitalchopda.app.MainActivity` (Single-Activity Compose)
+* **Application Class**: `com.digitalchopda.app.DigitalChopdaApplication`
+* **Local Database**: Room SQLite v14 (`ChopdaDatabase.kt`)
+* **Design System**: Midnight Surface & Crisp Slate Canvas (`#F8FAFC`)
+* **Security**: Keystore AES-256 Vault (`SecurityVault.kt`), BiometricPrompt hardware auth
 
 ---
 
-## 🌐 Custom Hostname Binding (`callintel.local`)
+## 2. 🧭 UI Navigation & 5-Tab Floating Capsule Dock
 
-Instead of accessing `localhost:5173`, you can bind a custom domain name:
+Persistent bottom navigation via `FloatingCapsuleDock`:
 
-1. Open Notepad as Administrator and edit:
-   `C:\Windows\System32\drivers\etc\hosts`
-2. Add this line at the bottom:
-   ```text
-   127.0.0.1   callintel.local
-   ```
-3. Open your browser and go to:
-   `http://callintel.local:5173/`
+* **Tab 0: Chopda / Dashboard (`Screen.Dashboard`)**: Dual-perspective Rokad cash drawer, Web-aligned 6-metric orders overview, live recent invoices feed, daily statement PDF download.
+* **Tab 1: Party / Khata Ledger (`Screen.Party`)**: Customer directory, Udhar/Jama balances, 360° party passbook, credit limits.
+* **Tab 2: Billing Hub (`Screen.Billing`)**: Quick POS billing, GST tax invoices, quotation estimates, sales return credit notes.
+* **Tab 3: Products Catalog (`Screen.Products`)**: Barcode inventory, HSN codes, GST tax slabs (0%, 5%, 12%, 18%, 28%), stock adjustments.
+* **Tab 4: Settings & GST Hub (`Screen.Settings` / `Screen.GstHub`)**: Business switcher, UPI VPA configuration, language switching (English, Hindi, Gujarati), biometric lock.
 
 ---
 
-## 📦 System Architecture & Features
+## 3. 🛠️ Build & Verification Commands
 
-- **Dashboard**: Live analytics for due follow-ups, calls, quotations, and pending order collections.
-- **Calls**: Call logging, recording attachments, follow-up scheduling, and CSV export.
-- **Contacts**: Searchable CRM database with credit limits, GST details, and interactive customer timeline.
-- **Orders & Quotations**: Order management, GST calculations, downloadable PDF quotations, and payment actions.
-- **Credit (Khata)**: Customer ledger tracking, partial collections, over-limit badges, and auto-settlement upon full collection.
-- **WhatsApp Web Integration**: Direct tokenless WhatsApp PDF attachments via QR code linking (`SettingsPage`).
-- **Native Android App (`android/`)**: Offline-first Room SQLite mobile client with Biometric security, ESC/POS Bluetooth thermal printing, and GST invoicing.
+### Run Unit Tests
+```bash
+cd android
+./gradlew testDebugUnitTest
+```
 
----
-
-## 📱 Native Android App (Build & Run)
-
+### Build Debug APK
 ```bash
 cd android
 ./gradlew assembleDebug
 ```
-Built APK output: `android/app/build/outputs/apk/debug/app-debug.apk` (or convenient shortcut in `apk/DigitalChopda-debug.apk`).
+
+### Build Minified Release APK
+```bash
+cd android
+./gradlew assembleRelease
+```
+
+### Run Maestro E2E Flows
+```bash
+cd android
+./run_e2e_tests.sh
+# Or run individual flow
+maestro test .maestro/01_login_flow.yaml
+```
+
+---
+
+## 4. 🔒 Release Signing & Environment
+
+Release signing is configured in `app/build.gradle.kts` to pull from system environment variables with a clean fallback to the debug keystore for development:
+
+* `KEYSTORE_PATH`: Path to production `.keystore` / `.jks` file
+* `KEYSTORE_PASSWORD`: Keystore password
+* `KEY_ALIAS`: Key alias name
+* `KEY_PASSWORD`: Key password

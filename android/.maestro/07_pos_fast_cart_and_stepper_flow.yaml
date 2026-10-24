@@ -1,0 +1,80 @@
+appId: com.digitalchopda.app
+---
+# Flow 7: POS Fast Cart, Inline Search & Quantity Stepper Flow
+- launchApp:
+    clearState: false
+
+# 1. Return to root dock if inside a detail view
+- runFlow:
+    when:
+      visible: ".*Passbook.*|.*TRANSACTION LEDGER.*|.*PDF.*"
+    commands:
+      - back
+
+# 2. Switch to Billing tab on bottom navigation dock
+- tapOn:
+    text: "^Billing.*"
+
+# 3. Wait for Billing screen and tap Create Invoice
+- extendedWaitUntil:
+    visible: ".*New Tax Invoice.*|.*Create Invoice.*|.*New Invoice.*|.*\\+ Invoice.*"
+    timeout: 8000
+
+- tapOn:
+    text: ".*New Tax Invoice.*|.*Create Invoice.*|.*New Invoice.*|.*\\+ Invoice.*"
+
+# 4. Wait for Create Invoice screen to appear
+- extendedWaitUntil:
+    visible: ".*CREATE INVOICE.*|.*ITEMS / SERVICES.*"
+    timeout: 8000
+
+# 5. Check 1-tap fast add from catalog presets chips or Add Item Dialog
+- runFlow:
+    when:
+      visible: "Select product from catalog…"
+    commands:
+      - tapOn: "Select product from catalog…"
+      - extendedWaitUntil:
+          visible: ".*Raymond.*|.*Saree.*|.*Blazer.*"
+          timeout: 5000
+      - tapOn: ".*Raymond.*|.*Saree.*|.*Blazer.*"
+      - tapOn: "ADD ITEM"
+
+- runFlow:
+    when:
+      visible: "\\+ Raymond.*|\\+ E2E.*"
+    commands:
+      - tapOn:
+          text: "\\+ Raymond.*|\\+ E2E.*"
+
+- runFlow:
+    when:
+      visible: ".*\\+ ADD ITEM FROM CATALOG.*"
+      notVisible: ".*ITEMS / SERVICES \\([1-9]\\).*"
+    commands:
+      - tapOn: ".*\\+ ADD ITEM FROM CATALOG.*"
+      - extendedWaitUntil:
+          visible: "Select product from catalog…"
+          timeout: 5000
+      - tapOn: "Select product from catalog…"
+      - tapOn: ".*Raymond.*|.*Saree.*|.*Blazer.*"
+      - tapOn: "ADD ITEM"
+
+# 6. Verify line item appears and stepper functions
+- extendedWaitUntil:
+    visible: ".*ITEMS / SERVICES \\([1-9]\\).*"
+    timeout: 8000
+
+- assertVisible: ".*ITEMS / SERVICES \\([1-9]\\).*"
+
+# 7. Tap increase on Quantity Stepper
+- runFlow:
+    when:
+      visible: "Increase"
+    commands:
+      - tapOn: "Increase"
+
+# 8. Verify the 1-tap Print button in sticky bottom bar is present
+- assertVisible: ".*Print.*"
+- assertVisible: ".*SAVE & SEND.*"
+- takeScreenshot: "07_pos_fast_cart_and_stepper_success"

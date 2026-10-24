@@ -96,6 +96,34 @@ class EscPosFormatter(private val widthMm: Int = 58) {
         out.write("GRAND TOTAL: ₹${invoice.grandTotal.toInt()}\n".toByteArray(Charsets.UTF_8))
         out.write(EscPos.BOLD_OFF)
 
+        // Dynamic NPCI UPI QR Code Block
+        val upiVpa = company.upiVpa.trim()
+        if (upiVpa.isNotEmpty() && invoice.grandTotal > 0) {
+            out.write(divider())
+            out.write(EscPos.ALIGN_CENTER)
+            out.write(EscPos.BOLD_ON)
+            out.write("SCAN & PAY WITH ANY UPI APP\n".toByteArray(Charsets.UTF_8))
+            out.write(EscPos.BOLD_OFF)
+
+            val note = "Bill ${invoice.invoiceNumber}"
+            val upiPayload = com.digitalchopda.app.core.payment.UpiPaymentUtils.buildUpiUri(
+                vpa = upiVpa,
+                firmName = company.firmName,
+                amount = invoice.grandTotal,
+                note = note
+            )
+            val qrSize = if (widthMm == 80) 336 else 256
+            val bitMatrix = com.digitalchopda.app.core.payment.UpiPaymentUtils.generateQrBitMatrix(upiPayload, qrSize)
+            if (bitMatrix != null) {
+                out.write(formatQrRasterBitImage(bitMatrix, widthMm))
+                out.write(EscPos.FEED_LINE)
+            }
+
+            out.write(EscPos.ALIGN_CENTER)
+            out.write("Google Pay | PhonePe | Paytm | BHIM\n".toByteArray(Charsets.UTF_8))
+            out.write("UPI ID: $upiVpa\n".toByteArray(Charsets.UTF_8))
+        }
+
         out.write(divider())
         out.write(EscPos.ALIGN_CENTER)
         out.write("Thank you for your business!\n".toByteArray(Charsets.UTF_8))
@@ -104,6 +132,59 @@ class EscPosFormatter(private val widthMm: Int = 58) {
         out.write(EscPos.FEED_LINE)
         out.write(EscPos.CUT_PAPER)
 
+        return out.toByteArray()
+    }
+
+    /**
+     * Converts a ZXing BitMatrix into universal ESC/POS standard raster bit-image (GS v 0).
+     * Automatically calculates dot density and centers the QR code horizontally.
+     */
+    fun formatQrRasterBitImage(bitMatrix: com.google.zxing.common.BitMatrix, widthMm: Int = 58): ByteArray {
+        val qrSize = bitMatrix.width
+        val totalLineWidthBytes = if (widthMm == 80) 72 else 48
+        val qrWidthBytes = (qrSize + 7) / 8
+        val leftPadBytes = ((totalLineWidthBytes - qrWidthBytes) / 2).coerceAtLeast(0)
+        val rightPadBytes = (totalLineWidthBytes - qrWidthBytes - leftPadBytes).coerceAtLeast(0)
+        val actualWidthBytes = leftPadBytes + qrWidthBytes + rightPadBytes
+
+        val out = ByteArrayOutputStream()
+        // GS v 0 m xL xH yL yH
+        out.write(0x1D)
+        out.write(0x76)
+        out.write(0x30)
+        out.write(0x00) // mode 0: normal
+        out.write(actualWidthBytes % 256)
+        out.write(actualWidthBytes / 256)
+        out.write(qrSize % 256)
+        out.write(qrSize / 256)
+
+        for (y in 0 until qrSize) {
+            // Left padding (whitespace)
+            for (p in 0 until leftPadBytes) {
+                out.write(0x00)
+            }
+            // QR data bits
+            var currentByte = 0
+            var bitCount = 0
+            for (x in 0 until qrSize) {
+                val isBlack = bitMatrix.get(x, y)
+                currentByte = (currentByte shl 1) or (if (isBlack) 1 else 0)
+                bitCount++
+                if (bitCount == 8) {
+                    out.write(currentByte)
+                    currentByte = 0
+                    bitCount = 0
+                }
+            }
+            if (bitCount > 0) {
+                currentByte = currentByte shl (8 - bitCount)
+                out.write(currentByte)
+            }
+            // Right padding (whitespace)
+            for (p in 0 until rightPadBytes) {
+                out.write(0x00)
+            }
+        }
         return out.toByteArray()
     }
 
@@ -208,7 +289,8 @@ class BluetoothPrinterManager(private val context: Context) {
                 syncStatus = com.digitalchopda.app.domain.model.SyncStatus.SYNCED,
                 createdAt = System.currentTimeMillis()
             )
-            printInvoiceReceipt(null, company, dummyInvoice, widthMm)
+            val testCompany = if (company.upiVpa.isBlank()) company.copy(upiVpa = "merchant@upi") else company
+            printInvoiceReceipt(null, testCompany, dummyInvoice, widthMm)
         } catch (_: Exception) {
             Result.success(true)
         }

@@ -1,0 +1,33 @@
+appId: com.digitalchopda.app
+---
+# Flow 5: Party Detail -> "+ New Bill" -> Verify Customer is Pre-selected
+- launchApp:
+    clearState: false
+
+# 1. Switch to Party tab
+- tapOn:
+    text: "^Party$"
+
+- extendedWaitUntil:
+    visible: ".*Ananya Fashion Hub.*|.*Ramesh Bhai Patel.*"
+    timeout: 8000
+
+# 2. Tap on customer to open Party 360 Detail
+- tapOn:
+    text: ".*Ananya Fashion Hub.*|.*Ramesh Bhai Patel.*"
+
+- extendedWaitUntil:
+    visible: ".*\\+ New Bill.*"
+    timeout: 8000
+
+# 3. Tap "+ New Bill"
+- tapOn:
+    text: ".*\\+ New Bill.*"
+
+# 4. Assert that invoice creator has opened and customer is pre-selected as the party!
+- extendedWaitUntil:
+    visible: ".*Ananya Fashion Hub.*|.*Ramesh Bhai Patel.*"
+    timeout: 8000
+
+- assertVisible: ".*Ananya Fashion Hub.*|.*Ramesh Bhai Patel.*"
+- takeScreenshot: "05_party_preselected_new_bill_success"

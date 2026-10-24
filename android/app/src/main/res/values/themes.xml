@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <style name="Theme.DigitalChopda" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">#F8FAFC</item>
         <item name="android:statusBarColor">#8B0000</item>
         <item name="android:navigationBarColor">#1A1A1A</item>
     </style>

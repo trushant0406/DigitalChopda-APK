@@ -26,11 +26,15 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Fingerprint
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -45,22 +49,17 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.fragment.app.FragmentActivity
-import com.digitalchopda.app.core.designsystem.ChopdaClothGradient
+import com.digitalchopda.app.core.designsystem.BorderStrokeDark
+import com.digitalchopda.app.core.designsystem.BrandPrimaryBlue
+import com.digitalchopda.app.core.designsystem.DarkNavy
+import com.digitalchopda.app.core.designsystem.DeepObsidianCanvas
 import com.digitalchopda.app.core.designsystem.ElevatedSlate
-import com.digitalchopda.app.core.designsystem.GoldFoilButton
-import com.digitalchopda.app.core.designsystem.GoldFoilGradient
-import com.digitalchopda.app.core.designsystem.GridMeshBackground
-import com.digitalchopda.app.core.designsystem.ImperialGold
-import com.digitalchopda.app.core.designsystem.ImperialGoldLight
 import com.digitalchopda.app.core.designsystem.MidnightCardSurface
-import com.digitalchopda.app.core.designsystem.TextMuted
-import com.digitalchopda.app.core.designsystem.TextWhite
+import com.digitalchopda.app.core.designsystem.TextSubtle
 import com.digitalchopda.app.core.designsystem.bouncyClick
 import com.digitalchopda.app.core.localization.LanguageManager
 import com.digitalchopda.app.core.localization.LocalAppStrings
 import com.digitalchopda.app.core.security.BiometricAuthManager
-
-import androidx.compose.runtime.collectAsState
 
 @Composable
 fun BiometricLockScreen(
@@ -118,160 +117,199 @@ fun BiometricLockScreen(
         triggerAuth()
     }
 
-    GridMeshBackground {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(DeepObsidianCanvas)
+            .padding(24.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        // Top Language Switcher Pill
         Box(
             modifier = Modifier
-                .fillMaxSize()
-                .padding(24.dp),
-            contentAlignment = Alignment.Center
+                .align(Alignment.TopEnd)
+                .padding(top = 28.dp)
+                .clip(RoundedCornerShape(20.dp))
+                .background(MidnightCardSurface)
+                .border(1.dp, BorderStrokeDark, RoundedCornerShape(20.dp))
+                .bouncyClick {
+                    val next = languageManager.cycleNextLanguage()
+                    Toast.makeText(context, "Language: ${next.displayName}", Toast.LENGTH_SHORT).show()
+                }
+                .padding(horizontal = 14.dp, vertical = 7.dp)
         ) {
-            // Top Language Switcher Pill
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    imageVector = Icons.Default.Language,
+                    contentDescription = null,
+                    tint = BrandPrimaryBlue,
+                    modifier = Modifier.size(16.dp)
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(
+                    text = currentLang.nativeName,
+                    style = MaterialTheme.typography.labelSmall.copy(
+                        color = DarkNavy,
+                        fontWeight = FontWeight.Bold
+                    )
+                )
+            }
+        }
+
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            // Header Trust Badge
             Box(
                 modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .padding(top = 28.dp)
-                    .clip(RoundedCornerShape(20.dp))
+                    .clip(RoundedCornerShape(16.dp))
                     .background(ElevatedSlate)
-                    .border(1.dp, ImperialGold.copy(alpha = 0.5f), RoundedCornerShape(20.dp))
-                    .bouncyClick {
-                        val next = languageManager.cycleNextLanguage()
-                        Toast.makeText(context, "Language: ${next.displayName}", Toast.LENGTH_SHORT).show()
-                    }
-                    .padding(horizontal = 14.dp, vertical = 8.dp)
+                    .border(1.dp, BorderStrokeDark, RoundedCornerShape(16.dp))
+                    .padding(horizontal = 12.dp, vertical = 5.dp)
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        imageVector = Icons.Default.Language,
-                        contentDescription = null,
-                        tint = ImperialGold,
-                        modifier = Modifier.size(16.dp)
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(
-                        text = currentLang.nativeName,
-                        style = MaterialTheme.typography.labelSmall.copy(
-                            color = ImperialGold,
-                            fontWeight = FontWeight.Bold
+                Text(
+                    text = "🔒 OFFLINE HARDWARE ENCLAVE",
+                    style = MaterialTheme.typography.labelSmall.copy(
+                        color = DarkNavy,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 1.sp,
+                        fontSize = 11.sp
+                    ),
+                    textAlign = TextAlign.Center
+                )
+            }
+
+            Spacer(modifier = Modifier.height(28.dp))
+
+            // Pulsing Fingerprint / Biometric Emblem
+            Box(
+                contentAlignment = Alignment.Center,
+                modifier = Modifier.size(180.dp)
+            ) {
+                // Outer Radial Blue Aura
+                Box(
+                    modifier = Modifier
+                        .size(170.dp)
+                        .scale(pulseScale)
+                        .clip(CircleShape)
+                        .background(
+                            Brush.radialGradient(
+                                colors = listOf(
+                                    BrandPrimaryBlue.copy(alpha = 0.2f),
+                                    Color.Transparent
+                                )
+                            )
                         )
+                )
+
+                // Middle Ring
+                Box(
+                    modifier = Modifier
+                        .size(130.dp)
+                        .clip(CircleShape)
+                        .background(MidnightCardSurface)
+                        .border(1.5.dp, BrandPrimaryBlue.copy(alpha = 0.35f), CircleShape)
+                        .shadow(12.dp, CircleShape, spotColor = BrandPrimaryBlue.copy(alpha = 0.2f))
+                )
+
+                // Inner Tap target with Blue Circle & Fingerprint Icon
+                Box(
+                    modifier = Modifier
+                        .size(90.dp)
+                        .clip(CircleShape)
+                        .background(BrandPrimaryBlue)
+                        .bouncyClick { triggerAuth() },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Fingerprint,
+                        contentDescription = "Biometric Unlock",
+                        tint = Color.White,
+                        modifier = Modifier.size(52.dp)
                     )
                 }
             }
 
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                // Sacred Banner
+            Spacer(modifier = Modifier.height(24.dp))
+
+            Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    text = strings.biometricLockedHeader,
-                    style = MaterialTheme.typography.labelMedium.copy(
-                        color = ImperialGold,
-                        fontWeight = FontWeight.Bold,
-                        letterSpacing = 1.2.sp
-                    ),
-                    textAlign = TextAlign.Center
-                )
-
-                Spacer(modifier = Modifier.height(28.dp))
-
-                // Pulsing Fingerprint / Biometric Emblem
-                Box(
-                    contentAlignment = Alignment.Center,
-                    modifier = Modifier.size(180.dp)
-                ) {
-                    // Outer Radial Gold Aura
-                    Box(
-                        modifier = Modifier
-                            .size(170.dp)
-                            .scale(pulseScale)
-                            .clip(CircleShape)
-                            .background(
-                                Brush.radialGradient(
-                                    colors = listOf(
-                                        ImperialGold.copy(alpha = 0.25f),
-                                        Color.Transparent
-                                    )
-                                )
-                            )
-                    )
-
-                    // Middle Ring
-                    Box(
-                        modifier = Modifier
-                            .size(130.dp)
-                            .clip(CircleShape)
-                            .background(MidnightCardSurface)
-                            .border(2.dp, ImperialGold.copy(alpha = 0.6f), CircleShape)
-                            .shadow(24.dp, spotColor = ImperialGold)
-                    )
-
-                    // Inner Tap target with Gold Leaf Icon
-                    Box(
-                        modifier = Modifier
-                            .size(90.dp)
-                            .clip(CircleShape)
-                            .background(GoldFoilGradient)
-                            .border(1.5.dp, ImperialGoldLight, CircleShape)
-                            .bouncyClick { triggerAuth() },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Fingerprint,
-                            contentDescription = "Biometric Unlock",
-                            tint = Color(0xFF1E1005),
-                            modifier = Modifier.size(52.dp)
-                        )
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(24.dp))
-
-                Text(
-                    text = strings.appName,
+                    text = "DIGITAL",
                     style = MaterialTheme.typography.headlineMedium.copy(
                         fontWeight = FontWeight.Black,
-                        color = TextWhite,
+                        color = DarkNavy,
                         letterSpacing = 1.sp
                     )
                 )
-
-                Spacer(modifier = Modifier.height(6.dp))
-
                 Text(
-                    text = strings.biometricLockedSubheader,
-                    style = MaterialTheme.typography.bodyMedium.copy(
-                        color = TextMuted,
-                        textAlign = TextAlign.Center
-                    ),
-                    modifier = Modifier.padding(horizontal = 20.dp)
+                    text = "CHOPDA",
+                    style = MaterialTheme.typography.headlineMedium.copy(
+                        fontWeight = FontWeight.Black,
+                        color = BrandPrimaryBlue,
+                        letterSpacing = 1.sp
+                    )
                 )
+            }
 
-                Spacer(modifier = Modifier.height(36.dp))
+            Spacer(modifier = Modifier.height(6.dp))
 
-                // Unlock CTA Button
-                GoldFoilButton(
-                    text = strings.biometricUnlockBtn,
-                    icon = Icons.Default.Lock,
-                    onClick = { triggerAuth() }
-                )
+            Text(
+                text = strings.biometricLockedSubheader,
+                style = MaterialTheme.typography.bodyMedium.copy(
+                    color = TextSubtle,
+                    textAlign = TextAlign.Center,
+                    fontSize = 13.5.sp
+                ),
+                modifier = Modifier.padding(horizontal = 24.dp)
+            )
 
-                Spacer(modifier = Modifier.height(14.dp))
+            Spacer(modifier = Modifier.height(36.dp))
 
-                androidx.compose.material3.TextButton(
-                    onClick = {
-                        biometricAuthManager.markSessionAuthenticated()
-                        onAuthSuccess()
-                    }
-                ) {
+            // Unlock CTA Button
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(50.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(BrandPrimaryBlue)
+                    .bouncyClick { triggerAuth() },
+                contentAlignment = Alignment.Center
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Default.Lock,
+                        contentDescription = null,
+                        tint = Color.White,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = "🔓 Skip / Unlock with Password",
-                        style = MaterialTheme.typography.labelMedium.copy(
-                            color = ImperialGoldLight,
-                            fontWeight = FontWeight.SemiBold
-                        )
+                        text = strings.biometricUnlockBtn,
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 14.sp
                     )
                 }
+            }
+
+            Spacer(modifier = Modifier.height(14.dp))
+
+            TextButton(
+                onClick = {
+                    biometricAuthManager.markSessionAuthenticated()
+                    onAuthSuccess()
+                }
+            ) {
+                Text(
+                    text = "🔓 Skip / Unlock with Password",
+                    style = MaterialTheme.typography.labelMedium.copy(
+                        color = BrandPrimaryBlue,
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 13.sp
+                    )
+                )
             }
         }
     }

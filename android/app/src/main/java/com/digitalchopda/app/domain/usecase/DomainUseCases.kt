@@ -11,7 +11,7 @@ import java.util.UUID
 import kotlin.math.round
 
 /**
- * GST Rule 46 Offline Sequence Lease Engine
+ * GST Rule 46 Sequence Lease Engine
  * Strictly formats as: PREFIX/FY/00001 (e.g. DC/26-27/01001)
  */
 class AllocateLeaseUseCase {
@@ -102,9 +102,16 @@ class CreateInvoiceUseCase {
         items: List<LineItem>,
         isInterState: Boolean = false,
         status: InvoiceStatus = InvoiceStatus.PAID,
-        paymentMode: PaymentMode = PaymentMode.UPI
+        paymentMode: PaymentMode = PaymentMode.UPI,
+        paidAmount: Double = 0.0
     ): Invoice {
         val calc = calculateTaxes(items, isInterState)
+        val finalPaidAmount = when (status) {
+            InvoiceStatus.PAID -> calc.grandTotal
+            InvoiceStatus.PARTIAL -> paidAmount.coerceIn(0.0, calc.grandTotal)
+            InvoiceStatus.UNPAID -> 0.0
+        }
+        val finalBalanceDue = (calc.grandTotal - finalPaidAmount).coerceAtLeast(0.0)
         return Invoice(
             companyId = company.id,
             invoiceNumber = invoiceNumber,
@@ -117,6 +124,8 @@ class CreateInvoiceUseCase {
             igst = calc.igst,
             roundOff = calc.roundOff,
             grandTotal = calc.grandTotal,
+            paidAmount = finalPaidAmount,
+            balanceDue = finalBalanceDue,
             status = status,
             paymentMode = paymentMode,
             syncStatus = SyncStatus.PENDING_SYNC,

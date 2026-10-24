@@ -1,0 +1,82 @@
+appId: com.digitalchopda.app
+---
+# Flow 4: Billing Hub -> Create Invoice with Party Dropdown -> Verify Itemized Products & Pricing
+- launchApp:
+    clearState: false
+
+# 1. Ensure we are at root main dock
+- runFlow:
+    when:
+      visible: ".*Passbook.*|.*TRANSACTION LEDGER.*|.*PDF.*"
+    commands:
+      - back
+
+# 2. Switch to Billing tab
+- tapOn:
+    text: "^Billing$"
+
+- extendedWaitUntil:
+    visible: ".*New Tax Invoice.*|.*Invoices.*"
+    timeout: 8000
+
+# 3. Tap "New Tax Invoice" to open invoice creator
+- tapOn:
+    text: ".*New Tax Invoice.*"
+
+- extendedWaitUntil:
+    visible: ".*BILL TO / CHOOSE PARTY.*"
+    timeout: 8000
+
+# 4. Open the new "Choose Party" dropdown
+- tapOn: "Toggle party dropdown"
+
+- extendedWaitUntil:
+    visible: ".*Walk-in Customer.*|.*Add New Party.*"
+    timeout: 5000
+
+# 5. Select "Walk-in Customer"
+- tapOn:
+    text: ".*Walk-in Customer.*"
+
+# 5.1 Add product from 1-tap quick chip into clean empty cart
+- tapOn:
+    text: ".*\\+ ABC.*|.*\\+ Pure.*|.*\\+ Bandh.*|.*\\+ .*"
+
+- extendedWaitUntil:
+    visible: ".*ITEMS / SERVICES \\(1\\).*"
+    timeout: 5000
+
+# 6. Save & Generate Invoice
+- tapOn:
+    text: ".*SAVE & SEND.*"
+
+# 7. Wait for PDF Viewer / Success Screen
+- extendedWaitUntil:
+    visible: ".*INV-.*|.*Invoice.*|.*PRINT.*|.*SHARE.*"
+    timeout: 12000
+
+- takeScreenshot: "04_invoice_created_pdf_viewer"
+
+# 8. Return back to Billing Hub
+- back
+- runFlow:
+    when:
+      visible: ".*Quick Billing.*|.*Quotation Estimate.*"
+    commands:
+      - tapOn: "Back"
+
+- extendedWaitUntil:
+    visible: ".*Walk-in Customer.*"
+    timeout: 8000
+
+# 9. Open the Walk-in Customer invoice card to inspect Document Details
+- tapOn:
+    text: ".*Walk-in Customer.*"
+
+# 10. Assert Itemized Products & Pricing table is present with columns and items
+- extendedWaitUntil:
+    visible: ".*ITEMIZED PRODUCTS & PRICING.*"
+    timeout: 10000
+
+- assertVisible: ".*ITEMIZED PRODUCTS & PRICING.*"
+- takeScreenshot: "04_itemized_products_table_success"

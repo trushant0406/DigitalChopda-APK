@@ -3,8 +3,11 @@ package com.digitalchopda.app.presentation.dashboard
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.digitalchopda.app.core.network.ApiDashboardSummaryResponse
+import com.digitalchopda.app.core.network.ApiOrdersSummaryResponse
 import com.digitalchopda.app.data.local.entity.CustomerEntity
 import com.digitalchopda.app.data.local.entity.InvoiceEntity
+import com.digitalchopda.app.data.local.entity.PaymentEntity
 import com.digitalchopda.app.data.repository.BillingRepository
 import com.digitalchopda.app.data.repository.CompanyRepository
 import com.digitalchopda.app.data.repository.CustomerRepository
@@ -28,8 +31,8 @@ class DashboardViewModel(
     private val _activeCompany = MutableStateFlow(
         Company(
             id = 1L,
-            firmName = "Sharma Traders",
-            ownerName = "Amit Sharma",
+            firmName = "ABC E-COMMERCE",
+            ownerName = "Admin User",
             gstin = "24AAACS1429B1Z8",
             phone = "+91 98765 43210",
             address = "Surat, Gujarat",
@@ -55,6 +58,27 @@ class DashboardViewModel(
 
     private val _invoiceCount = MutableStateFlow(0)
     val invoiceCount: StateFlow<Int> = _invoiceCount.asStateFlow()
+
+    private val _dashboardSummary = MutableStateFlow<ApiDashboardSummaryResponse?>(null)
+    val dashboardSummary: StateFlow<ApiDashboardSummaryResponse?> = _dashboardSummary.asStateFlow()
+
+    private val _ordersSummary = MutableStateFlow<ApiOrdersSummaryResponse?>(null)
+    val ordersSummary: StateFlow<ApiOrdersSummaryResponse?> = _ordersSummary.asStateFlow()
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    val payments: StateFlow<List<PaymentEntity>> = _activeCompany
+        .flatMapLatest { company ->
+            billingRepository.getPaymentsForCompany(company.id)
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val totalCashInflow: StateFlow<Double> = payments.combine(_activeCompany) { list, _ ->
+        list.filter { it.isJama }.sumOf { it.amount }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0.0)
+
+    val totalCashOutflow: StateFlow<Double> = payments.combine(_activeCompany) { list, _ ->
+        list.filter { !it.isJama }.sumOf { it.amount }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0.0)
 
     @OptIn(ExperimentalCoroutinesApi::class)
     val rawCustomers: StateFlow<List<CustomerEntity>> = _activeCompany
@@ -96,12 +120,33 @@ class DashboardViewModel(
     fun refresh() {
         viewModelScope.launch {
             try {
+                _isSyncing.value = true
                 val company = companyRepository.getActiveCompany()
                 _activeCompany.value = company
+                try {
+                    billingRepository.syncInvoicesWithServer(company.id)
+                    customerRepository.syncContactsWithServer(company.id)
+                } catch (e: Exception) {
+                    android.util.Log.e("DashboardViewModel", "Background sync in refresh failed", e)
+                }
                 loadInvoiceStats(company.id)
+                loadSummaries()
             } catch (e: Exception) {
                 android.util.Log.e("DashboardViewModel", "Error in refresh()", e)
+            } finally {
+                _isSyncing.value = false
             }
+        }
+    }
+
+    private suspend fun loadSummaries() {
+        try {
+            val sum = billingRepository.fetchDashboardSummary()
+            if (sum != null) _dashboardSummary.value = sum
+            val ord = billingRepository.fetchOrdersSummary()
+            if (ord != null) _ordersSummary.value = ord
+        } catch (e: Exception) {
+            android.util.Log.e("DashboardViewModel", "Error in loadSummaries()", e)
         }
     }
 
@@ -135,21 +180,28 @@ class DashboardViewModel(
                 val companyId = _activeCompany.value.id
                 val currentList = rawCustomers.value
                 val existing = currentList.firstOrNull { it.name.equals(partyName.trim(), ignoreCase = true) }
-                val delta = if (isJama) amount else -amount
-
-                if (existing != null) {
-                    customerRepository.updateBalance(existing.id, delta)
+                val targetCustomerId = if (existing != null) {
+                    existing.id
                 } else {
                     customerRepository.addCustomer(
                         CustomerEntity(
                             companyId = companyId,
                             name = partyName.trim(),
                             phone = "",
-                            balance = delta,
+                            balance = 0.0,
                             address = note
                         )
                     )
                 }
+
+                customerRepository.recordPayment(
+                    companyId = companyId,
+                    customerId = targetCustomerId,
+                    amount = amount,
+                    isJama = isJama,
+                    paymentMode = "cash",
+                    notes = note.ifBlank { if (isJama) "Quick Entry (You Got)" else "Quick Entry (You Gave)" }
+                )
             } catch (e: Exception) {
                 android.util.Log.e("DashboardViewModel", "Error in addQuickVoucher()", e)
             }

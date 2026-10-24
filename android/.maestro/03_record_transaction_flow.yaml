@@ -1,0 +1,64 @@
+appId: com.digitalchopda.app
+---
+# Flow 3: Record Payment / Transaction Flow
+- launchApp
+- extendedWaitUntil:
+    visible: ".*ABC E-COMMERCE.*|.*Sharma Traders.*|.*You'll Get.*|.*चोपड़ा.*"
+    timeout: 10000
+
+# 1. Switch to Party tab on bottom navigation dock
+- tapOn:
+    text: "^Party$"
+
+# 2. Select customer in party list (search if not already visible)
+- runFlow:
+    when:
+      notVisible: ".*Ramesh Bhai Patel.*"
+    commands:
+      - tapOn:
+          text: ".*Search party.*"
+      - inputText: "Ramesh"
+
+- extendedWaitUntil:
+    visible: ".*Ramesh Bhai Patel.*"
+    timeout: 8000
+
+- tapOn:
+    text: ".*Ramesh Bhai Patel.*"
+
+# 3. Assert on Party 360 Screen
+- extendedWaitUntil:
+    visible: ".*Passbook.*|.*COLLECTED.*"
+    timeout: 10000
+
+# 4. Tap on "+ Receive" (Payment In / Jama)
+- tapOn:
+    text: ".*\\+ Receive.*"
+
+# 5. Fill Payment In Dialog
+- extendedWaitUntil:
+    visible: ".*Amount.*"
+    timeout: 8000
+
+- tapOn:
+    text: ".*Amount.*"
+- inputText: "1500"
+- hideKeyboard
+
+# Select UPI payment mode
+- runFlow:
+    when:
+      visible: "UPI"
+    commands:
+      - tapOn: "UPI"
+
+# 6. Confirm and Record Payment
+- tapOn:
+    text: ".*Confirm.*Receive.*"
+
+# 7. Assert transaction recorded in Passbook ledger
+- extendedWaitUntil:
+    visible: ".*1,500.*|.*1500.*|.*Payment In.*"
+    timeout: 10000
+
+- takeScreenshot: "03_transaction_recorded_success"

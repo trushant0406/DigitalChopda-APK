@@ -1,0 +1,45 @@
+appId: com.digitalchopda.app
+---
+# Flow 1: Authentication & Dashboard Launch
+- launchApp:
+    clearState: false
+
+# 1. Switch to English for deterministic text matching if language selector is visible
+- runFlow:
+    when:
+      visible: "EN"
+    commands:
+      - tapOn: "EN"
+
+# 2. Check if 1-Tap Biometric Login is present
+- runFlow:
+    when:
+      visible: "1-Tap Biometric Login"
+    commands:
+      - tapOn: "1-Tap Biometric Login"
+
+# Fallback: Manual credential entry if login form is displayed
+- runFlow:
+    when:
+      visible:
+        text: ".*LOG IN.*"
+    commands:
+      - tapOn:
+          text: ".*Mobile Number.*|.*Username.*"
+      - eraseText
+      - inputText: "admin"
+      - hideKeyboard
+      - tapOn:
+          text: ".*Password.*"
+      - eraseText
+      - inputText: "admin123"
+      - hideKeyboard
+      - tapOn:
+          text: ".*LOG IN.*"
+
+# 3. Assert successfully landed on Main Container / Dashboard
+- extendedWaitUntil:
+    visible: ".*Parties.*|.*Chopda.*|.*चोपड़ा.*|.*You'll Get.*"
+    timeout: 15000
+
+- takeScreenshot: "01_login_success"
