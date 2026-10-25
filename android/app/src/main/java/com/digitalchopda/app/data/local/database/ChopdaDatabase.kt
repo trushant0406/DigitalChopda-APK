@@ -20,6 +20,7 @@ import com.digitalchopda.app.data.local.dao.PurchaseDao
 import com.digitalchopda.app.data.local.dao.QuotationDao
 import com.digitalchopda.app.data.local.dao.StockAdjustmentDao
 import com.digitalchopda.app.data.local.dao.SupplierDao
+import com.digitalchopda.app.data.local.dao.OutboxDao
 import com.digitalchopda.app.data.local.entity.CompanyEntity
 import com.digitalchopda.app.data.local.entity.CreditNoteEntity
 import com.digitalchopda.app.data.local.entity.CustomerEntity
@@ -35,6 +36,7 @@ import com.digitalchopda.app.data.local.entity.PurchaseItemEntity
 import com.digitalchopda.app.data.local.entity.QuotationEntity
 import com.digitalchopda.app.data.local.entity.StockAdjustmentEntity
 import com.digitalchopda.app.data.local.entity.SupplierEntity
+import com.digitalchopda.app.data.local.entity.OutboxEntity
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -55,9 +57,10 @@ import kotlinx.coroutines.launch
         StockAdjustmentEntity::class,
         OrderRevisionEntity::class,
         ProductEntity::class,
-        CreditNoteEntity::class
+        CreditNoteEntity::class,
+        OutboxEntity::class
     ],
-    version = 15,
+    version = 16,
     exportSchema = false
 )
 abstract class ChopdaDatabase : RoomDatabase() {
@@ -76,6 +79,7 @@ abstract class ChopdaDatabase : RoomDatabase() {
     abstract fun creditNoteDao(): CreditNoteDao
     abstract fun stockAdjustmentDao(): StockAdjustmentDao
     abstract fun orderRevisionDao(): OrderRevisionDao
+    abstract fun outboxDao(): OutboxDao
 
     companion object {
         @Volatile
@@ -240,6 +244,31 @@ abstract class ChopdaDatabase : RoomDatabase() {
             }
         }
 
+        val MIGRATION_15_16 = object : Migration(15, 16) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS outbox_sync_queue (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        companyId INTEGER NOT NULL,
+                        idempotencyKey TEXT NOT NULL,
+                        entityType TEXT NOT NULL,
+                        actionType TEXT NOT NULL,
+                        payloadJson TEXT NOT NULL,
+                        status TEXT NOT NULL DEFAULT 'PENDING',
+                        retryCount INTEGER NOT NULL DEFAULT 0,
+                        lastError TEXT,
+                        createdAt INTEGER NOT NULL DEFAULT 0,
+                        syncedAt INTEGER
+                    )
+                    """.trimIndent()
+                )
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_outbox_sync_queue_companyId_status ON outbox_sync_queue (companyId, status)")
+                db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS index_outbox_sync_queue_idempotencyKey ON outbox_sync_queue (idempotencyKey)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_outbox_sync_queue_createdAt ON outbox_sync_queue (createdAt)")
+            }
+        }
+
         fun getInstance(context: Context): ChopdaDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
@@ -247,9 +276,21 @@ abstract class ChopdaDatabase : RoomDatabase() {
                     ChopdaDatabase::class.java,
                     "digital_chopda_v1.db"
                 )
-                    .addMigrations(MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15)
+                    .setJournalMode(RoomDatabase.JournalMode.WRITE_AHEAD_LOGGING)
+                    .addMigrations(MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16)
                     .fallbackToDestructiveMigration()
                     .addCallback(object : Callback() {
+                        override fun onOpen(db: SupportSQLiteDatabase) {
+                            super.onOpen(db)
+                            // Enable SQLite fast WAL optimizations for concurrent sub-millisecond reads and writes
+                            try {
+                                db.execSQL("PRAGMA synchronous = NORMAL")
+                                db.execSQL("PRAGMA temp_store = MEMORY")
+                            } catch (e: Exception) {
+                                android.util.Log.w("ChopdaDatabase", "Could not apply SQLite pragmas", e)
+                            }
+                        }
+
                         override fun onCreate(db: SupportSQLiteDatabase) {
                             super.onCreate(db)
                             // Pre-populate realistic seed data for immediate out-of-the-box experience

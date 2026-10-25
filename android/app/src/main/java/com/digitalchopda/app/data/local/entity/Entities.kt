@@ -385,3 +385,27 @@ data class CreditNoteEntity(
     val createdAt: Long = System.currentTimeMillis()
 )
 
+@Entity(
+    tableName = "outbox_sync_queue",
+    indices = [
+        Index(value = ["companyId", "status"]),
+        Index(value = ["idempotencyKey"], unique = true),
+        Index(value = ["createdAt"])
+    ]
+)
+data class OutboxEntity(
+    @PrimaryKey(autoGenerate = true)
+    val id: Long = 0,
+    val companyId: Long,
+    val idempotencyKey: String = java.util.UUID.randomUUID().toString(),
+    val entityType: String, // 'contact', 'invoice', 'payment', 'stock_adjustment'
+    val actionType: String, // 'INSERT', 'UPDATE', 'DELETE'
+    val payloadJson: String,
+    val status: String = "PENDING", // 'PENDING', 'SYNCING', 'SYNCED', 'FAILED'
+    val retryCount: Int = 0,
+    val lastError: String? = null,
+    val createdAt: Long = System.currentTimeMillis(),
+    val syncedAt: Long? = null
+)
+
+

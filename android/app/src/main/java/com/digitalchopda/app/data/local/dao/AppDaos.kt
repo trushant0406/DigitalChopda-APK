@@ -21,6 +21,7 @@ import com.digitalchopda.app.data.local.entity.PurchaseItemEntity
 import com.digitalchopda.app.data.local.entity.QuotationEntity
 import com.digitalchopda.app.data.local.entity.StockAdjustmentEntity
 import com.digitalchopda.app.data.local.entity.SupplierEntity
+import com.digitalchopda.app.data.local.entity.OutboxEntity
 import kotlinx.coroutines.flow.Flow
 
 @Dao
@@ -491,4 +492,29 @@ interface OrderRevisionDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertRevision(revision: OrderRevisionEntity): Long
 }
+
+@Dao
+interface OutboxDao {
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun enqueue(outbox: OutboxEntity): Long
+
+    @Query("SELECT * FROM outbox_sync_queue WHERE companyId = :companyId AND status = 'PENDING' ORDER BY createdAt ASC LIMIT :limit")
+    suspend fun getPendingBatch(companyId: Long, limit: Int = 50): List<OutboxEntity>
+
+    @Query("UPDATE outbox_sync_queue SET status = 'SYNCING' WHERE id IN (:ids)")
+    suspend fun markSyncing(ids: List<Long>)
+
+    @Query("UPDATE outbox_sync_queue SET status = 'SYNCED', syncedAt = :syncedAt, lastError = null WHERE idempotencyKey = :idempotencyKey")
+    suspend fun markSynced(idempotencyKey: String, syncedAt: Long = System.currentTimeMillis())
+
+    @Query("UPDATE outbox_sync_queue SET status = 'FAILED', retryCount = retryCount + 1, lastError = :error WHERE idempotencyKey = :idempotencyKey")
+    suspend fun markFailed(idempotencyKey: String, error: String)
+
+    @Query("SELECT COUNT(*) FROM outbox_sync_queue WHERE companyId = :companyId AND status = 'PENDING'")
+    fun observePendingCount(companyId: Long): Flow<Int>
+
+    @Query("DELETE FROM outbox_sync_queue WHERE status = 'SYNCED' AND syncedAt < :beforeTimestamp")
+    suspend fun pruneSynced(beforeTimestamp: Long)
+}
+
 
