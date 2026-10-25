@@ -1,0 +1,32 @@
+appId: com.digitalchopda.app
+---
+- launchApp:
+    clearState: false
+
+# 1. Switch away and back to Party tab to trigger fresh screen sync
+- tapOn:
+    text: "^Products$"
+
+- extendedWaitUntil:
+    visible: ".*Products.*"
+    timeout: 5000
+
+- tapOn:
+    text: "^Party$"
+
+- extendedWaitUntil:
+    visible: ".*Add Party.*"
+    timeout: 8000
+
+# 2. Search for the party created on the Website
+- tapOn:
+    text: ".*Search.*"
+- inputText: "Vrajesh Textiles"
+
+# 3. Assert party created on website is now visible in APK!
+- extendedWaitUntil:
+    visible: ".*Vrajesh Textiles.*"
+    timeout: 10000
+
+- assertVisible: ".*Vrajesh Textiles.*"
+- takeScreenshot: "e2e_party_web_to_apk_success"

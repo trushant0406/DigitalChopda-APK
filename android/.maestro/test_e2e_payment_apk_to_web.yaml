@@ -1,0 +1,57 @@
+appId: com.digitalchopda.app
+---
+- launchApp:
+    clearState: false
+
+# 1. Switch to Party tab
+- tapOn:
+    text: "^Party$"
+
+- extendedWaitUntil:
+    visible: ".*Add Party.*"
+    timeout: 8000
+
+# 2. Search for Pooja Synthetics
+- tapOn:
+    text: ".*Search.*"
+- inputText: "Pooja Synthetics"
+- hideKeyboard
+
+- extendedWaitUntil:
+    visible: "9822334455"
+    timeout: 8000
+
+# Tap the party card by its unique phone number
+- tapOn:
+    text: "9822334455"
+
+# 3. Assert on Party Detail Screen (Party 360)
+- extendedWaitUntil:
+    visible: ".*\\+ Receive.*"
+    timeout: 10000
+
+# 4. Tap on "+ Receive" (Payment In)
+- tapOn:
+    text: ".*\\+ Receive.*"
+
+# 5. Fill Payment In Dialog
+- extendedWaitUntil:
+    visible: ".*Amount.*"
+    timeout: 6000
+
+- tapOn:
+    text: ".*Amount.*"
+- inputText: "1500"
+- hideKeyboard
+
+# 6. Tap Confirm + Receive
+- tapOn:
+    text: ".*Confirm.*Receive.*"
+
+# 7. Assert transaction recorded in Party 360 ledger
+- extendedWaitUntil:
+    visible: ".*1,500.*|.*1500.*"
+    timeout: 10000
+
+- assertVisible: ".*1,500.*|.*1500.*"
+- takeScreenshot: "e2e_payment_apk_to_web_success"

@@ -1,0 +1,46 @@
+appId: com.digitalchopda.app
+---
+- launchApp:
+    clearState: false
+
+# 1. We are already on the invoice screen with Pooja Synthetics selected!
+# But handle if anywhere else:
+- runFlow:
+    when:
+      notVisible: ".*BILL TO PARTY.*"
+    commands:
+      - tapOn:
+          text: "^Billing$"
+      - tapOn:
+          text: ".*New Tax Invoice.*"
+      - tapOn: "Toggle party dropdown"
+      - tapOn:
+          text: ".*Search party by name or phone.*"
+      - inputText: "Pooja Synthetics"
+      - hideKeyboard
+      - tapOn:
+          text: "9822334455"
+
+# 2. Add product using the 1-tap quick chip from catalog
+- extendedWaitUntil:
+    visible: ".*APC 600VA.*|.*Create New Item.*"
+    timeout: 8000
+
+- tapOn:
+    text: ".*APC 600VA.*"
+
+# 3. Assert item added to cart
+- extendedWaitUntil:
+    visible: ".*ITEMS / SERVICES \\(1\\).*"
+    timeout: 6000
+
+# 4. Save and Dispatch Invoice to Central Depot
+- tapOn:
+    text: ".*SAVE & SEND.*"
+
+# 5. Wait for PDF Viewer / Success Screen
+- extendedWaitUntil:
+    visible: ".*INV-.*|.*Invoice.*|.*PRINT.*|.*SHARE.*"
+    timeout: 15000
+
+- takeScreenshot: "e2e_invoice_apk_to_web_success"

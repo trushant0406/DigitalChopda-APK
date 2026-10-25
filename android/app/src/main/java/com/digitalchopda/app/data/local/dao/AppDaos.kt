@@ -250,6 +250,9 @@ interface CustomerDao {
 
     @Query("SELECT * FROM customers WHERE companyId = :companyId")
     suspend fun getCustomersSync(companyId: Long): List<CustomerEntity>
+
+    @Query("SELECT COUNT(*) FROM customers WHERE serverContactId IS NULL")
+    fun observePendingSyncCustomerCount(): Flow<Int>
 }
 
 @Dao
@@ -472,6 +475,9 @@ interface StockAdjustmentDao {
 
     @Query("UPDATE stock_adjustments SET syncStatus = :syncStatus WHERE id = :id")
     suspend fun markAdjustmentSynced(id: Long, syncStatus: String = "SYNCED")
+
+    @Query("SELECT COUNT(*) FROM stock_adjustments WHERE syncStatus = 'PENDING_SYNC'")
+    fun observePendingSyncAdjustmentCount(): Flow<Int>
 }
 
 @Dao

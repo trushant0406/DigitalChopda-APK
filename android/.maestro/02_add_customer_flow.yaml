@@ -43,6 +43,10 @@ appId: com.digitalchopda.app
     text: ".*SAVE PARTY.*"
 
 # 5. Verify newly added customer is present in party list
+- tapOn:
+    text: ".*Search.*"
+- inputText: "Ramesh Bhai Patel"
+
 - extendedWaitUntil:
     visible: ".*Ramesh Bhai Patel.*"
     timeout: 10000

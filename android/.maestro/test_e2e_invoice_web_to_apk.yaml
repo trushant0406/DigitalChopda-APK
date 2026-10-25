@@ -1,0 +1,53 @@
+appId: com.digitalchopda.app
+---
+- launchApp:
+    clearState: false
+
+# 1. Ensure we return to main navigation dock
+- runFlow:
+    when:
+      visible: ".*PDF.*|.*PRINT.*|.*SHARE.*|.*INV-.*"
+    commands:
+      - back
+
+- runFlow:
+    when:
+      visible: ".*BILL TO.*PARTY.*|.*Create Invoice.*"
+    commands:
+      - back
+
+# 2. Switch to Products and back to Billing to trigger fresh screen load
+- tapOn:
+    text: "^Products$"
+
+- extendedWaitUntil:
+    visible: ".*Products.*"
+    timeout: 5000
+
+- tapOn:
+    text: "^Billing$"
+
+- extendedWaitUntil:
+    visible: ".*Billing & Documents.*"
+    timeout: 8000
+
+# 3. Tap Sync Documents icon if needed to refresh from server
+- runFlow:
+    when:
+      visible: "Sync Documents"
+    commands:
+      - tapOn: "Sync Documents"
+
+# 4. Search for Vrajesh Textiles
+- tapOn:
+    text: ".*Search.*"
+- inputText: "Vrajesh Textiles"
+- hideKeyboard
+
+# 5. Assert invoice created on Web Dashboard appears in the APK!
+- extendedWaitUntil:
+    visible: ".*Vrajesh Textiles.*"
+    timeout: 10000
+
+- assertVisible: ".*Vrajesh Textiles.*"
+- takeScreenshot: "e2e_invoice_web_to_apk_success"

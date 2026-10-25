@@ -97,6 +97,10 @@ class TokenStorage(context: Context) {
         private const val KEY_IS_LOGGED_IN = "is_logged_in"
         private const val KEY_SERVER_URL = "server_base_url"
         const val DEFAULT_BASE_URL = "http://100.99.250.0:3000/api/"
+        const val URL_CLOUD_PROD = "https://app.digitalchopda.in/api/"
+        const val URL_OFFICE_WIFI = "http://10.74.4.212:3000/api/"
+        const val URL_TAILSCALE_DEV = "http://100.99.250.0:3000/api/"
+        const val URL_EMULATOR = "http://10.0.2.2:3000/api/"
     }
 
     fun getBaseUrl(): String {
@@ -106,6 +110,8 @@ class TokenStorage(context: Context) {
     fun setBaseUrl(url: String) {
         val sanitized = if (url.endsWith("/")) url else "$url/"
         prefs.edit().putString(KEY_SERVER_URL, sanitized).apply()
+        com.digitalchopda.app.core.network.NetworkClient.reset()
+        com.digitalchopda.app.core.network.AuthHeaderInterceptor.activeHostOverride = null
     }
 
     fun saveTokens(accessToken: String, refreshToken: String) {
@@ -142,8 +148,20 @@ class TokenStorage(context: Context) {
         prefs.edit().putLong(KEY_ACTIVE_COMPANY, companyId).apply()
     }
 
+    fun isTokenExpired(): Boolean {
+        val token = getAccessToken()
+        if (token.isBlank()) return true
+        val parts = token.split(":")
+        val exp = when (parts.size) {
+            5 -> parts[3].toLongOrNull()
+            4 -> parts[2].toLongOrNull()
+            else -> null
+        } ?: return false
+        return System.currentTimeMillis() > exp
+    }
+
     fun isLoggedIn(): Boolean {
-        return prefs.getBoolean(KEY_IS_LOGGED_IN, false) && getAccessToken().isNotEmpty()
+        return prefs.getBoolean(KEY_IS_LOGGED_IN, false) && getAccessToken().isNotEmpty() && !isTokenExpired()
     }
 
     fun clear() {

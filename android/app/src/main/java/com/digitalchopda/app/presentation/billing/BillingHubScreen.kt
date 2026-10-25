@@ -1,6 +1,7 @@
 package com.digitalchopda.app.presentation.billing
 
 import android.widget.Toast
+import com.digitalchopda.app.core.network.InstantNetworkSyncMonitor
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -187,6 +188,8 @@ fun BillingHubScreen(
     val purchases by (purchaseRepository?.getPurchasesForCompany(activeCompany.id) ?: kotlinx.coroutines.flow.flowOf(emptyList())).collectAsState(initial = emptyList())
     val customers by customerRepository.getCustomers(activeCompany.id).collectAsState(initial = emptyList())
     val pendingSyncCount by billingRepository.observePendingSyncCount().collectAsState(initial = 0)
+    val isOnline by InstantNetworkSyncMonitor.isOnline.collectAsState()
+    val isSyncingOutbox by InstantNetworkSyncMonitor.isSyncing.collectAsState()
 
     val dateFormat = remember { SimpleDateFormat("dd MMM yyyy", Locale.getDefault()) }
 
@@ -267,9 +270,15 @@ fun BillingHubScreen(
                 actions = {
                     SyncStatusPill(
                         pendingCount = pendingSyncCount,
+                        isOnline = isOnline,
+                        isSyncing = isSyncingOutbox || isSyncing,
                         onSyncClick = {
-                            InvoiceSyncWorker.enqueueImmediateSync(context)
-                            val message = if (pendingSyncCount == 0) "Cloud vault is completely up to date" else "Syncing $pendingSyncCount pending items with cloud..."
+                            InstantNetworkSyncMonitor.triggerManualSync(context)
+                            val message = when {
+                                !isOnline -> "Device is offline. $pendingSyncCount records queued in local outbox."
+                                pendingSyncCount == 0 -> "Cloud vault is completely up to date with Central Depot"
+                                else -> "Syncing $pendingSyncCount pending items with Central Depot..."
+                            }
                             Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
                             coroutineScope.launch {
                                 isSyncing = true

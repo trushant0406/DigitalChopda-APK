@@ -235,11 +235,18 @@ class BillingRepository(
     fun observePendingSyncCount(): Flow<Int> {
         return combine(
             db.invoiceDao().observePendingSyncInvoiceCount(),
-            db.paymentDao().observePendingSyncPaymentCount()
-        ) { invoiceCount, paymentCount ->
-            invoiceCount + paymentCount
+            db.paymentDao().observePendingSyncPaymentCount(),
+            db.customerDao().observePendingSyncCustomerCount(),
+            db.stockAdjustmentDao().observePendingSyncAdjustmentCount()
+        ) { invoiceCount, paymentCount, customerCount, adjustmentCount ->
+            invoiceCount + paymentCount + customerCount + adjustmentCount
         }
     }
+
+    fun observePendingInvoiceCount(): Flow<Int> = db.invoiceDao().observePendingSyncInvoiceCount()
+    fun observePendingPaymentCount(): Flow<Int> = db.paymentDao().observePendingSyncPaymentCount()
+    fun observePendingCustomerCount(): Flow<Int> = db.customerDao().observePendingSyncCustomerCount()
+    fun observePendingAdjustmentCount(): Flow<Int> = db.stockAdjustmentDao().observePendingSyncAdjustmentCount()
 
     suspend fun getActiveCompany(): Company? {
         return db.companyDao().getActiveCompany()?.toDomain()
@@ -1291,7 +1298,8 @@ class CustomerRepository(
     }
 
     suspend fun addCustomer(customer: CustomerEntity): Long {
-        return db.customerDao().insertCustomer(customer)
+        val res = createParty(customer)
+        return res.getOrDefault(0L)
     }
 
     suspend fun updateBalance(customerId: Long, delta: Double) {
@@ -1469,7 +1477,7 @@ class CustomerRepository(
         orderId: Long? = null,
         invoiceNumber: String? = null
     ): Long {
-        return db.withTransaction {
+        val paymentId = db.withTransaction {
             val customer = db.customerDao().getCustomerById(customerId) ?: return@withTransaction -1L
             val receiptNo = "REC-${System.currentTimeMillis() % 100000}"
 
@@ -1518,32 +1526,89 @@ class CustomerRepository(
                 orderId = targetOrderId,
                 invoiceNumber = targetInvoiceNumber
             )
-            val paymentId = db.paymentDao().insertPayment(payment)
+            val insertedId = db.paymentDao().insertPayment(payment)
             val delta = if (isJama) -amount else amount
             db.customerDao().updateBalance(customerId, delta)
-            paymentId
+            insertedId
         }
+
+        if (paymentId > 0 && apiService != null) {
+            withContext(Dispatchers.IO) {
+                try {
+                    val pmt = db.paymentDao().getPaymentById(paymentId) ?: return@withContext
+                    val customer = db.customerDao().getCustomerById(customerId)
+                    val resolvedContactId = customer?.serverContactId ?: customerId
+                    if (isJama) {
+                        val req = ApiPaymentInRequest(
+                            contactId = resolvedContactId,
+                            phone = customer?.phone?.ifBlank { null },
+                            name = customer?.name?.ifBlank { null },
+                            amount = amount,
+                            paymentMode = paymentMode.lowercase(),
+                            orderId = pmt.orderId,
+                            notes = notes.ifBlank { "Mobile Payment In" },
+                            paidAt = null
+                        )
+                        val res = apiService.createPaymentIn(req)
+                        if (res.isSuccessful && res.body() != null) {
+                            val body = res.body()!!
+                            db.paymentDao().markSynced(
+                                id = paymentId,
+                                serverId = body.id ?: 0L,
+                                receiptNumber = body.receiptNumber ?: pmt.receiptNumber,
+                                syncStatus = "SYNCED"
+                            )
+                        }
+                    } else {
+                        val khataReq = com.digitalchopda.app.core.network.ApiCreateKhataTransactionRequest(
+                            contactId = resolvedContactId,
+                            entryType = "debit",
+                            amount = amount,
+                            transactionDate = null,
+                            particulars = notes.ifBlank { "Payment Out" },
+                            paymentMode = paymentMode.lowercase(),
+                            referenceNo = pmt.receiptNumber.ifBlank { null },
+                            notes = notes.ifBlank { null }
+                        )
+                        val res = apiService.createKhataTransaction(khataReq)
+                        if (res.isSuccessful && res.body() != null) {
+                            db.paymentDao().markSynced(
+                                id = paymentId,
+                                serverId = res.body()!!.id,
+                                receiptNumber = pmt.receiptNumber,
+                                syncStatus = "SYNCED"
+                            )
+                        }
+                    }
+                } catch (e: Exception) {
+                    android.util.Log.e("CustomerRepo", "Failed immediate payment sync: ${e.message}")
+                }
+            }
+        }
+        return paymentId
     }
 
     suspend fun createParty(party: CustomerEntity): Result<Long> {
         return try {
-            val localId = db.customerDao().insertCustomer(party)
+            val safeClientRefId = party.clientReferenceId.ifBlank { java.util.UUID.randomUUID().toString() }
+            val entityToSave = if (party.clientReferenceId != safeClientRefId) party.copy(clientReferenceId = safeClientRefId) else party
+            val localId = db.customerDao().insertCustomer(entityToSave)
             if (apiService != null) {
                 try {
                     val req = com.digitalchopda.app.core.network.ApiCreateContactRequest(
-                        name = party.name,
-                        phone = party.phone,
-                        partyType = party.partyType,
-                        partyTag = party.partyTag,
-                        openingBalance = party.openingBalance,
-                        openingBalanceType = party.openingBalanceType,
-                        creditLimit = party.creditLimit,
-                        gstin = party.gstin.ifBlank { null },
-                        pan = party.pan.ifBlank { null },
-                        billingAddress = party.address.ifBlank { null },
-                        city = party.city.ifBlank { null },
-                        state = party.state.ifBlank { null },
-                        clientReferenceId = party.clientReferenceId
+                        name = entityToSave.name,
+                        phone = entityToSave.phone,
+                        partyType = entityToSave.partyType,
+                        partyTag = entityToSave.partyTag,
+                        openingBalance = entityToSave.openingBalance,
+                        openingBalanceType = entityToSave.openingBalanceType,
+                        creditLimit = entityToSave.creditLimit,
+                        gstin = entityToSave.gstin.ifBlank { null },
+                        pan = entityToSave.pan.ifBlank { null },
+                        billingAddress = entityToSave.address.ifBlank { null },
+                        city = entityToSave.city.ifBlank { null },
+                        state = entityToSave.state.ifBlank { null },
+                        clientReferenceId = safeClientRefId
                     )
                     val createRes = apiService.createContact(req)
                     if (createRes.isSuccessful && createRes.body() != null) {
@@ -1685,6 +1750,35 @@ class CustomerRepository(
                     syncStatus = "PENDING_SYNC"
                 )
                 db.paymentDao().insertPayment(payment)
+            }
+            if (id > 0 && apiService != null) {
+                withContext(Dispatchers.IO) {
+                    try {
+                        val customer = db.customerDao().getCustomerById(partyId)
+                        val resolvedContactId = customer?.serverContactId ?: partyId
+                        val khataReq = com.digitalchopda.app.core.network.ApiCreateKhataTransactionRequest(
+                            contactId = resolvedContactId,
+                            entryType = "debit",
+                            amount = amount,
+                            transactionDate = null,
+                            particulars = notes.ifBlank { "Supplier Payment Out" },
+                            paymentMode = paymentMode.lowercase(),
+                            referenceNo = referenceNo.ifBlank { null },
+                            notes = notes.ifBlank { null }
+                        )
+                        val res = apiService.createKhataTransaction(khataReq)
+                        if (res.isSuccessful && res.body() != null) {
+                            db.paymentDao().markSynced(
+                                id = id,
+                                serverId = res.body()!!.id,
+                                receiptNumber = referenceNo.ifBlank { "PAY-$id" },
+                                syncStatus = "SYNCED"
+                            )
+                        }
+                    } catch (e: Exception) {
+                        android.util.Log.e("CustomerRepo", "Failed immediate payment out sync: ${e.message}")
+                    }
+                }
             }
             Result.success(id)
         } catch (e: Exception) {

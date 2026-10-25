@@ -1,0 +1,56 @@
+appId: com.digitalchopda.app
+---
+- launchApp:
+    clearState: false
+
+- runFlow:
+    when:
+      visible: ".*Passbook.*|.*TRANSACTION LEDGER.*"
+    commands:
+      - back
+
+# 1. Switch to Party tab
+- tapOn:
+    text: "^Party$"
+
+- extendedWaitUntil:
+    visible: ".*Add Party.*"
+    timeout: 8000
+
+# 2. Tap Add Party
+- tapOn:
+    text: ".*Add Party.*"
+
+- extendedWaitUntil:
+    visible: ".*Party Name.*"
+    timeout: 8000
+
+# 3. Enter details
+- tapOn:
+    text: ".*Party Name.*"
+- inputText: "Pooja Synthetics"
+
+- tapOn:
+    text: ".*Mobile Phone.*"
+- inputText: "9822334455"
+
+- scroll
+
+# 4. Save
+- tapOn:
+    text: ".*SAVE PARTY.*"
+
+# 5. Search to confirm in APK
+- extendedWaitUntil:
+    visible: ".*Search.*"
+    timeout: 8000
+
+- tapOn:
+    text: ".*Search.*"
+- inputText: "Pooja Synthetics"
+
+- extendedWaitUntil:
+    visible: ".*Pooja Synthetics.*"
+    timeout: 8000
+
+- takeScreenshot: "e2e_party_apk_created"

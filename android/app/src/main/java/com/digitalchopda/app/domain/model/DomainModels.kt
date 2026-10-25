@@ -38,7 +38,7 @@ data class SequenceLease(
     val totalCapacity: Long get() = rangeEnd - rangeStart + 1
     val remainingCapacity: Long get() = (rangeEnd - currentCursor + 1).coerceAtLeast(0)
     val remainingPercentage: Float get() = if (totalCapacity > 0) (remainingCapacity.toFloat() / totalCapacity.toFloat()) * 100f else 0f
-    val needsRenewal: Boolean get() = remainingPercentage <= 10f
+    val needsRenewal: Boolean get() = remainingPercentage <= 20f
 
     /**
      * Strictly formats invoice numbers as Rule 46: PREFIX/FY/00001 (e.g., DC/26-27/01001)

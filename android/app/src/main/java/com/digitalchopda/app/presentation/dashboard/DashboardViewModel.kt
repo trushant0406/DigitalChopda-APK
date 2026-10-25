@@ -213,6 +213,8 @@ class DashboardViewModel(
             _isSyncing.value = true
             try {
                 billingRepository.syncPendingInvoices()
+                billingRepository.syncPendingPayments()
+                billingRepository.syncInvoicesWithServer(_activeCompany.value.id)
                 customerRepository.syncContactsWithServer(_activeCompany.value.id)
                 refresh()
             } catch (_: Exception) {

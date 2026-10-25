@@ -80,6 +80,9 @@ import com.digitalchopda.app.core.designsystem.TextMuted
 import com.digitalchopda.app.core.designsystem.TextSubtle
 import com.digitalchopda.app.core.designsystem.TextWhite
 import com.digitalchopda.app.core.designsystem.bouncyClick
+import com.digitalchopda.app.core.designsystem.SyncStatusPill
+import com.digitalchopda.app.core.network.InstantNetworkSyncMonitor
+import com.digitalchopda.app.DigitalChopdaApplication
 import com.digitalchopda.app.data.local.entity.CustomerEntity
 import com.digitalchopda.app.data.repository.CompanyRepository
 import com.digitalchopda.app.data.repository.CustomerRepository
@@ -132,6 +135,10 @@ fun PartyScreen(
     var isSyncing by remember { mutableStateOf(false) }
     var showAddPartyDialog by remember { mutableStateOf(false) }
 
+    val isOnline by InstantNetworkSyncMonitor.isOnline.collectAsState()
+    val isSyncingOutbox by InstantNetworkSyncMonitor.isSyncing.collectAsState()
+    val pendingSyncCount by remember { DigitalChopdaApplication.instance.billingRepository.observePendingSyncCount() }.collectAsState(initial = 0)
+
     // Auto-sync on screen launch
     LaunchedEffect(activeCompany.id) {
         if (activeCompany.id > 0) {
@@ -146,14 +153,15 @@ fun PartyScreen(
     }
 
     fun triggerSync() {
+        InstantNetworkSyncMonitor.triggerManualSync(context)
         scope.launch {
             isSyncing = true
             val result = customerRepository.syncContactsWithServer(activeCompany.id)
             isSyncing = false
             if (result.isSuccess) {
-                Toast.makeText(context, "✓ Parties synced from server (${result.getOrNull()} contacts)", Toast.LENGTH_SHORT).show()
+                Toast.makeText(context, "✓ Parties synced from Central Depot (${result.getOrNull()} contacts)", Toast.LENGTH_SHORT).show()
             } else {
-                Toast.makeText(context, "Sync note: Working in local mode", Toast.LENGTH_SHORT).show()
+                Toast.makeText(context, "Sync note: Working in offline mode", Toast.LENGTH_SHORT).show()
             }
         }
     }
@@ -228,6 +236,13 @@ fun PartyScreen(
                     }
                 },
                 actions = {
+                    SyncStatusPill(
+                        pendingCount = pendingSyncCount,
+                        isOnline = isOnline,
+                        isSyncing = isSyncingOutbox || isSyncing,
+                        onSyncClick = { triggerSync() },
+                        modifier = Modifier.padding(end = 6.dp)
+                    )
                     IconButton(
                         onClick = { triggerSync() },
                         modifier = Modifier

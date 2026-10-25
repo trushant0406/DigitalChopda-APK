@@ -24,7 +24,7 @@ appId: com.digitalchopda.app
     text: ".*New Tax Invoice.*"
 
 - extendedWaitUntil:
-    visible: ".*BILL TO / CHOOSE PARTY.*"
+    visible: ".*BILL TO.*PARTY.*"
     timeout: 8000
 
 # 4. Open the new "Choose Party" dropdown

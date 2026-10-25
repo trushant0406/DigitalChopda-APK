@@ -2073,12 +2073,16 @@ fun ChopdaPdfLoadingOverlay(
 fun SyncStatusPill(
     pendingCount: Int,
     onSyncClick: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    isOnline: Boolean = true,
+    isSyncing: Boolean = false
 ) {
-    val isSynced = pendingCount == 0
-    val backgroundColor = if (isSynced) EmeraldJamaBg else WarningAmberBg
-    val contentColor = if (isSynced) EmeraldJama else WarningAmber
-    val label = if (isSynced) "☁️ Synced" else "⏳ $pendingCount Pending"
+    val (backgroundColor, contentColor, label) = when {
+        !isOnline -> Triple(RubyUdharBg, RubyUdhar, if (pendingCount > 0) "🔴 $pendingCount Offline" else "🔴 Offline")
+        isSyncing -> Triple(WarningAmberBg, WarningAmber, "🔄 Syncing...")
+        pendingCount > 0 -> Triple(WarningAmberBg, WarningAmber, "⏳ $pendingCount Pending")
+        else -> Triple(EmeraldJamaBg, EmeraldJama, "☁️ Synced")
+    }
 
     Box(
         modifier = modifier

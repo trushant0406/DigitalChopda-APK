@@ -13,6 +13,7 @@ import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import com.digitalchopda.app.core.network.InstantNetworkSyncMonitor
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -181,6 +182,8 @@ fun DashboardScreen(
     val totalUdhar by viewModel.totalUdhar.collectAsState()
     val isSyncing by viewModel.isSyncing.collectAsState()
     val pendingSyncCount by billingRepository.observePendingSyncCount().collectAsState(initial = 0)
+    val isOnline by InstantNetworkSyncMonitor.isOnline.collectAsState()
+    val isSyncingOutbox by InstantNetworkSyncMonitor.isSyncing.collectAsState()
     val dashboardSummary by viewModel.dashboardSummary.collectAsState()
     val ordersSummary by viewModel.ordersSummary.collectAsState()
     val payments by viewModel.payments.collectAsState()
@@ -275,7 +278,12 @@ fun DashboardScreen(
                     ownerName = if (activeCompany.ownerName.isBlank()) "Admin User" else activeCompany.ownerName,
                     unreadNotifications = if (pendingSyncCount > 0) pendingSyncCount else 0,
                     languageName = currentLang?.nativeName,
-                    statusPillText = if (pendingSyncCount == 0) "● Cloud Synced" else "⏳ $pendingSyncCount Outbox Pending",
+                    statusPillText = when {
+                        !isOnline -> if (pendingSyncCount > 0) "🔴 $pendingSyncCount Queued" else "🔴 Offline Enclave"
+                        isSyncingOutbox -> "🔄 Syncing Depot..."
+                        pendingSyncCount > 0 -> "⏳ $pendingSyncCount Pending"
+                        else -> "● Cloud Synced"
+                    },
                     onLanguageClick = if (languageManager != null) {
                         {
                             val next = languageManager.cycleNextLanguage()
@@ -284,8 +292,12 @@ fun DashboardScreen(
                     } else null,
                     onCompanyClick = { showCompanySheet = true },
                     onNotificationClick = {
-                        InvoiceSyncWorker.enqueueImmediateSync(context)
-                        val message = if (pendingSyncCount == 0) "Cloud vault is completely up to date" else "Syncing $pendingSyncCount pending items with cloud..."
+                        InstantNetworkSyncMonitor.triggerManualSync(context)
+                        val message = when {
+                            !isOnline -> "Device is offline. $pendingSyncCount records queued in local outbox."
+                            pendingSyncCount == 0 -> "Cloud vault is completely up to date with Central Depot"
+                            else -> "Syncing $pendingSyncCount pending items with Central Depot..."
+                        }
                         Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
                     },
                     onFilterClick = {}

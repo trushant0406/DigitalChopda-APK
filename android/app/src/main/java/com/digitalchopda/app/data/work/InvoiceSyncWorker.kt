@@ -10,16 +10,35 @@ import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
+import androidx.work.workDataOf
 import com.digitalchopda.app.DigitalChopdaApplication
+import com.digitalchopda.app.core.network.InstantNetworkSyncMonitor
 import java.util.concurrent.TimeUnit
 
+/**
+ * Enterprise Topological Outbox Synchronization Worker (Pillars 1 & 2)
+ *
+ * Flushes offline entities strictly in parent-first dependency order:
+ * 1. Contacts/Parties (resolves serverContactId for offline parties and pulls remote updates)
+ * 2. Products Catalog (syncs master catalog)
+ * 3. Stock Adjustments (flushes inventory deltas)
+ * 4. Invoices / Orders (uses resolved serverContactIds, acquires serverOrderIds)
+ * 5. Purchases (flushes purchase vouchers)
+ * 6. Payments & Khata Debits (uses resolved serverContactIds & serverOrderIds)
+ * 7. Quotations (flushes quotations)
+ * 8. Credit Notes / Sales Returns
+ *
+ * Updates [InstantNetworkSyncMonitor] syncing state and publishes progress.
+ */
 class InvoiceSyncWorker(
     appContext: Context,
     workerParams: WorkerParameters
 ) : CoroutineWorker(appContext, workerParams) {
 
     override suspend fun doWork(): Result {
+        InstantNetworkSyncMonitor.setSyncing(true)
         return try {
+            setProgress(workDataOf("is_syncing" to true))
             val app = applicationContext as? DigitalChopdaApplication ?: return Result.failure()
             val activeCompany = app.companyRepository.getActiveCompany()
             var hasTransientErrors = false
@@ -99,6 +118,11 @@ class InvoiceSyncWorker(
             }
         } catch (_: Exception) {
             Result.retry()
+        } finally {
+            InstantNetworkSyncMonitor.setSyncing(false)
+            try {
+                setProgress(workDataOf("is_syncing" to false, "last_sync" to System.currentTimeMillis()))
+            } catch (_: Exception) {}
         }
     }
 
