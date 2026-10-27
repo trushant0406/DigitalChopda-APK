@@ -134,6 +134,7 @@ fun DocumentDetailScreen(
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val bluetoothPrinterManager = remember { com.digitalchopda.app.core.printer.BluetoothPrinterManager(context) }
 
     var activeCompany by remember {
         mutableStateOf(
@@ -461,6 +462,22 @@ fun DocumentDetailScreen(
                                 imageVector = Icons.Default.LocalShipping,
                                 contentDescription = "Shipping Label",
                                 tint = BrandPrimaryBlue
+                            )
+                        }
+                    }
+                    if (document is DocumentModel.InvoiceDoc) {
+                        IconButton(onClick = {
+                            scope.launch {
+                                val inv = (document as DocumentModel.InvoiceDoc).entity
+                                val invoiceDomain = inv.toDomain()
+                                val res = bluetoothPrinterManager.printInvoiceReceipt(null, activeCompany, invoiceDomain, 58)
+                                Toast.makeText(context, if (res.isSuccess) "Printing thermal receipt..." else "No Bluetooth printer found", Toast.LENGTH_SHORT).show()
+                            }
+                        }) {
+                            Icon(
+                                imageVector = Icons.Default.Print,
+                                contentDescription = "Print Thermal Receipt",
+                                tint = ImperialGold
                             )
                         }
                     }

@@ -7,7 +7,7 @@ appId: com.digitalchopda.app
 # 1. Return to root dock if inside a detail view
 - runFlow:
     when:
-      visible: ".*Passbook.*|.*TRANSACTION LEDGER.*|.*PDF.*"
+      visible: ".*Passbook.*|.*TRANSACTION LEDGER.*|.*PDF.*|.*CREATE INVOICE.*|.*BILL TO.*"
     commands:
       - back
 

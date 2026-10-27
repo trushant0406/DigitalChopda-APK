@@ -70,7 +70,13 @@ data class ApiProductDto(
     @SerializedName("is_tax_inclusive") val isTaxInclusive: Boolean = false,
     @SerializedName(value = "stock_quantity", alternate = ["stockQuantity"]) val stockQuantity: Double = 0.0,
     @SerializedName(value = "min_stock_alert", alternate = ["minStockAlert"]) val minStockAlert: Double? = 5.0,
-    @SerializedName(value = "purchase_price", alternate = ["purchasePrice"]) val purchasePrice: Double? = 0.0
+    @SerializedName(value = "purchase_price", alternate = ["purchasePrice"]) val purchasePrice: Double? = 0.0,
+    @SerializedName(value = "primary_image_url", alternate = ["primaryImageUrl"]) val primaryImageUrl: String? = null,
+    @SerializedName(value = "wholesale_price", alternate = ["wholesalePrice"]) val wholesalePrice: Double? = null,
+    @SerializedName(value = "wholesale_quantity", alternate = ["wholesaleQuantity"]) val wholesaleQuantity: Double? = 1.0,
+    @SerializedName(value = "batch_number", alternate = ["batchNumber"]) val batchNumber: String? = null,
+    @SerializedName(value = "expiry_date", alternate = ["expiryDate"]) val expiryDate: String? = null,
+    @SerializedName(value = "show_in_online_store", alternate = ["showInOnlineStore"]) val showInOnlineStore: Boolean? = true
 )
 
 data class ApiCreateProductRequest(
@@ -83,7 +89,13 @@ data class ApiCreateProductRequest(
     @SerializedName("is_tax_inclusive") val isTaxInclusive: Boolean = false,
     @SerializedName("stock_quantity") val stockQuantity: Double = 0.0,
     @SerializedName("min_stock_alert") val minStockAlert: Double = 5.0,
-    @SerializedName("purchase_price") val purchasePrice: Double = 0.0
+    @SerializedName("purchase_price") val purchasePrice: Double = 0.0,
+    @SerializedName("primary_image_url") val primaryImageUrl: String? = null,
+    @SerializedName("wholesale_price") val wholesalePrice: Double? = null,
+    @SerializedName("wholesale_quantity") val wholesaleQuantity: Double = 1.0,
+    @SerializedName("batch_number") val batchNumber: String? = null,
+    @SerializedName("expiry_date") val expiryDate: String? = null,
+    @SerializedName("show_in_online_store") val showInOnlineStore: Boolean = true
 )
 
 // --- Sequence Lease DTOs (Offline Billing Engine) ---
@@ -244,6 +256,7 @@ data class ApiCreateOrderRequest(
     @SerializedName("idempotency_key") val idempotencyKey: String? = null,
     @SerializedName("discount_percent") val discountPercent: Double? = 0.0,
     @SerializedName("discount_amount") val discountAmount: Double? = 0.0,
+    @SerializedName("delivery_address") val deliveryAddress: String? = null,
     @SerializedName("client_reference_id") val clientReferenceId: String? = null
 )
 
@@ -266,6 +279,7 @@ data class ApiOrderDto(
     @SerializedName("received_amount") val receivedAmount: Double? = null,
     @SerializedName("balance_due") val balanceDue: Double? = null,
     @SerializedName("fulfillment_status") val fulfillmentStatus: String? = "not_ready",
+    @SerializedName("delivery_address") val deliveryAddress: String? = null,
     @SerializedName("items") val items: List<ApiOrderItemDto>? = emptyList()
 )
 
@@ -282,6 +296,14 @@ data class ApiCreditSummaryResponse(
 )
 
 // --- Payment-In / Credit Ledger DTOs ---
+data class ApiPaymentAllocationItemDto(
+    @SerializedName("order_id") val orderId: Long,
+    val amount: Double,
+    @SerializedName("discount_amount") val discountAmount: Double? = 0.0,
+    @SerializedName("tds_amount") val tdsAmount: Double? = 0.0,
+    val notes: String? = null
+)
+
 data class ApiPaymentInRequest(
     @SerializedName("contact_id") val contactId: Long? = null,
     val phone: String? = null,
@@ -291,7 +313,8 @@ data class ApiPaymentInRequest(
     @SerializedName("order_id") val orderId: Long? = null,
     val notes: String? = null,
     @SerializedName("paid_at") val paidAt: String? = null,
-    @SerializedName("client_reference_id") val clientReferenceId: String? = null
+    @SerializedName("client_reference_id") val clientReferenceId: String? = null,
+    @SerializedName("allocations") val allocations: List<ApiPaymentAllocationItemDto>? = null
 )
 
 data class ApiPaymentInResponse(

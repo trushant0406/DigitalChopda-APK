@@ -42,6 +42,19 @@
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/file_paths" />
         </provider>
+
+        <receiver
+            android:name=".core.receiver.TestE2ESyncReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="com.digitalchopda.app.ACTION_CREATE_TEST_PARTY" />
+                <action android:name="com.digitalchopda.app.ACTION_CREATE_TEST_PAYMENT" />
+                <action android:name="com.digitalchopda.app.ACTION_CREATE_ALLOCATED_PAYMENT" />
+                <action android:name="com.digitalchopda.app.ACTION_CREATE_TEST_INVOICE" />
+                <action android:name="com.digitalchopda.app.ACTION_SYNC_NOW" />
+                <action android:name="com.digitalchopda.app.ACTION_SWITCH_COMPANY" />
+            </intent-filter>
+        </receiver>
     </application>
 
 </manifest>

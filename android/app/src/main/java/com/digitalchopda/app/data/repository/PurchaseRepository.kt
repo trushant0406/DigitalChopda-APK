@@ -260,13 +260,18 @@ class PurchaseRepository(
                         android.util.Log.w("PurchaseRepo", "Deferring sync for purchase ${p.purchaseNumber}: unresolved supplier contact ID")
                         continue
                     }
-                    val req = com.digitalchopda.app.core.network.ApiCreatePurchaseRequest(
-                        contactId = serverContactId,
-                        purchaseNumber = p.purchaseNumber,
-                        supplierInvoiceNo = p.supplierInvoiceNo.ifBlank { p.vendorBillNumber },
-                        paymentStatus = p.paymentStatus,
-                        paymentMethod = p.paymentMethod,
-                        items = items.map {
+                    val finalItems = if (items.isEmpty()) {
+                        listOf(
+                            com.digitalchopda.app.core.network.ApiPurchaseItemRequest(
+                                productName = "General Inward Item",
+                                quantity = 1.0,
+                                unitPrice = p.grandTotal,
+                                gstRate = 0.0,
+                                hsnCode = null
+                            )
+                        )
+                    } else {
+                        items.map {
                             com.digitalchopda.app.core.network.ApiPurchaseItemRequest(
                                 productName = it.productName,
                                 quantity = it.quantity,
@@ -274,7 +279,15 @@ class PurchaseRepository(
                                 gstRate = it.gstRate,
                                 hsnCode = it.hsnCode
                             )
-                        },
+                        }
+                    }
+                    val req = com.digitalchopda.app.core.network.ApiCreatePurchaseRequest(
+                        contactId = serverContactId,
+                        purchaseNumber = p.purchaseNumber,
+                        supplierInvoiceNo = p.supplierInvoiceNo.ifBlank { p.vendorBillNumber },
+                        paymentStatus = p.paymentStatus,
+                        paymentMethod = p.paymentMethod,
+                        items = finalItems,
                         notes = p.notes,
                         clientReferenceId = p.clientReferenceId
                     )
@@ -369,6 +382,31 @@ class PurchaseRepository(
                     }
                     syncedCount++
                 }
+
+                // Authoritative Scoped Pruning: delete stale local purchases not on server for companyId
+                val remoteServerIds = remotePurchases.map { it.id }.toSet()
+                val localPurchases = db.purchaseDao().getAllPurchasesSync(companyId)
+                val stalePurchases = localPurchases.filter {
+                    it.companyId == companyId &&
+                    it.serverPurchaseId != null &&
+                    it.serverPurchaseId !in remoteServerIds
+                }
+                for (sp in stalePurchases) {
+                    db.purchaseDao().deletePurchase(sp.id)
+                }
+
+                // Authoritative Scoped Deduplication
+                val remainingPurchases = db.purchaseDao().getAllPurchasesSync(companyId)
+                val grouped = remainingPurchases.filter { it.serverPurchaseId != null }.groupBy { it.serverPurchaseId!! }
+                for ((_, duplicates) in grouped) {
+                    if (duplicates.size > 1) {
+                        val sorted = duplicates.sortedByDescending { it.id }
+                        for (dup in sorted.drop(1)) {
+                            db.purchaseDao().deletePurchase(dup.id)
+                        }
+                    }
+                }
+
                 Result.success(syncedCount)
             } catch (e: Exception) {
                 Result.failure(e)

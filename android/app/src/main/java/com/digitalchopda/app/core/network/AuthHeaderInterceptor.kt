@@ -25,10 +25,10 @@ class AuthHeaderInterceptor(
          * Candidate local/development Depot hosts ordered by priority.
          */
         val DEV_CANDIDATE_HOSTS = listOf(
-            "100.99.250.0", // 1. Tailscale Dev Mesh
-            "10.74.4.212",  // 2. Office / Local Wi-Fi LAN
-            "10.0.2.2",     // 3. Android Emulator host loopback
-            "127.0.0.1",    // 4. Local loopback (with adb reverse)
+            "127.0.0.1",    // 1. Local loopback (with adb reverse - zero latency)
+            "100.99.250.0", // 2. Tailscale Dev Mesh
+            "10.74.4.212",  // 3. Office / Local Wi-Fi LAN
+            "10.0.2.2",     // 4. Android Emulator host loopback
             "localhost"
         )
 

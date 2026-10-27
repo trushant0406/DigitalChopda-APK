@@ -85,6 +85,12 @@ class CompanyRepository(
         db.companyDao().deactivateAll()
         db.companyDao().setActiveCompany(companyId)
         tokenStorage.setActiveCompanyId(companyId)
+        try {
+            com.digitalchopda.app.core.network.RealtimeEventSubscriber.restartForCompany(
+                com.digitalchopda.app.DigitalChopdaApplication.instance,
+                companyId
+            )
+        } catch (_: Exception) {}
     }
 
     suspend fun addCompany(company: Company): Long {
@@ -372,6 +378,31 @@ class BillingRepository(
                     }
                     syncedCount++
                 }
+
+                // 🧹 Authoritative Reconciliation: Prune stale or reseeded invoices
+                val currentInvoices = db.invoiceDao().getAllInvoicesSync(companyId)
+                val remoteOrderIds = remoteOrders.map { it.id }.toSet()
+                val staleInvoices = currentInvoices.filter {
+                    it.companyId == companyId && (
+                        (it.serverOrderId != null && it.serverOrderId !in remoteOrderIds && it.syncStatus == "SYNCED") ||
+                        (it.serverOrderId == null && it.syncStatus == "SYNCED")
+                    )
+                }
+                for (si in staleInvoices) {
+                    db.invoiceDao().deleteInvoice(si.id)
+                }
+
+                val remainingInvoices = db.invoiceDao().getAllInvoicesSync(companyId)
+                val groupedInvoices = remainingInvoices.filter { it.serverOrderId != null }.groupBy { it.serverOrderId!! }
+                for ((_, duplicates) in groupedInvoices) {
+                    if (duplicates.size > 1) {
+                        val sorted = duplicates.sortedByDescending { it.id }
+                        for (dup in sorted.drop(1)) {
+                            db.invoiceDao().deleteInvoice(dup.id)
+                        }
+                    }
+                }
+
                 Result.success(syncedCount)
             } catch (e: Exception) {
                 android.util.Log.e("BillingRepository", "Error syncing orders/invoices from server", e)
@@ -1038,6 +1069,7 @@ class BillingRepository(
                     db.customerDao().getCustomerById(pmt.customerId)
                 } else null
 
+                val resolvedPhone = pmt.customerPhone.ifBlank { resolvedContact?.phone ?: "" }
                 val resolvedContactId = pmt.serverContactId ?: resolvedContact?.serverContactId ?: pmt.customerId
 
                 val isDebit = !pmt.isJama // true = You Got (Credit), false = You Gave (Debit)
@@ -1071,8 +1103,8 @@ class BillingRepository(
                 } else {
                     val req = ApiPaymentInRequest(
                         contactId = resolvedContactId,
-                        phone = pmt.customerPhone.ifBlank { null },
-                        name = pmt.customerName.ifBlank { null },
+                        phone = resolvedPhone.ifBlank { null },
+                        name = pmt.customerName.ifBlank { resolvedContact?.name },
                         amount = pmt.amount,
                         paymentMode = pmt.paymentMode.lowercase(),
                         orderId = resolvedOrderId,
@@ -1092,6 +1124,14 @@ class BillingRepository(
                             syncStatus = "SYNCED"
                         )
                         syncedCount++
+                    } else if (res.code() == 404 && resolvedPhone.isBlank() && pmt.customerName.isBlank()) {
+                        // Orphaned payment voucher from older test seed with no customer details - prune to prevent deadlock
+                        db.paymentDao().markSynced(
+                            id = pmt.id,
+                            serverId = 0L,
+                            receiptNumber = pmt.receiptNumber,
+                            syncStatus = "SYNCED"
+                        )
                     }
                 }
             } catch (e: Exception) {
@@ -1475,7 +1515,8 @@ class CustomerRepository(
         notes: String,
         invoiceId: Long? = null,
         orderId: Long? = null,
-        invoiceNumber: String? = null
+        invoiceNumber: String? = null,
+        allocations: List<com.digitalchopda.app.core.network.ApiPaymentAllocationItemDto>? = null
     ): Long {
         val paymentId = db.withTransaction {
             val customer = db.customerDao().getCustomerById(customerId) ?: return@withTransaction -1L
@@ -1485,7 +1526,24 @@ class CustomerRepository(
             var targetOrderId = orderId
             var targetInvoiceNumber = invoiceNumber ?: ""
 
-            if (targetInvoiceId != null) {
+            if (!allocations.isNullOrEmpty()) {
+                val matchedNumbers = mutableListOf<String>()
+                for (item in allocations) {
+                    val invoice = db.invoiceDao().getInvoiceByServerOrderId(item.orderId)
+                        ?: db.invoiceDao().getInvoiceById(item.orderId)
+                    if (invoice != null) {
+                        matchedNumbers.add(invoice.invoiceNumber)
+                        val newPaidAmount = invoice.paidAmount + item.amount
+                        val newStatus = if (newPaidAmount >= (invoice.grandTotal - 0.001)) "PAID" else "PARTIAL"
+                        db.invoiceDao().updatePaidAmountAndStatus(invoice.id, newPaidAmount, newStatus)
+                        if (targetInvoiceId == null) targetInvoiceId = invoice.id
+                        if (targetOrderId == null) targetOrderId = invoice.serverOrderId
+                    }
+                }
+                if (matchedNumbers.isNotEmpty()) {
+                    targetInvoiceNumber = matchedNumbers.joinToString(", ")
+                }
+            } else if (targetInvoiceId != null) {
                 val invoice = db.invoiceDao().getInvoiceById(targetInvoiceId)
                 if (invoice != null) {
                     if (targetInvoiceNumber.isBlank()) {
@@ -1524,7 +1582,8 @@ class CustomerRepository(
                 syncStatus = "PENDING_SYNC",
                 invoiceId = targetInvoiceId,
                 orderId = targetOrderId,
-                invoiceNumber = targetInvoiceNumber
+                invoiceNumber = targetInvoiceNumber,
+                isSettlement = !allocations.isNullOrEmpty() || targetInvoiceId != null
             )
             val insertedId = db.paymentDao().insertPayment(payment)
             val delta = if (isJama) -amount else amount
@@ -1547,7 +1606,8 @@ class CustomerRepository(
                             paymentMode = paymentMode.lowercase(),
                             orderId = pmt.orderId,
                             notes = notes.ifBlank { "Mobile Payment In" },
-                            paidAt = null
+                            paidAt = null,
+                            allocations = allocations
                         )
                         val res = apiService.createPaymentIn(req)
                         if (res.isSuccessful && res.body() != null) {
@@ -1638,7 +1698,7 @@ class CustomerRepository(
                 try {
                     val req = com.digitalchopda.app.core.network.ApiCreateContactRequest(
                         name = u.name,
-                        phone = u.phone,
+                        phone = com.digitalchopda.app.util.PhoneSanitizer.normalize(u.phone),
                         partyType = u.partyType,
                         partyTag = u.partyTag,
                         openingBalance = u.openingBalance,
@@ -1700,6 +1760,27 @@ class CustomerRepository(
                     )
                     db.customerDao().insertCustomer(entity)
                 }
+
+                // 🧹 Authoritative Reconciliation: Prune stale or reseeded parties that no longer exist on Central Depot
+                val remoteServerIds = contacts.map { it.id }.toSet()
+                val currentLocal = db.customerDao().getCustomersSync(companyId)
+                val stale = currentLocal.filter { it.serverContactId != null && it.serverContactId !in remoteServerIds }
+                for (s in stale) {
+                    db.customerDao().deleteCustomer(s.id)
+                }
+
+                // Deduplicate local records sharing the same serverContactId
+                val remaining = db.customerDao().getCustomersSync(companyId)
+                val groupedByServerId = remaining.filter { it.serverContactId != null }.groupBy { it.serverContactId!! }
+                for ((_, duplicates) in groupedByServerId) {
+                    if (duplicates.size > 1) {
+                        val sorted = duplicates.sortedByDescending { it.id }
+                        for (dup in sorted.drop(1)) {
+                            db.customerDao().deleteCustomer(dup.id)
+                        }
+                    }
+                }
+
                 Result.success(contacts.size)
             } else {
                 Result.failure(Exception("Failed to fetch contacts: ${res.code()}"))
@@ -1993,6 +2074,31 @@ class QuotationRepository(
                     }
                     syncedCount++
                 }
+
+                // Authoritative Scoped Pruning: delete stale local quotations not on server for companyId
+                val remoteServerIds = remoteQuotations.map { it.id }.toSet()
+                val localQuotations = db.quotationDao().getAllQuotationsSync(companyId)
+                val staleQuotations = localQuotations.filter {
+                    it.companyId == companyId &&
+                    it.serverQuotationId != null &&
+                    it.serverQuotationId !in remoteServerIds
+                }
+                for (sq in staleQuotations) {
+                    db.quotationDao().deleteQuotation(sq.id)
+                }
+
+                // Authoritative Scoped Deduplication
+                val remainingQuotations = db.quotationDao().getAllQuotationsSync(companyId)
+                val grouped = remainingQuotations.filter { it.serverQuotationId != null }.groupBy { it.serverQuotationId!! }
+                for ((_, duplicates) in grouped) {
+                    if (duplicates.size > 1) {
+                        val sorted = duplicates.sortedByDescending { it.id }
+                        for (dup in sorted.drop(1)) {
+                            db.quotationDao().deleteQuotation(dup.id)
+                        }
+                    }
+                }
+
                 Result.success(syncedCount)
             } catch (e: Exception) {
                 android.util.Log.e("QuotationRepository", "Error syncing quotations from server", e)
@@ -2337,6 +2443,31 @@ class CreditNoteRepository(
                     }
                     syncedCount++
                 }
+
+                // Authoritative Scoped Pruning: delete stale local credit notes not on server for companyId
+                val remoteServerIds = remoteList.map { it.id }.toSet()
+                val localCreditNotes = db.creditNoteDao().getAllCreditNotesSync(companyId)
+                val staleCreditNotes = localCreditNotes.filter {
+                    it.companyId == companyId &&
+                    it.serverCreditNoteId != null &&
+                    it.serverCreditNoteId !in remoteServerIds
+                }
+                for (scn in staleCreditNotes) {
+                    db.creditNoteDao().deleteCreditNote(scn.id)
+                }
+
+                // Authoritative Scoped Deduplication
+                val remainingCreditNotes = db.creditNoteDao().getAllCreditNotesSync(companyId)
+                val grouped = remainingCreditNotes.filter { it.serverCreditNoteId != null }.groupBy { it.serverCreditNoteId!! }
+                for ((_, duplicates) in grouped) {
+                    if (duplicates.size > 1) {
+                        val sorted = duplicates.sortedByDescending { it.id }
+                        for (dup in sorted.drop(1)) {
+                            db.creditNoteDao().deleteCreditNote(dup.id)
+                        }
+                    }
+                }
+
                 Result.success(syncedCount)
             } catch (e: Exception) {
                 Result.failure(e)
@@ -2393,10 +2524,41 @@ class ProductRepository(
                         version = existing?.version ?: 1,
                         syncStatus = "SYNCED",
                         serverProductId = p.id,
+                        primaryImageUrl = p.primaryImageUrl ?: existing?.primaryImageUrl,
+                        wholesalePrice = p.wholesalePrice ?: existing?.wholesalePrice,
+                        wholesaleQuantity = p.wholesaleQuantity ?: existing?.wholesaleQuantity ?: 1.0,
+                        batchNumber = p.batchNumber ?: existing?.batchNumber,
+                        expiryDate = p.expiryDate ?: existing?.expiryDate,
+                        showInOnlineStore = p.showInOnlineStore ?: existing?.showInOnlineStore ?: true,
                         createdAt = existing?.createdAt ?: System.currentTimeMillis()
                     )
                     db.productDao().upsertProduct(entity)
                 }
+
+                // 🧹 Authoritative Reconciliation: Prune stale or reseeded products
+                val currentProducts = db.productDao().getAllProductsSync(companyId)
+                val remoteProductIds = remoteList.map { it.id }.toSet()
+                val staleProducts = currentProducts.filter {
+                    it.companyId == companyId && (
+                        (it.serverProductId != null && it.serverProductId !in remoteProductIds && it.syncStatus == "SYNCED") ||
+                        (it.serverProductId == null && it.syncStatus == "SYNCED")
+                    )
+                }
+                for (sp in staleProducts) {
+                    db.productDao().deleteProduct(sp.id)
+                }
+
+                val remainingProd = db.productDao().getAllProductsSync(companyId)
+                val groupedProducts = remainingProd.filter { it.serverProductId != null }.groupBy { it.serverProductId!! }
+                for ((_, duplicates) in groupedProducts) {
+                    if (duplicates.size > 1) {
+                        val sorted = duplicates.sortedByDescending { it.id }
+                        for (dup in sorted.drop(1)) {
+                            db.productDao().deleteProduct(dup.id)
+                        }
+                    }
+                }
+
                 Result.success(remoteList.size)
             } else {
                 Result.failure(Exception("Failed to fetch products: ${res.code()}"))
@@ -2426,7 +2588,13 @@ class ProductRepository(
             minStockAlert = product.minStockAlert,
             purchasePrice = product.purchasePrice,
             sku = product.sku?.trim()?.ifBlank { null },
-            barcode = product.barcode?.trim()?.ifBlank { null }
+            barcode = product.barcode?.trim()?.ifBlank { null },
+            primaryImageUrl = product.primaryImageUrl,
+            wholesalePrice = product.wholesalePrice,
+            wholesaleQuantity = product.wholesaleQuantity,
+            batchNumber = product.batchNumber,
+            expiryDate = product.expiryDate,
+            showInOnlineStore = product.showInOnlineStore
         )
         return try {
             val id = db.productDao().insertProduct(entity)
@@ -2441,7 +2609,13 @@ class ProductRepository(
                         sku = entity.sku,
                         stockQuantity = entity.stockQuantity,
                         minStockAlert = entity.minStockAlert,
-                        purchasePrice = entity.purchasePrice
+                        purchasePrice = entity.purchasePrice,
+                        primaryImageUrl = product.primaryImageUrl,
+                        wholesalePrice = product.wholesalePrice,
+                        wholesaleQuantity = product.wholesaleQuantity,
+                        batchNumber = product.batchNumber,
+                        expiryDate = product.expiryDate,
+                        showInOnlineStore = product.showInOnlineStore
                     )
                     val remoteRes = apiService.createProduct(req)
                     if (remoteRes.isSuccessful && remoteRes.body() != null) {
@@ -2481,6 +2655,12 @@ class ProductRepository(
             purchasePrice = product.purchasePrice,
             sku = product.sku?.trim()?.ifBlank { null },
             barcode = product.barcode?.trim()?.ifBlank { null },
+            primaryImageUrl = product.primaryImageUrl ?: existingEntity?.primaryImageUrl,
+            wholesalePrice = product.wholesalePrice ?: existingEntity?.wholesalePrice,
+            wholesaleQuantity = product.wholesaleQuantity,
+            batchNumber = product.batchNumber ?: existingEntity?.batchNumber,
+            expiryDate = product.expiryDate ?: existingEntity?.expiryDate,
+            showInOnlineStore = product.showInOnlineStore,
             version = (existingEntity?.version ?: 1) + 1,
             serverProductId = existingEntity?.serverProductId,
             createdAt = product.createdAt
@@ -2493,7 +2673,18 @@ class ProductRepository(
                         name = trimmedName,
                         defaultPrice = product.defaultPrice,
                         hsnCode = product.hsnCode?.trim()?.ifBlank { null },
-                        gstRate = product.gstRate
+                        gstRate = product.gstRate,
+                        barcode = entity.barcode,
+                        sku = entity.sku,
+                        stockQuantity = entity.stockQuantity,
+                        minStockAlert = entity.minStockAlert,
+                        purchasePrice = entity.purchasePrice,
+                        primaryImageUrl = entity.primaryImageUrl,
+                        wholesalePrice = entity.wholesalePrice,
+                        wholesaleQuantity = entity.wholesaleQuantity,
+                        batchNumber = entity.batchNumber,
+                        expiryDate = entity.expiryDate,
+                        showInOnlineStore = entity.showInOnlineStore
                     )
                     apiService.updateProduct(existingEntity.serverProductId, req)
                 } catch (e: Exception) {
@@ -2595,8 +2786,13 @@ class ProductRepository(
             var count = 0
             for (adj in pending) {
                 try {
-                    val prod = db.productDao().getProductById(adj.productId) ?: continue
-                    val serverProdId = prod.serverProductId ?: continue
+                    val prod = db.productDao().getProductById(adj.productId)
+                    if (prod == null || prod.serverProductId == null) {
+                        // Orphaned local adjustment without server product - prune to clear outbox
+                        db.stockAdjustmentDao().markAdjustmentSynced(adj.id, "SYNCED")
+                        continue
+                    }
+                    val serverProdId = prod.serverProductId
                     val req = com.digitalchopda.app.core.network.ApiStockAdjustmentRequest(
                         productId = serverProdId,
                         adjustmentType = adj.adjustmentType,
@@ -2605,9 +2801,9 @@ class ProductRepository(
                         notes = adj.notes
                     )
                     val res = api.adjustStock(req)
-                    if (res.isSuccessful) {
+                    if (res.isSuccessful || res.code() == 404) {
                         db.stockAdjustmentDao().markAdjustmentSynced(adj.id, "SYNCED")
-                        count++
+                        if (res.isSuccessful) count++
                     }
                 } catch (e: Exception) {
                     android.util.Log.e("ProductRepo", "Failed to sync adjustment ${adj.id}: ${e.message}")
@@ -2926,6 +3122,12 @@ fun ProductEntity.toDomain() = Product(
     purchasePrice = purchasePrice,
     sku = sku,
     barcode = barcode,
+    primaryImageUrl = primaryImageUrl,
+    wholesalePrice = wholesalePrice,
+    wholesaleQuantity = wholesaleQuantity,
+    batchNumber = batchNumber,
+    expiryDate = expiryDate,
+    showInOnlineStore = showInOnlineStore,
     createdAt = createdAt
 )
 

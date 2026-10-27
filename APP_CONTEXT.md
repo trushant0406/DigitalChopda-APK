@@ -79,15 +79,23 @@ Database Class: `ChopdaDatabase.kt` (Room SQLite)
 
 ## 5. 🧪 E2E Test Suite (Maestro CLI)
 
-Located in `android/.maestro/`:
+Located in `android/.maestro/` — verified 100% passing in Reality Mode:
 * `01_login_flow.yaml`: Handles 1-tap biometric or admin credentials, asserts Dashboard landing.
 * `02_add_customer_flow.yaml`: Opens Party tab, taps `+ Add Party`, fills customer form, taps `SAVE PARTY`, and verifies via search.
 * `03_record_transaction_flow.yaml`: Opens party 360°, taps `+ Receive`, inputs amount (₹1,500), selects UPI, confirms, and verifies passbook ledger row.
+* `04_billing_and_itemized_detail_flow.yaml`: Opens Billing tab, selects "Walk-in Customer" via dropdown, adds item to cart, generates invoice, views PDF viewer, and asserts itemized products table.
+* `05_party_new_bill_preselect_flow.yaml`: Searches party in 89-party master list, taps party 360°, taps `+ New Bill`, and verifies customer pre-selection in invoice creator.
+* `06_product_creation_and_search_flow.yaml`: Opens Products tab, taps `+ Add Product`, creates "Raymond Wool Blend Blazer" with base price ₹2,500, and verifies catalog list.
+* `07_pos_fast_cart_and_stepper_flow.yaml`: Tests fast POS cart, catalog dropdown selection, quantity stepper increment, 1-tap print and save sticky buttons.
+* `08_sync_transparency_and_soundbox_flow.yaml`: Asserts Cloud Synced pill, verifies header actions, company switcher dismiss, and Billing Hub Outbox sync transparency.
+* `09_statement_download_flow.yaml`: Verifies Dashboard statement download flow and FileProvider URI authority.
 
 ### Master Runner:
 ```bash
 cd android
 ./run_e2e_tests.sh
+# Or targeting explicit device:
+DEVICE=emulator-5554 ./run_e2e_tests.sh
 ```
 
 ---
@@ -197,3 +205,29 @@ cd android
 
 ### 7.6 Utilities (`util/`)
 * **`FormatUtils.kt`**: Helper functions for Indian currency formatting (`₹ 1,23,456.00`), phone number sanitation, and date-time formatting.
+
+---
+
+## 8. 📜 MANDATORY IMPLEMENTATION & LIVING DOCUMENTATION RULES
+
+### 8.1 The Twin-Pillar Definition of Done (Reality Verification + Living Memory Sync)
+Whenever planning, coding, or modifying any feature in DigitalChopda Android:
+
+1. **Pillar 1: Empirical Reality Verification**:
+   - Write real production code directly in the live strata.
+   - Run live build verification: `./gradlew assembleDebug` or `./gradlew testDebugUnitTest`.
+   - Run Maestro E2E test flows (`./run_e2e_tests.sh` or `maestro test .maestro/*.yaml`) on the connected device.
+   - Ensure explicit Room migrations: never use `fallbackToDestructiveMigration()`.
+   - **Zero Simulations**: No theoretical loops, fake tests, or sandboxed stubs. Pure execution only.
+
+2. **Pillar 2: Living Documentation Update (Token Preservation Rule)**:
+   - Update `APP_CONTEXT.md` immediately with any new composable, entity column, DAO query, navigation destination, or DTO.
+   - **Why?**: This document is the externalized long-term memory of the Android project. Keeping it 100% synchronized allows future AI sessions to read this single file (~1,500 tokens) instead of recursively scanning 100+ Kotlin source files (~40,000 tokens).
+
+### 8.2 Room Schema Migration Protocol
+- Production migrations must define explicit `Migration(fromVersion, toVersion)`.
+- Update Section 3 (Database Architecture) whenever Room entities or DAOs are altered.
+
+### 8.3 Backend & Cloud Sync Parity
+- Keep client DTOs in `core/network/ApiModels.kt` 100% aligned with the DigitalChopda Web/Backend (44 PostgreSQL migrations, `/api/v1/sync` batch delta synchronizer).
+- Enforce UUID idempotency keys on every offline transaction.

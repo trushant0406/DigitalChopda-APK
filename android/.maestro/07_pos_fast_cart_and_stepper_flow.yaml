@@ -49,15 +49,22 @@ appId: com.digitalchopda.app
 
 - runFlow:
     when:
-      visible: ".*\\+ ADD ITEM FROM CATALOG.*"
       notVisible: ".*ITEMS / SERVICES \\([1-9]\\).*"
     commands:
-      - tapOn: ".*\\+ ADD ITEM FROM CATALOG.*"
+      - runFlow:
+          when:
+            visible: ".*\\+ Add Product.*|.*Add Product / Line Item.*|.*\\+ ADD ITEM FROM CATALOG.*"
+          commands:
+            - tapOn:
+                text: ".*\\+ Add Product.*|.*Add Product / Line Item.*|.*\\+ ADD ITEM FROM CATALOG.*"
       - extendedWaitUntil:
           visible: "Select product from catalog…"
           timeout: 5000
       - tapOn: "Select product from catalog…"
-      - tapOn: ".*Raymond.*|.*Saree.*|.*Blazer.*"
+      - extendedWaitUntil:
+          visible: ".*APC.*|.*Anker.*|.*Boat.*|.*Raymond.*|.*Saree.*|.*Blazer.*"
+          timeout: 5000
+      - tapOn: ".*APC.*|.*Anker.*|.*Boat.*|.*Raymond.*|.*Saree.*|.*Blazer.*"
       - tapOn: "ADD ITEM"
 
 # 6. Verify line item appears and stepper functions

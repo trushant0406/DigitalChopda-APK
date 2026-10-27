@@ -167,6 +167,12 @@ data class ProductEntity(
     val version: Int = 1,
     val syncStatus: String = "SYNCED",
     val serverProductId: Long? = null,
+    val primaryImageUrl: String? = null,
+    val wholesalePrice: Double? = null,
+    val wholesaleQuantity: Double = 1.0,
+    val batchNumber: String? = null,
+    val expiryDate: String? = null,
+    val showInOnlineStore: Boolean = true,
     val createdAt: Long = System.currentTimeMillis()
 )
 

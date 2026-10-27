@@ -92,6 +92,9 @@ interface InvoiceDao {
     @Query("SELECT SUM(grandTotal) FROM invoices WHERE companyId = :companyId")
     suspend fun getTotalSales(companyId: Long): Double?
 
+    @Query("SELECT * FROM invoices WHERE companyId = :companyId")
+    suspend fun getAllInvoicesSync(companyId: Long): List<InvoiceEntity>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertInvoice(invoice: InvoiceEntity): Long
 
@@ -273,6 +276,9 @@ interface QuotationDao {
     @Query("SELECT COUNT(*) FROM quotations WHERE companyId = :companyId")
     suspend fun getQuotationCount(companyId: Long): Int
 
+    @Query("SELECT * FROM quotations WHERE companyId = :companyId")
+    suspend fun getAllQuotationsSync(companyId: Long): List<QuotationEntity>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertQuotation(quotation: QuotationEntity): Long
 
@@ -377,6 +383,9 @@ interface PurchaseDao {
 
     @Query("SELECT * FROM purchases WHERE purchaseNumber = :purchaseNumber LIMIT 1")
     suspend fun getPurchaseByNumber(purchaseNumber: String): PurchaseEntity?
+
+    @Query("SELECT * FROM purchases WHERE companyId = :companyId")
+    suspend fun getAllPurchasesSync(companyId: Long): List<PurchaseEntity>
 }
 
 @Dao
@@ -419,6 +428,9 @@ interface ProductDao {
 
     @Query("SELECT COUNT(*) FROM products WHERE companyId = :companyId")
     suspend fun getProductCountSync(companyId: Long): Int
+
+    @Query("SELECT * FROM products WHERE companyId = :companyId")
+    suspend fun getAllProductsSync(companyId: Long): List<ProductEntity>
 }
 
 @Dao
@@ -437,6 +449,9 @@ interface CreditNoteDao {
 
     @Query("SELECT COUNT(*) FROM credit_notes WHERE companyId = :companyId")
     suspend fun getCreditNoteCount(companyId: Long): Int
+
+    @Query("SELECT * FROM credit_notes WHERE companyId = :companyId")
+    suspend fun getAllCreditNotesSync(companyId: Long): List<CreditNoteEntity>
 
     @Query("SELECT SUM(totalAmount) FROM credit_notes WHERE companyId = :companyId AND status = 'ACTIVE'")
     suspend fun getTotalRefunds(companyId: Long): Double?

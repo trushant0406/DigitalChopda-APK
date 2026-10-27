@@ -21,7 +21,8 @@ captures/
 # Binary Outputs & Artifacts
 *.apk
 *.aab
-apk/
+apk/*
+!apk/DigitalChopda-release.apk
 
 # Maestro E2E
 **/.maestro/screenshots/

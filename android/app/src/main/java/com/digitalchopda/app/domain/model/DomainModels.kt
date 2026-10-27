@@ -94,6 +94,12 @@ data class Product(
     val purchasePrice: Double = 0.0,
     val sku: String? = null,
     val barcode: String? = null,
+    val primaryImageUrl: String? = null,
+    val wholesalePrice: Double? = null,
+    val wholesaleQuantity: Double = 1.0,
+    val batchNumber: String? = null,
+    val expiryDate: String? = null,
+    val showInOnlineStore: Boolean = true,
     val createdAt: Long = System.currentTimeMillis()
 )
 

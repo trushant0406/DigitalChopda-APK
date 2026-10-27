@@ -19,7 +19,7 @@ appId: com.digitalchopda.app
       - tapOn: "^Chopda$"
 
 - extendedWaitUntil:
-    visible: ".*Quick Entry.*|.*Cash Box.*|.*Search party.*"
+    visible: ".*You'll Get.*|.*Chopda.*|.*Parties.*|.*Quick Entry.*|.*Cash Box.*|.*Search party.*"
     timeout: 8000
 
 # 2. Tap on first party card or quick statement if visible

@@ -226,6 +226,21 @@ fun PartyDetailScreen(
                             Text("💬", fontSize = 18.sp)
                         }
 
+                        // Customer Payment Portal (CPP) Sharing
+                        IconButton(
+                            onClick = {
+                                val portalUrl = "https://app.digitalchopda.in/portal/${customer.phone}"
+                                val shareText = "Dear ${customer.name},\nView your real-time ledger statement and unpaid bills online:\n$portalUrl\n\nThank you,\n${activeCompany.firmName}"
+                                val intent = Intent(Intent.ACTION_SEND).apply {
+                                    type = "text/plain"
+                                    putExtra(Intent.EXTRA_TEXT, shareText)
+                                }
+                                context.startActivity(Intent.createChooser(intent, "Share Customer Portal (CPP)"))
+                            }
+                        ) {
+                            Text("🌐", fontSize = 18.sp)
+                        }
+
                         // Inward Purchase Action (Stock & Cargo Intake)
                         if (purchaseRepository != null) {
                             IconButton(
@@ -809,6 +824,30 @@ fun PartyDetailScreen(
                     showPaymentInDialog = false
                     invoiceForPayment = null
                     val againstText = if (selectedInvoice != null) " against ${selectedInvoice.invoiceNumber}" else ""
+                    Toast.makeText(context, "✅ Recorded + ${CurrencyFormatter.formatCurrency(amount)}$againstText Payment In", Toast.LENGTH_SHORT).show()
+                }
+            },
+            onConfirmWithAllocations = { amount, mode, notes, selectedInvoice, allocations ->
+                scope.launch {
+                    customerRepository.recordPayment(
+                        companyId = activeCompany.id,
+                        customerId = partyId,
+                        amount = amount,
+                        isJama = true,
+                        paymentMode = mode,
+                        notes = notes,
+                        invoiceId = selectedInvoice?.id,
+                        orderId = selectedInvoice?.serverOrderId,
+                        invoiceNumber = selectedInvoice?.invoiceNumber,
+                        allocations = allocations
+                    )
+                    showPaymentInDialog = false
+                    invoiceForPayment = null
+                    val againstText = if (!allocations.isNullOrEmpty()) {
+                        " (Allocated across ${allocations.size} bills)"
+                    } else if (selectedInvoice != null) {
+                        " against ${selectedInvoice.invoiceNumber}"
+                    } else ""
                     Toast.makeText(context, "✅ Recorded + ${CurrencyFormatter.formatCurrency(amount)}$againstText Payment In", Toast.LENGTH_SHORT).show()
                 }
             }

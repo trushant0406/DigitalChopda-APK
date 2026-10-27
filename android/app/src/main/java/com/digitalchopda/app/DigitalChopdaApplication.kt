@@ -126,6 +126,7 @@ class DigitalChopdaApplication : Application() {
         try {
             com.digitalchopda.app.data.work.InvoiceSyncWorker.schedulePeriodicSync(this)
             com.digitalchopda.app.core.network.InstantNetworkSyncMonitor.start(this)
+            com.digitalchopda.app.core.network.RealtimeEventSubscriber.start(this)
         } catch (_: Exception) {}
     }
 }

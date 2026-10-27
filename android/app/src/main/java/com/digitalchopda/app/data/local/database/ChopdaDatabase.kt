@@ -60,7 +60,7 @@ import kotlinx.coroutines.launch
         CreditNoteEntity::class,
         OutboxEntity::class
     ],
-    version = 16,
+    version = 17,
     exportSchema = false
 )
 abstract class ChopdaDatabase : RoomDatabase() {
@@ -269,6 +269,17 @@ abstract class ChopdaDatabase : RoomDatabase() {
             }
         }
 
+        val MIGRATION_16_17 = object : Migration(16, 17) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE products ADD COLUMN primaryImageUrl TEXT")
+                db.execSQL("ALTER TABLE products ADD COLUMN wholesalePrice REAL")
+                db.execSQL("ALTER TABLE products ADD COLUMN wholesaleQuantity REAL NOT NULL DEFAULT 1.0")
+                db.execSQL("ALTER TABLE products ADD COLUMN batchNumber TEXT")
+                db.execSQL("ALTER TABLE products ADD COLUMN expiryDate TEXT")
+                db.execSQL("ALTER TABLE products ADD COLUMN showInOnlineStore INTEGER NOT NULL DEFAULT 1")
+            }
+        }
+
         fun getInstance(context: Context): ChopdaDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
@@ -277,7 +288,7 @@ abstract class ChopdaDatabase : RoomDatabase() {
                     "digital_chopda_v1.db"
                 )
                     .setJournalMode(RoomDatabase.JournalMode.WRITE_AHEAD_LOGGING)
-                    .addMigrations(MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16)
+                    .addMigrations(MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16, MIGRATION_16_17)
                     .fallbackToDestructiveMigration()
                     .addCallback(object : Callback() {
                         override fun onOpen(db: SupportSQLiteDatabase) {

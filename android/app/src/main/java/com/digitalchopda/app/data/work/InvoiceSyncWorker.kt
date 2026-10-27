@@ -140,7 +140,7 @@ class InvoiceSyncWorker(
 
             WorkManager.getInstance(context).enqueueUniqueWork(
                 "${UNIQUE_WORK_NAME}_immediate",
-                ExistingWorkPolicy.REPLACE,
+                ExistingWorkPolicy.KEEP,
                 syncRequest
             )
         }

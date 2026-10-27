@@ -38,9 +38,35 @@ appId: com.digitalchopda.app
 - tapOn:
     text: ".*Walk-in Customer.*"
 
-# 5.1 Add product from 1-tap quick chip into clean empty cart
-- tapOn:
-    text: ".*\\+ ABC.*|.*\\+ Pure.*|.*\\+ Bandh.*|.*\\+ .*"
+# 5.1 Add product into cart
+- runFlow:
+    when:
+      visible: ".*\\+ ABC.*|.*\\+ Pure.*|.*\\+ Bandh.*"
+    commands:
+      - tapOn:
+          text: ".*\\+ ABC.*|.*\\+ Pure.*|.*\\+ Bandh.*"
+
+- runFlow:
+    when:
+      notVisible: ".*ITEMS / SERVICES \\(1\\).*"
+    commands:
+      - runFlow:
+          when:
+            notVisible: ".*Product / Description.*"
+          commands:
+            - tapOn:
+                text: ".*\\+ Add Product.*|.*\\+ .*"
+      - extendedWaitUntil:
+          visible: ".*Product / Description.*|.*Select product.*"
+          timeout: 5000
+      - tapOn:
+          text: ".*Product / Description.*"
+      - inputText: "Cotton Shirt"
+      - tapOn:
+          text: ".*Rate.*"
+      - inputText: "500"
+      - hideKeyboard
+      - tapOn: "ADD ITEM"
 
 - extendedWaitUntil:
     visible: ".*ITEMS / SERVICES \\(1\\).*"

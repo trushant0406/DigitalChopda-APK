@@ -9,25 +9,34 @@ appId: com.digitalchopda.app
     text: "^Party$"
 
 - extendedWaitUntil:
-    visible: ".*Ananya Fashion Hub.*|.*Ramesh Bhai Patel.*"
+    visible: ".*Search party.*|.*Active Party.*"
     timeout: 8000
 
-# 2. Tap on customer to open Party 360 Detail
+# 2. Search for Ramesh Bhai Patel
 - tapOn:
-    text: ".*Ananya Fashion Hub.*|.*Ramesh Bhai Patel.*"
+    text: ".*Search party.*"
+- inputText: "Ramesh"
+
+- extendedWaitUntil:
+    visible: ".*Ramesh Bhai Patel.*"
+    timeout: 8000
+
+# 3. Tap on customer to open Party 360 Detail
+- tapOn:
+    text: ".*Ramesh Bhai Patel.*"
 
 - extendedWaitUntil:
     visible: ".*\\+ New Bill.*"
     timeout: 8000
 
-# 3. Tap "+ New Bill"
+# 4. Tap "+ New Bill"
 - tapOn:
     text: ".*\\+ New Bill.*"
 
-# 4. Assert that invoice creator has opened and customer is pre-selected as the party!
+# 5. Assert that invoice creator has opened and customer is pre-selected as the party!
 - extendedWaitUntil:
-    visible: ".*Ananya Fashion Hub.*|.*Ramesh Bhai Patel.*"
+    visible: ".*Ramesh Bhai Patel.*"
     timeout: 8000
 
-- assertVisible: ".*Ananya Fashion Hub.*|.*Ramesh Bhai Patel.*"
+- assertVisible: ".*Ramesh Bhai Patel.*"
 - takeScreenshot: "05_party_preselected_new_bill_success"

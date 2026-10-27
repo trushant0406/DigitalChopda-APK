@@ -156,6 +156,10 @@ fun PartyScreen(
         InstantNetworkSyncMonitor.triggerManualSync(context)
         scope.launch {
             isSyncing = true
+            try {
+                DigitalChopdaApplication.instance.billingRepository.syncPendingPayments()
+                DigitalChopdaApplication.instance.productRepository.syncPendingStockAdjustments()
+            } catch (_: Exception) {}
             val result = customerRepository.syncContactsWithServer(activeCompany.id)
             isSyncing = false
             if (result.isSuccess) {
