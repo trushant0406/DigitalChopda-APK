@@ -75,6 +75,10 @@ data class InvoiceEntity(
     val fulfillmentStatus: String = "not_ready", // not_ready, ready, dispatched, delivered
     val whatsappSentCount: Int = 0,
     val lastWhatsappSentAt: Long? = null,
+    val irn: String? = null,
+    val ackNo: String? = null,
+    val signedQrCode: String? = null,
+    val ewayBillNo: String? = null,
     val createdAt: Long = System.currentTimeMillis()
 ) {
     val balanceDue: Double
@@ -172,6 +176,8 @@ data class ProductEntity(
     val wholesaleQuantity: Double = 1.0,
     val batchNumber: String? = null,
     val expiryDate: String? = null,
+    val hasBatches: Boolean = false,
+    val hasSerials: Boolean = false,
     val showInOnlineStore: Boolean = true,
     val createdAt: Long = System.currentTimeMillis()
 )
@@ -412,6 +418,55 @@ data class OutboxEntity(
     val lastError: String? = null,
     val createdAt: Long = System.currentTimeMillis(),
     val syncedAt: Long? = null
+)
+
+@Entity(
+    tableName = "batches",
+    indices = [
+        Index(value = ["companyId", "productId"]),
+        Index(value = ["batchNumber"])
+    ]
+)
+data class BatchEntity(
+    @PrimaryKey(autoGenerate = true)
+    val id: Long = 0,
+    val companyId: Long,
+    val productId: Long,
+    val batchNumber: String,
+    val expiryDate: Long? = null,
+    val manufacturingDate: Long? = null,
+    val mrp: Double = 0.0,
+    val purchasePrice: Double = 0.0,
+    val openingQuantity: Double = 0.0,
+    val currentQuantity: Double = 0.0,
+    val createdAt: Long = System.currentTimeMillis()
+)
+
+@Entity(
+    tableName = "delivery_challans",
+    indices = [
+        Index(value = ["companyId"]),
+        Index(value = ["challanNumber"])
+    ]
+)
+data class DeliveryChallanEntity(
+    @PrimaryKey(autoGenerate = true)
+    val id: Long = 0,
+    val companyId: Long,
+    val challanNumber: String,
+    val recipientName: String,
+    val recipientPhone: String? = null,
+    val shippingAddress: String? = null,
+    val dispatchDate: Long = System.currentTimeMillis(),
+    val transportMode: String = "road",
+    val vehicleNumber: String? = null,
+    val ewayBillNo: String? = null,
+    val totalQuantity: Double = 0.0,
+    val status: String = "out_for_delivery", // out_for_delivery, delivered, converted_to_invoice, cancelled
+    val orderId: Long? = null,
+    val itemsJson: String = "[]",
+    val syncStatus: String = "PENDING_SYNC",
+    val createdAt: Long = System.currentTimeMillis()
 )
 
 

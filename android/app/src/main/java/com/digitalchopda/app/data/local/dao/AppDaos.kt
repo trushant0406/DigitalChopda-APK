@@ -22,6 +22,8 @@ import com.digitalchopda.app.data.local.entity.QuotationEntity
 import com.digitalchopda.app.data.local.entity.StockAdjustmentEntity
 import com.digitalchopda.app.data.local.entity.SupplierEntity
 import com.digitalchopda.app.data.local.entity.OutboxEntity
+import com.digitalchopda.app.data.local.entity.BatchEntity
+import com.digitalchopda.app.data.local.entity.DeliveryChallanEntity
 import kotlinx.coroutines.flow.Flow
 
 @Dao
@@ -530,6 +532,36 @@ interface OutboxDao {
 
     @Query("DELETE FROM outbox_sync_queue WHERE status = 'SYNCED' AND syncedAt < :beforeTimestamp")
     suspend fun pruneSynced(beforeTimestamp: Long)
+}
+
+@Dao
+interface BatchDao {
+    @Query("SELECT * FROM batches WHERE productId = :productId ORDER BY expiryDate ASC")
+    fun getBatchesForProduct(productId: Long): Flow<List<BatchEntity>>
+
+    @Query("SELECT * FROM batches WHERE companyId = :companyId ORDER BY expiryDate ASC")
+    fun getAllBatches(companyId: Long): Flow<List<BatchEntity>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertBatch(batch: BatchEntity): Long
+
+    @Update
+    suspend fun updateBatch(batch: BatchEntity)
+}
+
+@Dao
+interface DeliveryChallanDao {
+    @Query("SELECT * FROM delivery_challans WHERE companyId = :companyId ORDER BY createdAt DESC")
+    fun getAllChallans(companyId: Long): Flow<List<DeliveryChallanEntity>>
+
+    @Query("SELECT * FROM delivery_challans WHERE id = :id")
+    suspend fun getChallanById(id: Long): DeliveryChallanEntity?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertChallan(challan: DeliveryChallanEntity): Long
+
+    @Update
+    suspend fun updateChallan(challan: DeliveryChallanEntity)
 }
 
 

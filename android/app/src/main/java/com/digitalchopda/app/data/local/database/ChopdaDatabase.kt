@@ -21,6 +21,8 @@ import com.digitalchopda.app.data.local.dao.QuotationDao
 import com.digitalchopda.app.data.local.dao.StockAdjustmentDao
 import com.digitalchopda.app.data.local.dao.SupplierDao
 import com.digitalchopda.app.data.local.dao.OutboxDao
+import com.digitalchopda.app.data.local.dao.BatchDao
+import com.digitalchopda.app.data.local.dao.DeliveryChallanDao
 import com.digitalchopda.app.data.local.entity.CompanyEntity
 import com.digitalchopda.app.data.local.entity.CreditNoteEntity
 import com.digitalchopda.app.data.local.entity.CustomerEntity
@@ -37,6 +39,8 @@ import com.digitalchopda.app.data.local.entity.QuotationEntity
 import com.digitalchopda.app.data.local.entity.StockAdjustmentEntity
 import com.digitalchopda.app.data.local.entity.SupplierEntity
 import com.digitalchopda.app.data.local.entity.OutboxEntity
+import com.digitalchopda.app.data.local.entity.BatchEntity
+import com.digitalchopda.app.data.local.entity.DeliveryChallanEntity
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -58,9 +62,11 @@ import kotlinx.coroutines.launch
         OrderRevisionEntity::class,
         ProductEntity::class,
         CreditNoteEntity::class,
-        OutboxEntity::class
+        OutboxEntity::class,
+        BatchEntity::class,
+        DeliveryChallanEntity::class
     ],
-    version = 17,
+    version = 18,
     exportSchema = false
 )
 abstract class ChopdaDatabase : RoomDatabase() {
@@ -80,6 +86,8 @@ abstract class ChopdaDatabase : RoomDatabase() {
     abstract fun stockAdjustmentDao(): StockAdjustmentDao
     abstract fun orderRevisionDao(): OrderRevisionDao
     abstract fun outboxDao(): OutboxDao
+    abstract fun batchDao(): BatchDao
+    abstract fun deliveryChallanDao(): DeliveryChallanDao
 
     companion object {
         @Volatile
@@ -280,6 +288,67 @@ abstract class ChopdaDatabase : RoomDatabase() {
             }
         }
 
+        val MIGRATION_17_18 = object : Migration(17, 18) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                // 1. Invoices E-Invoice & E-Way Bill fields
+                db.execSQL("ALTER TABLE invoices ADD COLUMN irn TEXT")
+                db.execSQL("ALTER TABLE invoices ADD COLUMN ackNo TEXT")
+                db.execSQL("ALTER TABLE invoices ADD COLUMN signedQrCode TEXT")
+                db.execSQL("ALTER TABLE invoices ADD COLUMN ewayBillNo TEXT")
+
+                // 2. Products Batches & Serials flags
+                db.execSQL("ALTER TABLE products ADD COLUMN hasBatches INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE products ADD COLUMN hasSerials INTEGER NOT NULL DEFAULT 0")
+
+                // 3. Batches table
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS batches (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        companyId INTEGER NOT NULL,
+                        productId INTEGER NOT NULL,
+                        batchNumber TEXT NOT NULL,
+                        expiryDate INTEGER,
+                        manufacturingDate INTEGER,
+                        mrp REAL NOT NULL DEFAULT 0.0,
+                        purchasePrice REAL NOT NULL DEFAULT 0.0,
+                        openingQuantity REAL NOT NULL DEFAULT 0.0,
+                        currentQuantity REAL NOT NULL DEFAULT 0.0,
+                        createdAt INTEGER NOT NULL DEFAULT 0
+                    )
+                    """.trimIndent()
+                )
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_batches_companyId_productId ON batches (companyId, productId)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_batches_batchNumber ON batches (batchNumber)")
+
+                // 4. Delivery Challans table
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS delivery_challans (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        companyId INTEGER NOT NULL,
+                        challanNumber TEXT NOT NULL,
+                        recipientName TEXT NOT NULL,
+                        recipientPhone TEXT,
+                        shippingAddress TEXT,
+                        dispatchDate INTEGER NOT NULL DEFAULT 0,
+                        transportMode TEXT NOT NULL DEFAULT 'road',
+                        vehicleNumber TEXT,
+                        ewayBillNo TEXT,
+                        totalQuantity REAL NOT NULL DEFAULT 0.0,
+                        status TEXT NOT NULL DEFAULT 'out_for_delivery',
+                        orderId INTEGER,
+                        itemsJson TEXT NOT NULL DEFAULT '[]',
+                        syncStatus TEXT NOT NULL DEFAULT 'PENDING_SYNC',
+                        createdAt INTEGER NOT NULL DEFAULT 0
+                    )
+                    """.trimIndent()
+                )
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_delivery_challans_companyId ON delivery_challans (companyId)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_delivery_challans_challanNumber ON delivery_challans (challanNumber)")
+            }
+        }
+
         fun getInstance(context: Context): ChopdaDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
@@ -288,7 +357,7 @@ abstract class ChopdaDatabase : RoomDatabase() {
                     "digital_chopda_v1.db"
                 )
                     .setJournalMode(RoomDatabase.JournalMode.WRITE_AHEAD_LOGGING)
-                    .addMigrations(MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16, MIGRATION_16_17)
+                    .addMigrations(MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16, MIGRATION_16_17, MIGRATION_17_18)
                     .fallbackToDestructiveMigration()
                     .addCallback(object : Callback() {
                         override fun onOpen(db: SupportSQLiteDatabase) {
