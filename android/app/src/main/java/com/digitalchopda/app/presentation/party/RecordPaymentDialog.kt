@@ -77,6 +77,7 @@ fun RecordPaymentDialog(
     onConfirm: (amount: Double, paymentMode: String, notes: String, selectedInvoice: InvoiceEntity?) -> Unit,
     onConfirmWithAllocations: ((amount: Double, paymentMode: String, notes: String, selectedInvoice: InvoiceEntity?, allocations: List<ApiPaymentAllocationItemDto>?) -> Unit)? = null
 ) {
+    val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
     var selectedInvoice by remember {
         mutableStateOf<InvoiceEntity?>(
             unpaidInvoices.firstOrNull { it.id == initialInvoiceId }
@@ -126,7 +127,14 @@ fun RecordPaymentDialog(
                         return@Button
                     }
                     isSaving = true
-                    SoundEffectsManager.playPaymentSuccessSound()
+                    try {
+                        haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
+                    } catch (_: Exception) {}
+                    SoundEffectsManager.announcePaymentReceived(
+                        amount = amount,
+                        customerName = partyName,
+                        isHindi = false
+                    )
                     if (isJama && isMultiBillMode && unpaidInvoices.size > 1) {
                         val allocationsList = unpaidInvoices.mapNotNull { inv ->
                             if (selectedInvoiceIds[inv.id] == true) {

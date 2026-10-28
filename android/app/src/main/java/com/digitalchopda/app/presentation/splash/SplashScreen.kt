@@ -276,22 +276,30 @@ fun SplashScreen(
             titleSlide.animateTo(0f, spring(dampingRatio = Spring.DampingRatioLowBouncy, stiffness = Spring.StiffnessMediumLow))
         }
 
-        // Stage 3: Dynamic Merchant Loading Steps
-        launch {
-            currentStatusIndex = 0
-            progressBarProgress.animateTo(0.35f, tween(400, easing = FastOutSlowInEasing))
-            delay(200L)
-            currentStatusIndex = 1
-            progressBarProgress.animateTo(0.78f, tween(400, easing = FastOutSlowInEasing))
-            delay(200L)
-            currentStatusIndex = 2
-            progressBarProgress.animateTo(1f, tween(350, easing = FastOutSlowInEasing))
-        }
-
-        delay(1650L)
+        // Stage 3: Dynamic Merchant Loading Steps with Adaptive Velocity
         val finalLoggedInState = startupInit.await()
-        delay(250L)
-        completeAndNavigate(finalLoggedInState)
+        if (finalLoggedInState) {
+            // Adaptive Velocity Mode for Active Merchant Session:
+            // Fast-track transition into dashboard in ~380ms
+            currentStatusIndex = 2
+            progressBarProgress.animateTo(1f, tween(150, easing = FastOutSlowInEasing))
+            delay(120L)
+            completeAndNavigate(true)
+        } else {
+            // Cold / Unauthenticated Session: Complete full auspicious stardust presentation
+            launch {
+                currentStatusIndex = 0
+                progressBarProgress.animateTo(0.35f, tween(300, easing = FastOutSlowInEasing))
+                delay(150L)
+                currentStatusIndex = 1
+                progressBarProgress.animateTo(0.78f, tween(300, easing = FastOutSlowInEasing))
+                delay(150L)
+                currentStatusIndex = 2
+                progressBarProgress.animateTo(1f, tween(250, easing = FastOutSlowInEasing))
+            }
+            delay(750L)
+            completeAndNavigate(false)
+        }
     }
 
     val statusTexts = listOf(

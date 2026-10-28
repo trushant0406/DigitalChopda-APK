@@ -150,6 +150,11 @@ fun ProductsScreen(
 
     val products by productRepository.getProducts(activeCompany.id).collectAsState(initial = emptyList())
     var searchQuery by remember { mutableStateOf("") }
+    var debouncedQuery by remember { mutableStateOf("") }
+    LaunchedEffect(searchQuery) {
+        kotlinx.coroutines.delay(150L)
+        debouncedQuery = searchQuery
+    }
     var selectedGstFilter by remember { mutableStateOf<Double?>(null) } // null = All
     var stockFilter by remember { mutableStateOf("ALL") } // "ALL", "LOW_STOCK", "OUT_OF_STOCK"
 
@@ -158,11 +163,11 @@ fun ProductsScreen(
     var productToDelete by remember { mutableStateOf<Product?>(null) }
     var productToAdjustStock by remember { mutableStateOf<Product?>(null) }
 
-    val filteredProducts = remember(products, searchQuery, selectedGstFilter, stockFilter) {
+    val filteredProducts = remember(products, debouncedQuery, selectedGstFilter, stockFilter) {
         products.filter { p ->
-            val matchesSearch = searchQuery.isBlank() ||
-                    p.name.contains(searchQuery, ignoreCase = true) ||
-                    (p.hsnCode?.contains(searchQuery, ignoreCase = true) == true)
+            val matchesSearch = debouncedQuery.isBlank() ||
+                    p.name.contains(debouncedQuery, ignoreCase = true) ||
+                    (p.hsnCode?.contains(debouncedQuery, ignoreCase = true) == true)
             val matchesGst = selectedGstFilter == null || p.gstRate == selectedGstFilter
             val matchesStock = when (stockFilter) {
                 "LOW_STOCK" -> p.stockQuantity <= p.minStockAlert && p.stockQuantity > 0.0

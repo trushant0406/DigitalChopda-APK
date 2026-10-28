@@ -438,7 +438,7 @@ fun CreateInvoiceScreen(
                                     pdfGenerator = pdfGenerator,
                                     isQuotation = isQuotationMode,
                                     onSuccess = { invoice, pdfFile, _ ->
-                                        SoundEffectsManager.playInvoiceCreatedSound()
+                                        SoundEffectsManager.announceInvoiceCreated(invoice.invoiceNumber, invoice.grandTotal)
                                         val docType = if (isQuotationMode) "quotation" else "invoice"
                                         val docTypeTitle = if (isQuotationMode) "Quotation" else "Tax Invoice"
                                         Toast.makeText(context, "$docTypeTitle ${invoice.invoiceNumber} Ready!", Toast.LENGTH_SHORT).show()

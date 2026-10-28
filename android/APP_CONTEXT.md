@@ -17,61 +17,6 @@
 
 ---
 
-## 1.5 🎨 Official Brand Design System & Vector Logo
-* **Component**: `DigitalChopdaLogo.kt` (`com.digitalchopda.app.core.designsystem`)
-* **Vector Geometry**:
-  * 3-Stop Linear Gradient Squircle: `#3B82F6` (Electric Blue) -> `#6366F1` (FinTech Indigo) -> `#10B981` (Emerald Green)
-  * Inner Specular White Border: `#FFFFFF` with 40% alpha
-  * Open White Chopda Ledger Book: Left page (`0.96f` alpha) and Right page (`0.92f` alpha)
-  * Deep Indigo Center Spine (`#4F46E5`)
-  * Left Page Glyph: Indian Rupee (`₹`) in FinTech Indigo (`#4F46E5`)
-  * Right Page Glyph: Dynamic Checkmark (`✓`) in Prosperity Emerald (`#10B981`)
-  * Wordmark: "Digital" (Slate 900 / Dark Navy) + "Chopda" (Royal Blue `#1D4ED8`) + "ERP" badge (`#10B981`)
-  * Sacred Invocation Pill: `卐 शुभ लाभ • श्री गणेशाय नमः 卐` (`#FFFBEB` surface, `#FDE68A` gold border)
-* **System Launcher Icons**:
-  * Adaptive / Square Icon: `res/drawable/ic_launcher.xml` (Squircle gradient with open book & glyphs)
-  * Round Icon: `res/drawable/ic_launcher_round.xml` (Circular gradient with open book & glyphs)
-  * Window Splash Screen: Surface white `#F8FAFC` background with official vector logo
-* **Splash Screen Sequence** (`SplashScreen.kt`):
-  * Radiant auspicious header pill (`卐 शुभ लाभ • श्री गणेशाय नमः 卐`)
-  * Central animated squircle logo mark (150dp) with breathing glow aura and stardust prosperity burst
-  * Title reveal with golden underline divider ("DIGITAL CHOPDA ERP")
-  * **High-Tech Bank-Grade Cryptographic Progress Card**:
-    * Floating Bento Glassmorphic squircle with ambient elevation & multi-tone gradient border (`#3B82F6` -> `#6366F1` -> `#10B981`)
-    * Top Telemetry: `256-BIT AES ENCRYPTED` security vault capsule, animated live radar beacon, and exact percentage badge
-    * Dynamic 3-stage security handshake:
-      1. Soft Blue Squircle + `Lock` icon: "✨ Opening Your Business Ledger..." / "Authenticating local hardware keystore"
-      2. Soft Indigo Squircle + `Security` shield: "🛡️ Verifying Bank-Grade Security..." / "Decrypting offline SQLiteCipher database"
-      3. Soft Emerald Squircle + `CheckCircle` icon: "🚀 Ready for Daily Vyapar • 100%" / "Zero-knowledge merchant session active"
-    * 7dp fluid neon progress track with traveling specular white laser shimmer sweep
-    * Micro-trust badges: `🛡️ DPDP 2023 Safe` • `🔒 SQLiteCipher` • `⚡ Offline First`
-    * Bottom sovereignty badge: `🇮🇳 Bank-Grade Merchant Protection • Made in Bharat`
-  * Clean fade-and-scale transition into Login or Dashboard
-* **Login & Registration Architecture** (`LoginRegisterScreen.kt`):
-  * **100% English Only**: All Hindi and Gujarati fluff removed from the authentication portal for maximum international and pan-India clarity.
-  * **Organic Splash-to-Login Hand-off Animation**:
-    * Vector logo emblem smoothly scales from 1.22f to 1.0f and glides from +45dp to its header resting position via spring physics.
-    * FinTech Bento Card slides up with a smooth vertical translation (+25dp -> 0dp) and fade-in (0f -> 1f).
-    * `NavGraph.kt` transition upgraded to a 400ms crossfade, eliminating abrupt screen hops.
-  * **Deep Obsidian Specular Canvas**:
-    * Fluid modern background with ambient radial blue/indigo specular glow matching the splash screen aesthetic.
-  * **Centerpiece Bento Auth Card**:
-    * High-contrast segmented switch (Sign In vs Create Account) with rounded pill animation.
-    * Clean form inputs with password visibility toggle and floating active borders.
-    * 1-Tap Biometric Login with real Android `BiometricPrompt` hardware enclave security (alerts merchant if no prior session exists, binds to AES tokens once authenticated).
-    * Clean "OR CONTINUE WITH" divider with "Login via OTP" and "Google Sign-In".
-  * **Bottom Trust & Support Dock**:
-    * Micro-trust badges: `🔒 256-Bit Encrypted` • `🛡️ Offline-First` • `🇮🇳 Made in Bharat`
-    * 24/7 Merchant Support button and enterprise version stamp.
-* **Settings & Merchant Vault** (`SettingsScreen.kt`):
-  * Zero developer jargon: Removed manual Enterprise Cloud Sync dialog, depot server URL picker, and pending count cards.
-  * Cloud synchronization runs autonomously in the background via `InstantNetworkSyncMonitor` and `InvoiceSyncWorker`.
-* **Manifest & Runtime Hardening**:
-  * Removed `TestE2ESyncReceiver` from `AndroidManifest.xml` ensuring zero exported test hooks in production.
-  * Dead test design files purged (`TraditionalChopdaBackground.kt` removed).
-
----
-
 ## 2. 📱 UI Navigation & Floating Capsule Dock
 
 The application uses a 5-tab persistent bottom dock (`FloatingCapsuleDock` in `MainContainerScreen.kt`):
@@ -230,8 +175,10 @@ DEVICE=emulator-5554 ./run_e2e_tests.sh
 * **Dashboard (`presentation/dashboard/`)**:
   * `DashboardScreen.kt`: Rokad cash drawer, business metrics, recent invoice feeds, and daily statement download.
   * `DashboardViewModel.kt`: ViewModel driving dashboard state, cashflow calculations, and metric aggregates.
+* **Core & Sound Systems (`core/sound/`)**:
+  * `SoundEffectsManager.kt`: Native Android `TextToSpeech` voice soundbox engine (Indian English / Hindi voice announcements: "Payment of ₹X received from [Customer] on DigitalChopda") combined with dual high-frequency sine wave `ToneGenerator` chimes.
 * **GST & Compliance (`presentation/gst/`)**:
-  * `GstHubScreen.kt`: GST filing dashboard summarizing output tax, input tax credit, and GSTR reports.
+  * `GstHubScreen.kt`: Live Reality Mode GST filing dashboard aggregating actual Room SQLite records (`InvoiceDao.getAllInvoicesSync` and `PurchaseDao.getAllPurchasesSync`) for dynamic tax liability (CGST, SGST, IGST), ITC credit, net tax payable, and B2B/B2C statutory counts.
 * **Leads & CRM (`presentation/leads/`)**:
   * `LeadsScreen.kt`: CRM sales pipeline and follow-up scheduler for customer acquisition.
 * **Main Container & Navigation (`presentation/main/`, `presentation/navigation/`)**:
@@ -239,24 +186,24 @@ DEVICE=emulator-5554 ./run_e2e_tests.sh
   * `NavGraph.kt`: Type-safe Jetpack Compose navigation graph defining routes and argument passing.
   * `Screen.kt`: Sealed route definitions for all app destinations.
 * **Party & Khata Ledger (`presentation/party/`)**:
-  * `PartyScreen.kt`: Customer directory and Udhar/Jama Khata ledger list.
+  * `PartyScreen.kt`: Customer directory and Udhar/Jama Khata ledger list with 150ms search debounce, 1-tap WhatsApp payment reminder dispatch, and 1-tap contextual "Settle" (Jama) / "Pay" (Udhar) quick actions.
   * `PartyDetailScreen.kt`: Party 360° profile screen with ledger passbook, balance summaries, and transaction history.
   * `AddEditPartyDialog.kt`: Dialog for creating or editing customer and supplier accounts.
-  * `RecordPaymentDialog.kt`: Dialog for recording payment received (Jama) or given.
+  * `RecordPaymentDialog.kt`: Dialog for recording payment received (Jama) or given, wired with tactile haptics and Voice Soundbox TTS announcement.
   * `RecordPaymentOutDialog.kt`: Dialog for recording money paid out to suppliers.
   * `RecordPurchaseDialog.kt`: Dialog for recording supplier purchase bills.
   * `PaymentReminderDialog.kt`: Dialog for sending friendly WhatsApp payment reminders with outstanding balances.
 * **PDF Viewer (`presentation/pdf/`)**:
   * `PdfViewerScreen.kt`: In-app PDF viewer screen supporting pinch-to-zoom, WhatsApp sharing, and printing.
 * **Products & Inventory (`presentation/products/`)**:
-  * `ProductsScreen.kt`: Comprehensive inventory catalog screen with search, stock counts, stock ledger audit logs, and barcode filters.
+  * `ProductsScreen.kt`: Comprehensive inventory catalog screen with 150ms debounced search, stock counts, stock ledger audit logs, and barcode filters.
   * `AddEditProductDialog.kt`: Dialog for adding or updating products, HSN codes, and pricing.
   * `AdjustStockDialog.kt`: Dialog for recording stock additions/reductions with audit reasons.
 * **Settings (`presentation/settings/`)**:
   * `SettingsScreen.kt`: Application settings, language selection, backup, and security configurations.
   * `CompanySwitchSheet.kt`: Bottom sheet allowing merchants to instantly switch between active business firms.
 * **Splash (`presentation/splash/`)**:
-  * `SplashScreen.kt`: Initial launch loading screen.
+  * `SplashScreen.kt`: Adaptive Velocity startup (<380ms transition into active merchant session, ~724ms cold launch).
 
 ### 7.6 Utilities (`util/`)
 * **`FormatUtils.kt`**: Helper functions for Indian currency formatting (`₹ 1,23,456.00`), phone number sanitation, and date-time formatting.

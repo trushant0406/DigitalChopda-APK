@@ -92,6 +92,7 @@ class DigitalChopdaApplication : Application() {
 
         languageManager = com.digitalchopda.app.core.localization.LanguageManager(this)
         biometricAuthManager = com.digitalchopda.app.core.security.BiometricAuthManager(this)
+        com.digitalchopda.app.core.sound.SoundEffectsManager.init(this)
         database = ChopdaDatabase.getInstance(this)
         CoroutineScope(Dispatchers.IO).launch {
             ChopdaDatabase.ensureSeedData(database)

@@ -115,9 +115,48 @@ fun GstHubScreen(
     var isCheckingAnomalies by remember { mutableStateOf(false) }
 
     LaunchedEffect(selectedPeriod) {
-        val res = mockApi.fetchGstReport(selectedPeriod)
-        if (res.isSuccess) {
-            reportData = res.getOrThrow()
+        try {
+            val app = context.applicationContext as? com.digitalchopda.app.DigitalChopdaApplication
+            val db = app?.database
+            val activeCompany = app?.companyRepository?.getActiveCompany()
+            if (db != null && activeCompany != null) {
+                val invoices = db.invoiceDao().getAllInvoicesSync(activeCompany.id)
+                val purchases = db.purchaseDao().getAllPurchasesSync(activeCompany.id)
+
+                val totalCgst = invoices.sumOf { it.cgst }
+                val totalSgst = invoices.sumOf { it.sgst }
+                val totalIgst = invoices.sumOf { it.igst }
+                val totalOutward = totalCgst + totalSgst + totalIgst
+                val totalInwardItc = purchases.sumOf { it.taxAmount }
+                val netPayable = maxOf(0.0, totalOutward - totalInwardItc)
+                val totalInv = invoices.size
+                val b2b = invoices.count { it.customerName.contains("Enterprise", ignoreCase = true) || it.customerName.contains("LLP", ignoreCase = true) || it.customerName.contains("Ltd", ignoreCase = true) }
+                val b2c = maxOf(0, totalInv - b2b)
+
+                reportData = GstReportData(
+                    period = selectedPeriod,
+                    totalInwardTaxLiability = totalInwardItc,
+                    totalOutwardTaxLiability = totalOutward,
+                    inputTaxCredit = totalInwardItc,
+                    netGstPayable = netPayable,
+                    gstr1Status = if (invoices.isNotEmpty()) "READY TO FILE ($totalInv Invoices)" else "NIL SALES",
+                    gstr3bStatus = if (netPayable > 0.0) "PENDING (₹${String.format(java.util.Locale.US, "%.0f", netPayable)} Due)" else "NIL LIABILITY",
+                    gstr2bStatus = if (purchases.isNotEmpty()) "MATCHED (${purchases.size} Purchase Bills)" else "NO INWARD BILLS",
+                    b2bCount = b2b,
+                    b2cCount = b2c,
+                    totalInvoices = totalInv
+                )
+            } else {
+                val res = mockApi.fetchGstReport(selectedPeriod)
+                if (res.isSuccess) {
+                    reportData = res.getOrThrow()
+                }
+            }
+        } catch (_: Exception) {
+            val res = mockApi.fetchGstReport(selectedPeriod)
+            if (res.isSuccess) {
+                reportData = res.getOrThrow()
+            }
         }
         try {
             val api = (context.applicationContext as? com.digitalchopda.app.DigitalChopdaApplication)?.apiService

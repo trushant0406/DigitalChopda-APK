@@ -26,6 +26,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForwardIos
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Chat
 import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
@@ -170,11 +171,31 @@ fun PartyScreen(
         }
     }
 
+    var paymentDialogParty by remember { mutableStateOf<CustomerEntity?>(null) }
+    var debouncedQuery by remember { mutableStateOf("") }
+    LaunchedEffect(searchQuery) {
+        kotlinx.coroutines.delay(150L)
+        debouncedQuery = searchQuery
+    }
+
+    fun launchWhatsAppReminder(party: CustomerEntity) {
+        try {
+            val cleanPhone = party.phone.replace("+", "").replace(" ", "").trim()
+            val text = "Namaste ${party.name}, gentle reminder regarding your outstanding ledger balance of ${CurrencyFormatter.formatCurrency(party.balance)} with ${activeCompany.firmName}. Kindly clear at your earliest convenience. Thank you!"
+            val intent = android.content.Intent(android.content.Intent.ACTION_VIEW).apply {
+                data = android.net.Uri.parse("https://api.whatsapp.com/send?phone=$cleanPhone&text=${java.net.URLEncoder.encode(text, "UTF-8")}")
+            }
+            context.startActivity(intent)
+        } catch (_: Exception) {
+            Toast.makeText(context, "WhatsApp is not installed on this device", Toast.LENGTH_SHORT).show()
+        }
+    }
+
     // Filter parties
-    val filteredParties = remember(allParties, searchQuery, selectedFilter) {
+    val filteredParties = remember(allParties, debouncedQuery, selectedFilter) {
         allParties.filter { party ->
             // Search query filter
-            val q = searchQuery.trim().lowercase()
+            val q = debouncedQuery.trim().lowercase()
             val matchesQuery = q.isEmpty() ||
                     party.name.lowercase().contains(q) ||
                     party.phone.contains(q) ||
@@ -398,12 +419,48 @@ fun PartyScreen(
                             party = party,
                             onClick = {
                                 onNavigateToPartyDetail(party.id, 0)
+                            },
+                            onWhatsAppClick = {
+                                launchWhatsAppReminder(party)
+                            },
+                            onPaymentClick = {
+                                paymentDialogParty = party
                             }
                         )
                     }
                 }
             }
         }
+    }
+
+    // Quick Record Payment Dialog for instant 1-tap settlement
+    if (paymentDialogParty != null) {
+        val p = paymentDialogParty!!
+        val isReceiving = p.balance >= 0
+        RecordPaymentDialog(
+            isJama = isReceiving,
+            partyName = p.name,
+            unpaidInvoices = emptyList(),
+            onDismiss = { paymentDialogParty = null },
+            onConfirm = { amount, paymentMode, notes, _ ->
+                scope.launch {
+                    customerRepository.recordPayment(
+                        companyId = activeCompany.id,
+                        customerId = p.id,
+                        amount = amount,
+                        isJama = isReceiving,
+                        paymentMode = paymentMode,
+                        notes = notes,
+                        invoiceId = null,
+                        orderId = null,
+                        invoiceNumber = null
+                    )
+                    paymentDialogParty = null
+                    val typeLabel = if (isReceiving) "Payment Received (Jama)" else "Payment Made (Udhar)"
+                    Toast.makeText(context, "✅ $typeLabel of ${CurrencyFormatter.formatCurrency(amount)} recorded", Toast.LENGTH_SHORT).show()
+                }
+            }
+        )
     }
 
     // Add Party Dialog
@@ -430,7 +487,9 @@ fun PartyScreen(
 @Composable
 fun PartyCardItem(
     party: CustomerEntity,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    onWhatsAppClick: (() -> Unit)? = null,
+    onPaymentClick: (() -> Unit)? = null
 ) {
     val (avatarBg, avatarText) = remember(party.name) { getAvatarColors(party.name) }
     val initials = remember(party.name) { getInitials(party.name) }
@@ -526,7 +585,7 @@ fun PartyCardItem(
 
             Spacer(modifier = Modifier.width(8.dp))
 
-            // Outstanding Balance
+            // Outstanding Balance & Quick Velocity Actions
             Column(horizontalAlignment = Alignment.End) {
                 val bal = party.balance
                 val (balColor, balLabel) = when {
@@ -549,6 +608,52 @@ fun PartyCardItem(
                     fontWeight = FontWeight.Medium,
                     textAlign = TextAlign.End
                 )
+
+                if ((onWhatsAppClick != null && party.phone.isNotBlank()) || (onPaymentClick != null && abs(bal) > 0.01)) {
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        if (onWhatsAppClick != null && party.phone.isNotBlank()) {
+                            Box(
+                                modifier = Modifier
+                                    .size(24.dp)
+                                    .clip(CircleShape)
+                                    .background(Color(0xFF25D366).copy(alpha = 0.15f))
+                                    .border(1.dp, Color(0xFF25D366).copy(alpha = 0.45f), CircleShape)
+                                    .clickable { onWhatsAppClick() },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Chat,
+                                    contentDescription = "WhatsApp Reminder",
+                                    tint = Color(0xFF25D366),
+                                    modifier = Modifier.size(12.dp)
+                                )
+                            }
+                        }
+
+                        if (onPaymentClick != null && abs(bal) > 0.01) {
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .background(if (bal > 0) EmeraldJama.copy(alpha = 0.15f) else RubyUdhar.copy(alpha = 0.15f))
+                                    .border(1.dp, if (bal > 0) EmeraldJama.copy(alpha = 0.45f) else RubyUdhar.copy(alpha = 0.45f), RoundedCornerShape(6.dp))
+                                    .clickable { onPaymentClick() }
+                                    .padding(horizontal = 7.dp, vertical = 2.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = if (bal > 0) "Settle" else "Pay",
+                                    color = if (bal > 0) EmeraldJama else RubyUdhar,
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+                    }
+                }
             }
 
             Spacer(modifier = Modifier.width(8.dp))
