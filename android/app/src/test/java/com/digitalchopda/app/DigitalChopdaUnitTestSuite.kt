@@ -313,16 +313,25 @@ class DigitalChopdaUnitTestSuite {
     fun testLanguageManagerSwitchingAndFlowReactivity() {
         val manager = LanguageManager()
 
-        // 1. Initial State should be Gujarati default
+        // 1. Initial State should be English default (modern streamlined UI)
+        assertEquals(AppLanguage.ENGLISH, manager.currentLanguage.value)
+        assertEquals(EnglishStrings, manager.strings.value)
+        assertEquals("DigitalChopda", manager.strings.value.appName)
+        assertEquals("Chopda", manager.strings.value.navChopda)
+        assertEquals("Billing", manager.strings.value.navBilling)
+
+        // 2. Cycle to Gujarati
+        val cycle1 = manager.cycleNextLanguage()
+        assertEquals(AppLanguage.GUJARATI, cycle1)
         assertEquals(AppLanguage.GUJARATI, manager.currentLanguage.value)
         assertEquals(GujaratiStrings, manager.strings.value)
         assertEquals("ડિજિટલ ચોપડો", manager.strings.value.appName)
         assertEquals("ચોપડો", manager.strings.value.navChopda)
         assertEquals("બિલિંગ", manager.strings.value.navBilling)
 
-        // 2. Cycle to Hindi
-        val cycle1 = manager.cycleNextLanguage()
-        assertEquals(AppLanguage.HINDI, cycle1)
+        // 3. Cycle to Hindi
+        val cycle2 = manager.cycleNextLanguage()
+        assertEquals(AppLanguage.HINDI, cycle2)
         assertEquals(AppLanguage.HINDI, manager.currentLanguage.value)
         assertEquals(HindiStrings, manager.strings.value)
         assertEquals("डिजिटल चोपड़ा", manager.strings.value.appName)
@@ -330,22 +339,12 @@ class DigitalChopdaUnitTestSuite {
         assertEquals("बिलिंग", manager.strings.value.navBilling)
         assertEquals("थर्मल बिल", manager.strings.value.thermalSlipBtn)
 
-        // 3. Cycle to English
-        val cycle2 = manager.cycleNextLanguage()
-        assertEquals(AppLanguage.ENGLISH, cycle2)
+        // 4. Cycle back to English (Full Loop)
+        val cycle3 = manager.cycleNextLanguage()
+        assertEquals(AppLanguage.ENGLISH, cycle3)
         assertEquals(AppLanguage.ENGLISH, manager.currentLanguage.value)
         assertEquals(EnglishStrings, manager.strings.value)
         assertEquals("DigitalChopda", manager.strings.value.appName)
-        assertEquals("Chopda", manager.strings.value.navChopda)
-        assertEquals("Billing", manager.strings.value.navBilling)
-        assertEquals("Thermal Bill", manager.strings.value.thermalSlipBtn)
-
-        // 4. Cycle back to Gujarati (Full Loop)
-        val cycle3 = manager.cycleNextLanguage()
-        assertEquals(AppLanguage.GUJARATI, cycle3)
-        assertEquals(AppLanguage.GUJARATI, manager.currentLanguage.value)
-        assertEquals(GujaratiStrings, manager.strings.value)
-        assertEquals("ડિજિટલ ચોપડો", manager.strings.value.appName)
 
         // 5. Direct setter
         manager.setLanguage(AppLanguage.HINDI)

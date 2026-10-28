@@ -112,7 +112,6 @@ import com.digitalchopda.app.core.designsystem.bouncyClick
 import com.digitalchopda.app.core.localization.AppLanguage
 import com.digitalchopda.app.core.localization.LanguageManager
 import com.digitalchopda.app.core.localization.LocalAppStrings
-import com.digitalchopda.app.core.network.MockDigitalChopdaApiService
 import com.digitalchopda.app.core.security.BiometricAuthManager
 import com.digitalchopda.app.data.repository.AuthRepository
 import com.digitalchopda.app.data.repository.CompanyRepository
@@ -126,7 +125,6 @@ import kotlinx.coroutines.launch
 fun SettingsScreen(
     companyRepository: CompanyRepository,
     authRepository: AuthRepository,
-    mockApi: MockDigitalChopdaApiService,
     languageManager: LanguageManager,
     biometricAuthManager: BiometricAuthManager,
     onNavigateBack: () -> Unit,
@@ -198,7 +196,6 @@ fun SettingsScreen(
 
     if (showGstHub) {
         GstHubScreen(
-            mockApi = mockApi,
             activeCompanyGstin = activeCompany.gstin,
             onNavigateBack = { showGstHub = false }
         )

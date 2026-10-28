@@ -9,8 +9,6 @@ import com.digitalchopda.app.core.network.ApiQuotationRequest
 import com.digitalchopda.app.core.network.ApiQuotationItemRequest
 import com.digitalchopda.app.core.network.AuthResponse
 import com.digitalchopda.app.core.network.DigitalChopdaApiService
-import com.digitalchopda.app.core.network.MockDigitalChopdaApiService
-import com.digitalchopda.app.core.network.StockSyncDelta
 import com.digitalchopda.app.core.security.TokenStorage
 import com.digitalchopda.app.data.local.database.ChopdaDatabase
 import androidx.room.withTransaction
@@ -229,8 +227,7 @@ class CompanyRepository(
 
 class BillingRepository(
     private val db: ChopdaDatabase,
-    val apiService: DigitalChopdaApiService? = null,
-    val mockApi: MockDigitalChopdaApiService? = null
+    val apiService: DigitalChopdaApiService? = null
 ) {
     private val allocateLeaseUseCase = AllocateLeaseUseCase()
 
@@ -623,11 +620,6 @@ class BillingRepository(
                             db.invoiceDao().updateSyncStatus(targetId, SyncStatus.SYNCED.name)
                         }
                     }
-                }
-            } else if (mockApi != null) {
-                val syncResult = mockApi.syncInvoiceOutbox(invoice, invoice.idempotencyKey)
-                if (syncResult.isSuccess) {
-                    db.invoiceDao().updateSyncStatus(targetId, SyncStatus.SYNCED.name)
                 }
             }
         } catch (_: Exception) {
@@ -1190,8 +1182,7 @@ class BillingRepository(
 
 class InventoryRepository(
     private val db: ChopdaDatabase,
-    private val apiService: DigitalChopdaApiService? = null,
-    private val mockApi: MockDigitalChopdaApiService? = null
+    private val apiService: DigitalChopdaApiService? = null
 ) {
     fun getItemsForCompany(companyId: Long): Flow<List<InventoryItem>> {
         return db.itemDao().getItemsForCompany(companyId).map { list ->
@@ -1288,12 +1279,11 @@ class InventoryRepository(
                         )
                     )
                 }
-            } catch (_: Exception) {}
+            } catch (e: Exception) {
+                return Result.failure(e)
+            }
         }
-        if (mockApi != null) {
-            return mockApi.syncStockDelta(StockSyncDelta(itemId, delta, baseVersion))
-        }
-        return Result.failure(IllegalStateException("No sync provider configured"))
+        return Result.failure(IllegalStateException("No network client configured for stock sync"))
     }
 }
 
@@ -2837,126 +2827,166 @@ class AuthRepository(
     private val tokenStorage: TokenStorage,
     private val apiService: DigitalChopdaApiService? = null,
     private val db: ChopdaDatabase? = null,
-    private val mockApi: MockDigitalChopdaApiService? = null,
     private val billingRepository: BillingRepository? = null,
     private val quotationRepository: QuotationRepository? = null,
     private val customerRepository: CustomerRepository? = null,
     private val productRepository: ProductRepository? = null
 ) {
     suspend fun loginWithPassword(usernameOrMobile: String, pass: String?): Result<AuthResponse> {
-        val api = apiService
-        if (api != null) {
-            try {
-                val req = com.digitalchopda.app.core.network.ApiLoginRequest(
-                    username = usernameOrMobile.trim(),
-                    password = pass
+        val api = apiService ?: return Result.failure(IllegalStateException("No network client configured for login"))
+        try {
+            val req = com.digitalchopda.app.core.network.ApiLoginRequest(
+                username = usernameOrMobile.trim(),
+                password = pass
+            )
+            val res = api.login(req)
+            if (res.isSuccessful && res.body()?.token != null) {
+                val body = res.body()!!
+                val token = body.token!!
+                val userId = body.user?.id?.toString() ?: "1"
+                val activeBizId = body.activeBusiness?.id ?: body.businesses?.firstOrNull()?.id ?: 1L
+
+                tokenStorage.saveTokens(token, "")
+                tokenStorage.saveUserSession(userId, usernameOrMobile, activeBizId)
+
+                val companiesList = body.businesses?.map { b ->
+                    Company(
+                        id = b.id,
+                        firmName = b.name,
+                        ownerName = b.tradeName ?: body.user?.name ?: b.name,
+                        invoicePrefix = b.invoicePrefix ?: "INV-",
+                        isActive = (b.id == activeBizId)
+                    )
+                } ?: listOf(
+                    Company(
+                        id = activeBizId,
+                        firmName = body.activeBusiness?.name ?: "DigitalChopda Store",
+                        ownerName = body.user?.name ?: "Owner",
+                        isActive = true
+                    )
                 )
-                val res = api.login(req)
-                if (res.isSuccessful && res.body()?.token != null) {
-                    val body = res.body()!!
-                    val token = body.token!!
-                    val userId = body.user?.id?.toString() ?: "1"
-                    val activeBizId = body.activeBusiness?.id ?: body.businesses?.firstOrNull()?.id ?: 1L
 
-                    tokenStorage.saveTokens(token, "")
-                    tokenStorage.saveUserSession(userId, usernameOrMobile, activeBizId)
-
-                    val companiesList = body.businesses?.map { b ->
-                        Company(
-                            id = b.id,
-                            firmName = b.name,
-                            ownerName = b.tradeName ?: body.user?.name ?: b.name,
-                            invoicePrefix = b.invoicePrefix ?: "INV-",
-                            isActive = (b.id == activeBizId)
-                        )
-                    } ?: listOf(
-                        Company(
-                            id = activeBizId,
-                            firmName = body.activeBusiness?.name ?: "DigitalChopda Store",
-                            ownerName = body.user?.name ?: "Owner",
-                            isActive = true
-                        )
-                    )
-
-                    // Seed server businesses into Room
-                    if (db != null) {
-                        for (c in companiesList) {
-                            db.companyDao().insertCompany(
-                                CompanyEntity(
-                                    id = c.id,
-                                    firmName = c.firmName,
-                                    ownerName = c.ownerName,
-                                    invoicePrefix = c.invoicePrefix,
-                                    isActive = c.isActive
-                                )
+                // Seed server businesses into Room
+                if (db != null) {
+                    for (c in companiesList) {
+                        db.companyDao().insertCompany(
+                            CompanyEntity(
+                                id = c.id,
+                                firmName = c.firmName,
+                                ownerName = c.ownerName,
+                                invoicePrefix = c.invoicePrefix,
+                                isActive = c.isActive
                             )
-                        }
-                    }
-
-                    // Immediately pull downstream documents from server into Room
-                    kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
-                        try {
-                            billingRepository?.syncInvoicesWithServer(activeBizId)
-                            quotationRepository?.syncQuotationsWithServer(activeBizId)
-                            customerRepository?.syncContactsWithServer(activeBizId)
-                            productRepository?.syncProductsWithServer(activeBizId)
-                        } catch (e: Exception) {
-                            android.util.Log.e("AuthRepository", "Post-login sync failed", e)
-                        }
-                    }
-
-                    return Result.success(
-                        AuthResponse(
-                            success = true,
-                            accessToken = token,
-                            refreshToken = "",
-                            userId = userId,
-                            ownerName = body.user?.name ?: body.user?.username ?: "Merchant",
-                            companies = companiesList
                         )
-                    )
-                } else {
-                    val parsedError = try {
-                        val errorString = res.errorBody()?.string()
-                        if (!errorString.isNullOrBlank()) {
-                            org.json.JSONObject(errorString).optString("error", "")
-                        } else ""
-                    } catch (_: Exception) { "" }.ifBlank {
-                        res.body()?.error ?: "Invalid credentials (Code ${res.code()})"
-                    }
-                    return Result.failure(IllegalArgumentException(parsedError))
-                }
-            } catch (e: Exception) {
-                // If live backend fails, fall back to mock service for enterprise resilience
-                if (mockApi != null) {
-                    return mockApi.login(usernameOrMobile, pass).also {
-                        it.onSuccess { auth ->
-                            tokenStorage.saveTokens(auth.accessToken, auth.refreshToken)
-                            tokenStorage.saveUserSession(auth.userId, usernameOrMobile, auth.companies.firstOrNull()?.id ?: 1L)
-                        }
                     }
                 }
-                return Result.failure(e)
-            }
-        }
 
-        val fallback = mockApi ?: MockDigitalChopdaApiService()
-        val res = fallback.login(usernameOrMobile, pass)
-        res.onSuccess { auth ->
-            tokenStorage.saveTokens(auth.accessToken, auth.refreshToken)
-            tokenStorage.saveUserSession(auth.userId, usernameOrMobile, auth.companies.firstOrNull()?.id ?: 1L)
+                // Immediately pull downstream documents from server into Room
+                kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+                    try {
+                        billingRepository?.syncInvoicesWithServer(activeBizId)
+                        quotationRepository?.syncQuotationsWithServer(activeBizId)
+                        customerRepository?.syncContactsWithServer(activeBizId)
+                        productRepository?.syncProductsWithServer(activeBizId)
+                    } catch (e: Exception) {
+                        android.util.Log.e("AuthRepository", "Post-login sync failed", e)
+                    }
+                }
+
+                return Result.success(
+                    AuthResponse(
+                        success = true,
+                        accessToken = token,
+                        refreshToken = "",
+                        userId = userId,
+                        ownerName = body.user?.name ?: body.user?.username ?: "Merchant",
+                        companies = companiesList
+                    )
+                )
+            } else {
+                val parsedError = try {
+                    val errorString = res.errorBody()?.string()
+                    if (!errorString.isNullOrBlank()) {
+                        org.json.JSONObject(errorString).optString("error", "")
+                    } else ""
+                } catch (_: Exception) { "" }.ifBlank {
+                    res.body()?.error ?: "Invalid credentials (Code ${res.code()})"
+                }
+                return Result.failure(IllegalArgumentException(parsedError))
+            }
+        } catch (e: Exception) {
+            return Result.failure(e)
         }
-        return res
     }
 
     suspend fun verifyOtp(mobile: String, otp: String): Result<AuthResponse> {
-        val fallback = mockApi ?: MockDigitalChopdaApiService()
-        val res = fallback.verifyOtp(mobile, otp)
-        res.onSuccess { auth ->
-            tokenStorage.saveTokens(auth.accessToken, auth.refreshToken)
-            tokenStorage.saveUserSession(auth.userId, mobile, auth.companies.firstOrNull()?.id ?: 1L)
+        val api = apiService ?: return Result.failure(IllegalStateException("No network client configured"))
+        return try {
+            val res = api.verifyOtp(com.digitalchopda.app.core.network.ApiVerifyOtpRequest(phone = mobile.trim(), otp = otp.trim()))
+            if (res.isSuccessful && res.body()?.token != null) {
+                val body = res.body()!!
+                val token = body.token!!
+                val userId = body.user?.id?.toString() ?: "1"
+                val activeBizId = body.activeBusiness?.id ?: body.businesses?.firstOrNull()?.id ?: 1L
+
+                tokenStorage.saveTokens(token, "")
+                tokenStorage.saveUserSession(userId, mobile, activeBizId)
+
+                val companiesList = body.businesses?.map { b ->
+                    Company(
+                        id = b.id,
+                        firmName = b.name,
+                        ownerName = b.tradeName ?: body.user?.name ?: b.name,
+                        invoicePrefix = b.invoicePrefix ?: "INV-",
+                        isActive = (b.id == activeBizId)
+                    )
+                } ?: listOf(
+                    Company(
+                        id = activeBizId,
+                        firmName = body.activeBusiness?.name ?: "DigitalChopda Store",
+                        ownerName = body.user?.name ?: "Owner",
+                        isActive = true
+                    )
+                )
+
+                if (db != null) {
+                    for (c in companiesList) {
+                        db.companyDao().insertCompany(
+                            CompanyEntity(
+                                id = c.id,
+                                firmName = c.firmName,
+                                ownerName = c.ownerName,
+                                invoicePrefix = c.invoicePrefix,
+                                isActive = c.isActive
+                            )
+                        )
+                    }
+                }
+
+                Result.success(
+                    AuthResponse(
+                        success = true,
+                        accessToken = token,
+                        refreshToken = "",
+                        userId = userId,
+                        ownerName = body.user?.name ?: body.user?.username ?: "Merchant",
+                        companies = companiesList
+                    )
+                )
+            } else {
+                val parsedError = try {
+                    val errorString = res.errorBody()?.string()
+                    if (!errorString.isNullOrBlank()) {
+                        org.json.JSONObject(errorString).optString("error", "")
+                    } else ""
+                } catch (_: Exception) { "" }.ifBlank {
+                    res.body()?.error ?: "Invalid OTP (Code ${res.code()})"
+                }
+                Result.failure(IllegalArgumentException(parsedError))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
         }
-        return res
     }
 
     suspend fun registerMerchant(
@@ -3038,10 +3068,6 @@ class AuthRepository(
     }
 
     suspend fun logout() {
-        val token = tokenStorage.getAccessToken()
-        try {
-            mockApi?.logout(token)
-        } catch (_: Exception) {}
         tokenStorage.clear()
     }
 

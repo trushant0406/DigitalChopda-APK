@@ -46,7 +46,7 @@ The application uses a 5-tab persistent bottom dock (`FloatingCapsuleDock` in `M
 
 ---
 
-## 3. 🗄️ Database Architecture (Room SQLite v9)
+## 3. 🗄️ Database Architecture (Room SQLite v18)
 
 Database Class: `ChopdaDatabase.kt` (Room SQLite)
 
@@ -233,3 +233,33 @@ Whenever planning, coding, or modifying any feature in DigitalChopda Android:
 ### 8.3 Backend & Cloud Sync Parity
 - Keep client DTOs in `core/network/ApiModels.kt` 100% aligned with the DigitalChopda Web/Backend (44 PostgreSQL migrations, `/api/v1/sync` batch delta synchronizer).
 - Enforce UUID idempotency keys on every offline transaction.
+
+---
+
+## 9. 📦 Production Release & R8 Slimming Architecture
+
+### 9.1 Binary Slimming Metrics (23MB → 3.8MB)
+* **Uncompressed Debug APK**: ~23 MB
+* **Production Release APK (`app-release.apk`)**: **3.8 MB** (83.5% binary size reduction)
+* **R8 Configuration**:
+  * `android.enableR8.fullMode=true` in `gradle.properties`
+  * `isMinifyEnabled = true` & `isShrinkResources = true` in `app/build.gradle.kts`
+  * Compile memory tuned: `-Xmx2560m -XX:MaxMetaspaceSize=512m` with `org.gradle.workers.max=2` for stable compilation within system limits.
+
+### 9.2 ProGuard Hardening (`proguard-rules.pro`)
+* Explicit keep rules for:
+  * Room DAOs: `com.digitalchopda.app.data.local.dao.** { *; }`
+  * Room Database & Converters: `com.digitalchopda.app.data.local.database.** { *; }`
+  * Room Entities: `com.digitalchopda.app.data.local.entity.** { *; }`
+  * Domain & Core Engines: `model.**`, `document.**`, `printer.**`, `sound.**`, `security.**`
+  * Retrofit 2 & Network DTOs: `core.network.**` with `@SerializedName` field preservation
+  * Security & Hardware Interop: SQLCipher (`net.sqlcipher.**`), ZXing (`com.google.zxing.**`), CameraX & ML Kit (`androidx.camera.**`, `com.google.mlkit.**`)
+  * WorkManager Workers: `androidx.work.ListenableWorker` constructors
+* Release Log Stripping:
+  * `android.util.Log.v/d/i` calls stripped at bytecode level via `-assumenosideeffects`
+  * HTTP request/response bodies silenced in release (`BuildConfig.DEBUG` check in `NetworkClient.kt`)
+
+### 9.3 Production Purity & Clean Khata Isolation
+* **Live API Enforced**: All repositories (`BillingRepository`, `InventoryRepository`, `AuthRepository`) communicate strictly through `DigitalChopdaApiService` via `NetworkClient.getApiService()`. `MockDigitalChopdaApiService` is completely purged from all production DI paths.
+* **Pure Merchant-Facing Scope**: Tab 3 of `PartyDetailScreen.kt` functions 100% as a clean Khata ledger ("Merchant Business Profile & KYC": Phone, GSTIN, PAN, Address, Credit Limit, Khata notes), completely isolating legacy CRM pipeline stages. `Screen.Leads` remains completely unreachable from the merchant dock and primary navigation.
+

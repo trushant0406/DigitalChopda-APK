@@ -157,7 +157,6 @@ fun MainContainerScreen(
                         4 -> SettingsScreen(
                             companyRepository = app.companyRepository,
                             authRepository = app.authRepository,
-                            mockApi = app.mockApi,
                             languageManager = app.languageManager,
                             biometricAuthManager = app.biometricAuthManager,
                             onNavigateBack = { currentTab = 0 },

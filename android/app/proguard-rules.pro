@@ -10,16 +10,34 @@
 -keep class * extends com.google.gson.reflect.TypeToken
 -keep class * extends com.google.gson.TypeAdapter
 
-# Keep models, entities, and document core
+# Keep Room Database, Entities, DAOs & Converters
 -keep class com.digitalchopda.app.data.local.entity.** { *; }
+-keep class com.digitalchopda.app.data.local.dao.** { *; }
+-keep class com.digitalchopda.app.data.local.database.** { *; }
+-keep class * extends androidx.room.RoomDatabase
+-dontwarn androidx.room.paging.**
+
+# Keep models and core engines
 -keep class com.digitalchopda.app.domain.model.** { *; }
 -keep class com.digitalchopda.app.core.document.** { *; }
+-keep class com.digitalchopda.app.core.printer.** { *; }
+-keep class com.digitalchopda.app.core.sound.** { *; }
+-keep class com.digitalchopda.app.core.security.** { *; }
 
-# Keep Network DTOs for Gson reflection
+# Keep Network DTOs, API Services & Retrofit 2
 -keep class com.digitalchopda.app.core.network.** { *; }
 -keepclassmembers class * {
     @com.google.gson.annotations.SerializedName <fields>;
 }
+-dontwarn retrofit2.**
+-keep class retrofit2.** { *; }
+-dontwarn okhttp3.**
+-dontwarn okio.**
+-keep class okhttp3.** { *; }
+
+# SQLCipher Database Security
+-keep class net.sqlcipher.** { *; }
+-dontwarn net.sqlcipher.**
 
 # WorkManager Worker reflection
 -keep class * extends androidx.work.ListenableWorker {
@@ -32,14 +50,15 @@
     public static boolean isLoggable(java.lang.String, int);
     public static int v(...);
     public static int d(...);
+    public static int i(...);
 }
 
 # ZXing Barcode Scanning & QR Generation
 -keep class com.google.zxing.** { *; }
 -dontwarn com.google.zxing.**
-
-# Retrofit 2 Keep Rules
--dontwarn retrofit2.**
--keep class retrofit2.** { *; }
+-keep class androidx.camera.** { *; }
+-dontwarn androidx.camera.**
+-keep class com.google.mlkit.** { *; }
+-dontwarn com.google.mlkit.**
 
 

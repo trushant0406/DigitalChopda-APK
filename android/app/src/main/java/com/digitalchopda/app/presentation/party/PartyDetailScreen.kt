@@ -436,21 +436,11 @@ fun PartyDetailScreen(
                                     }
                                 }
 
-                                // Lead Priority Pill
+                                // Party Type Status Pill
                                 StatusPill(
-                                    text = customer.leadPriority,
-                                    textColor = when (customer.leadPriority) {
-                                        "HOT" -> RubyUdhar
-                                        "WARM" -> BrandPrimaryBlue
-                                        "CONVERTED" -> EmeraldJama
-                                        else -> TextSubtle
-                                    },
-                                    backgroundColor = when (customer.leadPriority) {
-                                        "HOT" -> RubyUdhar.copy(alpha = 0.12f)
-                                        "WARM" -> BrandPrimaryBlue.copy(alpha = 0.12f)
-                                        "CONVERTED" -> EmeraldJama.copy(alpha = 0.12f)
-                                        else -> ElevatedSlate
-                                    }
+                                    text = customer.partyType.ifBlank { "CUSTOMER" },
+                                    textColor = BrandPrimaryBlue,
+                                    backgroundColor = BrandPrimaryBlue.copy(alpha = 0.12f)
                                 )
                             }
 
@@ -706,7 +696,7 @@ fun PartyDetailScreen(
                     }
                 }
 
-                // TAB 3: CONTACT & LEAD PROFILE
+                // TAB 3: MERCHANT BUSINESS PROFILE & KYC
                 if (selectedTab == 3) {
                     item {
                         ChopdaCard(
@@ -725,69 +715,33 @@ fun PartyDetailScreen(
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     Text(
-                                        text = "LEAD PIPELINE STAGE",
+                                        text = "MERCHANT BUSINESS PROFILE & KYC",
                                         style = MaterialTheme.typography.labelSmall.copy(
                                             fontWeight = FontWeight.Bold,
-                                            color = TextSubtle,
+                                            color = BrandPrimaryBlue,
                                             letterSpacing = 0.8.sp,
                                             fontSize = 11.sp
                                         )
                                     )
+                                    StatusPill(
+                                        text = customer.partyType.ifBlank { "CUSTOMER" },
+                                        textColor = EmeraldJama,
+                                        backgroundColor = EmeraldJama.copy(alpha = 0.12f)
+                                    )
                                 }
 
-                                // 4 Stage Buttons: Hot, Warm, Cold, Converted
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                                ) {
-                                    listOf("HOT" to "🔥 Hot", "WARM" to "⚡ Warm", "COLD" to "❄️ Cold", "CONVERTED" to "✅ Won").forEach { (stage, label) ->
-                                        val isSel = customer.leadPriority == stage
-                                        Box(
-                                            modifier = Modifier
-                                                .weight(1f)
-                                                .clip(RoundedCornerShape(8.dp))
-                                                .background(if (isSel) BrandPrimaryBlue else ElevatedSlate)
-                                                .clickable {
-                                                    scope.launch {
-                                                        customerRepository.updateLeadInfo(
-                                                            customer.id,
-                                                            stage,
-                                                            customer.expectedDealValue,
-                                                            customer.leadNotes,
-                                                            customer.nextFollowUpDate
-                                                        )
-                                                        Toast.makeText(context, "Stage updated to $stage", Toast.LENGTH_SHORT).show()
-                                                    }
-                                                }
-                                                .padding(vertical = 8.dp),
-                                            contentAlignment = Alignment.Center
-                                        ) {
-                                            Text(
-                                                text = label,
-                                                style = MaterialTheme.typography.labelSmall.copy(
-                                                    color = if (isSel) Color.White else DarkNavy,
-                                                    fontWeight = if (isSel) FontWeight.Bold else FontWeight.Medium,
-                                                    fontSize = 11.sp
-                                                )
-                                            )
-                                        }
-                                    }
-                                }
-
-                                Spacer(modifier = Modifier.height(4.dp))
                                 HorizontalDivider(color = BorderStrokeDark, thickness = 0.8.dp)
 
-                                // Lead Fields
-                                PartyDetailField(label = "Expected Deal Value", value = "₹ ${customer.expectedDealValue.toInt()}")
-                                if (customer.leadNotes.isNotBlank()) {
-                                    PartyDetailField(label = "Requirements & Notes", value = customer.leadNotes)
-                                }
-                                PartyDetailField(label = "Firm / Company Name", value = customer.companyName.ifBlank { customer.name })
+                                PartyDetailField(label = "Party / Firm Name", value = customer.companyName.ifBlank { customer.name })
+                                PartyDetailField(label = "Contact Phone", value = customer.phone.ifBlank { "—" })
                                 PartyDetailField(label = "GSTIN", value = customer.gstin.ifBlank { "Not Registered" })
                                 PartyDetailField(label = "PAN", value = customer.pan.ifBlank { "—" })
                                 PartyDetailField(label = "City / State", value = "${customer.city.ifBlank { "Surat" }}, ${customer.state.ifBlank { "Gujarat" }}")
-                                PartyDetailField(label = "Address", value = customer.address.ifBlank { "—" })
-                                PartyDetailField(label = "Credit Limit", value = if (customer.creditLimit > 0) "₹ ${customer.creditLimit.toInt()}" else "No Limit")
+                                PartyDetailField(label = "Billing Address", value = customer.address.ifBlank { "—" })
+                                PartyDetailField(label = "Credit Limit", value = if (customer.creditLimit > 0) "₹ ${customer.creditLimit.toInt()}" else "No Credit Limit")
+                                if (customer.leadNotes.isNotBlank()) {
+                                    PartyDetailField(label = "Khata Notes", value = customer.leadNotes)
+                                }
                             }
                         }
                     }

@@ -3,7 +3,6 @@ package com.digitalchopda.app
 import android.app.Application
 import com.digitalchopda.app.core.document.InvoicePdfGenerator
 import com.digitalchopda.app.core.network.DigitalChopdaApiService
-import com.digitalchopda.app.core.network.MockDigitalChopdaApiService
 import com.digitalchopda.app.core.network.NetworkClient
 import com.digitalchopda.app.core.printer.BluetoothPrinterManager
 import com.digitalchopda.app.core.security.TokenStorage
@@ -28,9 +27,6 @@ class DigitalChopdaApplication : Application() {
         private set
 
     lateinit var apiService: DigitalChopdaApiService
-        private set
-
-    lateinit var mockApi: MockDigitalChopdaApiService
         private set
 
     lateinit var pdfGenerator: InvoicePdfGenerator
@@ -98,14 +94,13 @@ class DigitalChopdaApplication : Application() {
             ChopdaDatabase.ensureSeedData(database)
         }
         tokenStorage = TokenStorage(this)
-        mockApi = MockDigitalChopdaApiService()
         apiService = NetworkClient.getApiService(tokenStorage)
         pdfGenerator = InvoicePdfGenerator(this)
         printerManager = BluetoothPrinterManager(this)
 
         companyRepository = CompanyRepository(database, tokenStorage, apiService)
-        billingRepository = BillingRepository(database, apiService, mockApi)
-        inventoryRepository = InventoryRepository(database, apiService, mockApi)
+        billingRepository = BillingRepository(database, apiService)
+        inventoryRepository = InventoryRepository(database, apiService)
         leadRepository = LeadRepository(database)
         customerRepository = CustomerRepository(database, apiService)
         quotationRepository = com.digitalchopda.app.data.repository.QuotationRepository(database, apiService)
@@ -116,7 +111,6 @@ class DigitalChopdaApplication : Application() {
             tokenStorage = tokenStorage,
             apiService = apiService,
             db = database,
-            mockApi = mockApi,
             billingRepository = billingRepository,
             quotationRepository = quotationRepository,
             customerRepository = customerRepository,

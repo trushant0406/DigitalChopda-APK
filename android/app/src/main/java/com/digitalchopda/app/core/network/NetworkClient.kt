@@ -1,5 +1,6 @@
 package com.digitalchopda.app.core.network
 
+import com.digitalchopda.app.BuildConfig
 import com.digitalchopda.app.core.security.TokenStorage
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
@@ -30,7 +31,11 @@ object NetworkClient {
             }
 
             val loggingInterceptor = HttpLoggingInterceptor().apply {
-                level = HttpLoggingInterceptor.Level.BODY
+                level = if (BuildConfig.DEBUG) {
+                    HttpLoggingInterceptor.Level.BODY
+                } else {
+                    HttpLoggingInterceptor.Level.NONE
+                }
             }
 
             val okHttpClient = OkHttpClient.Builder()

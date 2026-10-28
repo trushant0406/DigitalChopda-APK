@@ -75,7 +75,6 @@ import com.digitalchopda.app.core.designsystem.WarningAmber
 import com.digitalchopda.app.core.designsystem.bouncyClick
 import com.digitalchopda.app.core.localization.LocalAppStrings
 import com.digitalchopda.app.core.network.GstReportData
-import com.digitalchopda.app.core.network.MockDigitalChopdaApiService
 
 import androidx.compose.material.icons.filled.Warning
 import com.digitalchopda.app.core.document.ReportExportHelper
@@ -85,7 +84,6 @@ import kotlinx.coroutines.launch
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun GstHubScreen(
-    mockApi: MockDigitalChopdaApiService,
     activeCompanyGstin: String = "",
     onNavigateBack: () -> Unit
 ) {
@@ -97,13 +95,13 @@ fun GstHubScreen(
         mutableStateOf(
             GstReportData(
                 period = "October 2026",
-                totalInwardTaxLiability = 38200.0,
-                totalOutwardTaxLiability = 38200.0,
-                inputTaxCredit = 25750.0,
-                netGstPayable = 12450.0,
-                gstr1Status = "READY TO FILE",
-                gstr3bStatus = "PENDING (Due in 9 Days)",
-                gstr2bStatus = "AVAILABLE (100% Matched)"
+                totalInwardTaxLiability = 0.0,
+                totalOutwardTaxLiability = 0.0,
+                inputTaxCredit = 0.0,
+                netGstPayable = 0.0,
+                gstr1Status = "NIL SALES",
+                gstr3bStatus = "NIL LIABILITY",
+                gstr2bStatus = "NO INWARD BILLS"
             )
         )
     }
@@ -146,17 +144,9 @@ fun GstHubScreen(
                     b2cCount = b2c,
                     totalInvoices = totalInv
                 )
-            } else {
-                val res = mockApi.fetchGstReport(selectedPeriod)
-                if (res.isSuccess) {
-                    reportData = res.getOrThrow()
-                }
             }
         } catch (_: Exception) {
-            val res = mockApi.fetchGstReport(selectedPeriod)
-            if (res.isSuccess) {
-                reportData = res.getOrThrow()
-            }
+            // Keep current calculated values
         }
         try {
             val api = (context.applicationContext as? com.digitalchopda.app.DigitalChopdaApplication)?.apiService
