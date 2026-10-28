@@ -223,7 +223,7 @@ fun DashboardScreen(
                     name = item.name,
                     phone = item.phone.ifBlank { "+91 98000 00000" },
                     balance = item.balance,
-                    lastActive = if (item.address.isNotBlank()) item.address else "ચોપડા ખાતું"
+                    lastActive = if (item.address.isNotBlank()) item.address else "Khata Account"
                 )
             }
     }
@@ -287,7 +287,7 @@ fun DashboardScreen(
                     onLanguageClick = if (languageManager != null) {
                         {
                             val next = languageManager.cycleNextLanguage()
-                            Toast.makeText(context, "ભાષા: ${next.nativeName}", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, "Language: ${next.nativeName}", Toast.LENGTH_SHORT).show()
                         }
                     } else null,
                     onCompanyClick = { showCompanySheet = true },
@@ -394,7 +394,7 @@ fun DashboardScreen(
                                 contentAlignment = Alignment.Center
                             ) {
                                 Text(
-                                    text = "કોઈ પક્ષકાર મળ્યા નથી",
+                                    text = "No parties found",
                                     style = MaterialTheme.typography.bodyMedium.copy(color = TextMuted)
                                 )
                             }
@@ -422,7 +422,7 @@ fun DashboardScreen(
                 }
 
                 1 -> {
-                    // ─── PERSPECTIVE 1: દૈનિક રોકડ રજિસ્ટર (ROKAD CASHBOOK) ───
+                    // ─── PERSPECTIVE 1: DAILY CASHBOOK (ROKAD) ───
                     item {
                         val netCash = totalCashInflow - totalCashOutflow
                         RokadCashDrawerCard(
@@ -440,7 +440,7 @@ fun DashboardScreen(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
-                                text = "આજની રોકડ લેવડ-દેવડ (CASH FLOW)",
+                                text = "TODAY'S CASH FLOW",
                                 style = MaterialTheme.typography.labelMedium.copy(
                                     color = TextMuted,
                                     fontWeight = FontWeight.Bold,
@@ -448,7 +448,7 @@ fun DashboardScreen(
                                 )
                             )
                             Text(
-                                text = "${payments.size} વ્યવહારો",
+                                text = "${payments.size} entries",
                                 style = MaterialTheme.typography.labelSmall.copy(color = TextSubtle)
                             )
                         }
@@ -457,8 +457,8 @@ fun DashboardScreen(
                     if (payments.isEmpty()) {
                         item {
                             EmptyStateCard(
-                                title = "કોઈ રોકડ વ્યવહાર નથી",
-                                subtitle = "રોકડ આવક (જમા) અથવા ખર્ચ (ઉધાર) ઉમેરવા માટે '+ Quick Entry' પર ક્લિક કરો",
+                                title = "No cash transactions",
+                                subtitle = "Tap '+ Quick Entry' to record cash in (Jama) or cash out (Udhar)",
                                 icon = Icons.Default.PointOfSale,
                                 actionText = "+ Quick Entry",
                                 onActionClick = {
@@ -475,8 +475,8 @@ fun DashboardScreen(
                             items = payments.take(25),
                             key = { it.id }
                         ) { pmt ->
-                            val partyName = if (pmt.customerName.isNotBlank()) pmt.customerName else (if (pmt.isJama) "રોકડ આવક (Cash In)" else "રોકડ ખર્ચ (Cash Out)")
-                            val noteText = if (pmt.notes.isNotBlank()) pmt.notes else (if (pmt.isJama) "You Got (જમા)" else "You Gave (ઉધાર)")
+                            val partyName = if (pmt.customerName.isNotBlank()) pmt.customerName else (if (pmt.isJama) "Cash In (Jama)" else "Cash Out (Udhar)")
+                            val noteText = if (pmt.notes.isNotBlank()) pmt.notes else (if (pmt.isJama) "You Got (Jama)" else "You Gave (Udhar)")
                             val timeStr = remember(pmt.createdAt) {
                                 java.text.SimpleDateFormat("dd MMM, hh:mm a", java.util.Locale.getDefault()).format(java.util.Date(pmt.createdAt))
                             }
@@ -497,7 +497,7 @@ fun DashboardScreen(
                                         val msg = "Payment of ₹${pmt.amount} recorded for ${pmt.customerName} via ${pmt.paymentMode.uppercase()}."
                                         com.digitalchopda.app.core.payment.UpiPaymentUtils.launchWhatsApp(context, pmt.customerPhone, msg)
                                     } else {
-                                        Toast.makeText(context, "Payment entry: ₹${pmt.amount} (${if (pmt.isJama) "જમા" else "ઉધાર"})", Toast.LENGTH_SHORT).show()
+                                        Toast.makeText(context, "Payment entry: ₹${pmt.amount} (${if (pmt.isJama) "Jama" else "Udhar"})", Toast.LENGTH_SHORT).show()
                                     }
                                 }
                             )
@@ -506,10 +506,10 @@ fun DashboardScreen(
                 }
 
                 2 -> {
-                    // ─── PERSPECTIVE 2: બિલિંગ અને સેલ્સ એનાલિટિક્સ (INVOICING) ───
+                    // ─── PERSPECTIVE 2: BILLING & SALES ANALYTICS (INVOICING) ───
                     item {
                         Text(
-                            text = "ORDERS & SALES OVERVIEW (ઓર્ડર અને વેચાણ સારાંશ)",
+                            text = "ORDERS & SALES OVERVIEW",
                             style = MaterialTheme.typography.labelMedium.copy(
                                 color = TextMuted,
                                 fontWeight = FontWeight.Bold,
@@ -603,7 +603,7 @@ fun DashboardScreen(
                             horizontalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
                             QuickActionCard(
-                                title = "નવું બિલ બનાવો",
+                                title = "New Invoice",
                                 subtitle = "GST Invoice & Print",
                                 icon = Icons.Default.PointOfSale,
                                 accentColor = CoralPrimary,
@@ -628,7 +628,7 @@ fun DashboardScreen(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
-                                text = "RECENT SALES INVOICES (તાજેતરના બિલ)",
+                                text = "RECENT SALES INVOICES",
                                 style = MaterialTheme.typography.labelMedium.copy(
                                     color = TextMuted,
                                     fontWeight = FontWeight.Bold,
@@ -649,8 +649,8 @@ fun DashboardScreen(
                     if (recentInvoices.isEmpty()) {
                         item {
                             EmptyStateCard(
-                                title = "કોઈ તાજેતરના બિલ નથી",
-                                subtitle = "ગ્રાહકો માટે GST બિલ બનાવવા માટે 'નવું બિલ બનાવો' પર ક્લિક કરો",
+                                title = "No recent invoices",
+                                subtitle = "Tap 'New Invoice' to generate GST tax bills for customers",
                                 icon = Icons.Default.Description,
                                 actionText = "Create First Bill",
                                 onActionClick = onNavigateToBilling

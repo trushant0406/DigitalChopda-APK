@@ -537,11 +537,11 @@ fun SplashScreen(
                 Spacer(modifier = Modifier.height(8.dp))
 
                 Text(
-                    text = "स्मार्ट व्यापार • डिजिटल बહી-खाता",
+                    text = "Intelligent GST Invoicing & Khata Ledger",
                     style = MaterialTheme.typography.labelMedium.copy(
                         color = Color(0xFF475569),
                         fontWeight = FontWeight.Bold,
-                        letterSpacing = 1.2.sp,
+                        letterSpacing = 0.5.sp,
                         fontSize = 13.sp
                     ),
                     textAlign = TextAlign.Center
