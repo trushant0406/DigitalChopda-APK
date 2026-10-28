@@ -20,8 +20,8 @@ class LanguageManager(
     val strings: StateFlow<AppStrings> = _strings.asStateFlow()
 
     private fun loadInitialLanguage(): AppLanguage {
-        val savedCode = prefs?.getString(KEY_LANGUAGE_CODE, AppLanguage.GUJARATI.code) ?: AppLanguage.GUJARATI.code
-        return AppLanguage.entries.find { it.code == savedCode } ?: AppLanguage.GUJARATI
+        val savedCode = prefs?.getString(KEY_LANGUAGE_CODE, AppLanguage.ENGLISH.code) ?: AppLanguage.ENGLISH.code
+        return AppLanguage.entries.find { it.code == savedCode } ?: AppLanguage.ENGLISH
     }
 
     fun setLanguage(language: AppLanguage) {

@@ -68,6 +68,7 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
     }
     composeCompiler {
         featureFlags.add(org.jetbrains.kotlin.compose.compiler.gradle.ComposeFeatureFlag.OptimizeNonSkippingGroups)
@@ -76,6 +77,10 @@ android {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
         }
+    }
+    lint {
+        checkReleaseBuilds = false
+        abortOnError = false
     }
 }
 

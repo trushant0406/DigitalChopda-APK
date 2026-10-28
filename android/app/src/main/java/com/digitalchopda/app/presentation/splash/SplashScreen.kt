@@ -34,6 +34,11 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Security
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -64,6 +69,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.digitalchopda.app.core.designsystem.DigitalChopdaLogoMark
 import com.digitalchopda.app.core.designsystem.BorderStrokeDark
 import com.digitalchopda.app.core.designsystem.BrandAccentSoft
 import com.digitalchopda.app.core.designsystem.BrandPrimaryBlue
@@ -191,6 +197,26 @@ fun SplashScreen(
         label = "goldShineAngle"
     )
 
+    val radarPulse by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1200, easing = LinearOutSlowInEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "radarPulse"
+    )
+
+    val laserShimmerProgress by infiniteTransition.animateFloat(
+        initialValue = -0.3f,
+        targetValue = 1.3f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1400, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "laserShimmerProgress"
+    )
+
     // Single-shot navigation guard
     val hasNavigated = remember { mutableStateOf(false) }
 
@@ -252,19 +278,19 @@ fun SplashScreen(
 
         // Stage 3: Dynamic Merchant Loading Steps
         launch {
-            progressBarProgress.animateTo(0.35f, tween(400, easing = FastOutSlowInEasing))
             currentStatusIndex = 0
-            delay(400L)
-            progressBarProgress.animateTo(0.75f, tween(400, easing = FastOutSlowInEasing))
+            progressBarProgress.animateTo(0.35f, tween(400, easing = FastOutSlowInEasing))
+            delay(200L)
             currentStatusIndex = 1
-            delay(350L)
-            progressBarProgress.animateTo(1f, tween(300, easing = FastOutSlowInEasing))
+            progressBarProgress.animateTo(0.78f, tween(400, easing = FastOutSlowInEasing))
+            delay(200L)
             currentStatusIndex = 2
+            progressBarProgress.animateTo(1f, tween(350, easing = FastOutSlowInEasing))
         }
 
-        delay(1100L)
+        delay(1650L)
         val finalLoggedInState = startupInit.await()
-        delay(200L)
+        delay(250L)
         completeAndNavigate(finalLoggedInState)
     }
 
@@ -272,6 +298,12 @@ fun SplashScreen(
         strings.splashStepInit,
         strings.splashStepVault,
         strings.splashStepReady
+    )
+
+    val statusSubtitles = listOf(
+        strings.splashStepSubInit,
+        strings.splashStepSubVault,
+        strings.splashStepSubReady
     )
 
     // ─── MAIN FULL-SCREEN CANVAS ───
@@ -411,165 +443,15 @@ fun SplashScreen(
                     }
                 }
 
-                // 3. The Digital Chopda Book Core Container
-                Box(
-                    modifier = Modifier
-                        .size(width = 176.dp, height = 196.dp)
-                        .shadow(
-                            elevation = 20.dp,
-                            shape = RoundedCornerShape(topStart = 8.dp, bottomStart = 8.dp, topEnd = 20.dp, bottomEnd = 20.dp),
-                            ambientColor = Color(0x301E3A8A),
-                            spotColor = Color(0x401D4ED8)
-                        )
-                        .clip(RoundedCornerShape(topStart = 8.dp, bottomStart = 8.dp, topEnd = 20.dp, bottomEnd = 20.dp))
-                        .background(
-                            Brush.linearGradient(
-                                colors = listOf(
-                                    Color(0xFF1E3A8A), // Deep Navy
-                                    BrandPrimaryBlue,  // Royal FinTech Blue
-                                    Color(0xFF1D4ED8)
-                                ),
-                                start = Offset(0f, 0f),
-                                end = Offset(400f, 400f)
-                            )
-                        )
-                        .border(
-                            width = 2.dp,
-                            brush = Brush.linearGradient(
-                                listOf(
-                                    Color(0xFFFDE68A), // Gold foil border
-                                    Color(0xFFD97706),
-                                    Color(0xFFF59E0B)
-                                )
-                            ),
-                            shape = RoundedCornerShape(topStart = 8.dp, bottomStart = 8.dp, topEnd = 20.dp, bottomEnd = 20.dp)
-                        )
-                ) {
-                    // Left Book Spine with Traditional Gold Stitch Accents
-                    Box(
-                        modifier = Modifier
-                            .align(Alignment.CenterStart)
-                            .width(22.dp)
-                            .fillMaxSize()
-                            .background(
-                                Brush.horizontalGradient(
-                                    listOf(
-                                        Color(0xFF0F172A),
-                                        Color(0xFF1E293B),
-                                        Color(0xFF1E3A8A)
-                                    )
-                                )
-                            )
-                    ) {
-                        // Spine stitch lines
-                        Column(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .padding(vertical = 12.dp),
-                            verticalArrangement = Arrangement.SpaceBetween,
-                            horizontalAlignment = Alignment.CenterHorizontally
-                        ) {
-                            repeat(6) {
-                                Box(
-                                    modifier = Modifier
-                                        .width(12.dp)
-                                        .height(2.dp)
-                                        .clip(RoundedCornerShape(1.dp))
-                                        .background(Color(0xFFF59E0B).copy(alpha = 0.85f))
-                                )
-                            }
-                        }
-                    }
-
-                    // Satin Golden Silk Bookmark Hanging Down
-                    Box(
-                        modifier = Modifier
-                            .align(Alignment.TopEnd)
-                            .offset(x = (-26).dp, y = (-2).dp)
-                            .width(16.dp)
-                            .height(65.dp)
-                            .shadow(4.dp, RoundedCornerShape(bottomStart = 4.dp, bottomEnd = 4.dp), spotColor = Color(0xFFB45309))
-                            .background(
-                                Brush.verticalGradient(
-                                    listOf(
-                                        Color(0xFFFBBF24),
-                                        Color(0xFFD97706),
-                                        Color(0xFFB45309)
-                                    )
-                                )
-                            )
-                    )
-
-                    // Front Cover: Inner Golden Filigree Frame & Central Medallion
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(start = 28.dp, end = 12.dp, top = 14.dp, bottom = 14.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        // Subtle Inner Gold Hairline
-                        Box(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .border(1.dp, Color(0xFFFDE68A).copy(alpha = 0.35f), RoundedCornerShape(12.dp))
-                        )
-
-                        // Central Auspicious Prosperity Rupee Medallion
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.Center
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(66.dp)
-                                    .clip(CircleShape)
-                                    .background(
-                                        Brush.radialGradient(
-                                            listOf(
-                                                Color(0xFFFEF3C7),
-                                                Color(0xFFFDE68A),
-                                                Color(0xFFD97706)
-                                            )
-                                        )
-                                    )
-                                    .border(2.5.dp, Color(0xFFFFFBEB), CircleShape)
-                                    .shadow(8.dp, CircleShape, spotColor = Color(0xFFF59E0B)),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(
-                                    text = "₹",
-                                    fontSize = 34.sp,
-                                    fontWeight = FontWeight.Black,
-                                    color = Color(0xFF78350F),
-                                    textAlign = TextAlign.Center
-                                )
-                            }
-
-                            Spacer(modifier = Modifier.height(10.dp))
-
-                            Text(
-                                text = "DIGITAL CHOPDA",
-                                fontSize = 9.sp,
-                                fontWeight = FontWeight.Black,
-                                color = Color(0xFFFDE68A),
-                                letterSpacing = 1.6.sp
-                            )
-
-                            Spacer(modifier = Modifier.height(2.dp))
-
-                            Text(
-                                text = "बही-खाता",
-                                fontSize = 10.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = Color.White.copy(alpha = 0.90f),
-                                letterSpacing = 0.5.sp
-                            )
-                        }
-                    }
-                }
+                // 3. The Official DigitalChopda Vector Logo Mark
+                DigitalChopdaLogoMark(
+                    size = 150.dp,
+                    animated = true,
+                    showGlow = true
+                )
             }
 
-            Spacer(modifier = Modifier.height(30.dp))
+            Spacer(modifier = Modifier.height(28.dp))
 
             // ─── BRAND TYPOGRAPHY: CRISP & AUSPICIOUS ───
             Column(
@@ -589,8 +471,8 @@ fun SplashScreen(
                         style = MaterialTheme.typography.headlineLarge.copy(
                             fontWeight = FontWeight.Black,
                             color = DarkNavy,
-                            letterSpacing = 2.sp,
-                            fontSize = 32.sp
+                            letterSpacing = 1.5.sp,
+                            fontSize = 30.sp
                         )
                     )
 
@@ -601,10 +483,28 @@ fun SplashScreen(
                         style = MaterialTheme.typography.headlineLarge.copy(
                             fontWeight = FontWeight.Black,
                             color = BrandPrimaryBlue,
-                            letterSpacing = 2.sp,
-                            fontSize = 32.sp
+                            letterSpacing = 1.5.sp,
+                            fontSize = 30.sp
                         )
                     )
+
+                    Spacer(modifier = Modifier.width(8.dp))
+
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(Color(0xFFECFDF5))
+                            .border(1.dp, Color(0xFFA7F3D0), RoundedCornerShape(8.dp))
+                            .padding(horizontal = 8.dp, vertical = 3.dp)
+                    ) {
+                        Text(
+                            text = "ERP",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFF10B981),
+                            letterSpacing = 0.8.sp
+                        )
+                    }
                 }
 
                 Spacer(modifier = Modifier.height(8.dp))
@@ -642,7 +542,7 @@ fun SplashScreen(
 
             Spacer(modifier = Modifier.weight(1f))
 
-            // ─── MERCHANT-FACING STARTUP PROGRESS CARD (ZERO TECH JARGON) ───
+            // ─── HIGH-TECH BANK-GRADE PROGRESS CARD (INNOVATIVE & SECURE) ───
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 modifier = Modifier.fillMaxWidth()
@@ -650,68 +550,270 @@ fun SplashScreen(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clip(RoundedCornerShape(16.dp))
-                        .background(MidnightCardSurface)
-                        .border(1.dp, BorderStrokeDark, RoundedCornerShape(16.dp))
-                        .padding(horizontal = 16.dp, vertical = 14.dp)
+                        .shadow(
+                            elevation = 12.dp,
+                            shape = RoundedCornerShape(22.dp),
+                            spotColor = Color(0x1F1D4ED8),
+                            ambientColor = Color(0x0F000000)
+                        )
+                        .clip(RoundedCornerShape(22.dp))
+                        .background(Color.White)
+                        .border(
+                            width = 1.2.dp,
+                            brush = Brush.linearGradient(
+                                colors = listOf(
+                                    Color(0xFF3B82F6).copy(alpha = 0.35f),
+                                    Color(0xFF6366F1).copy(alpha = 0.20f),
+                                    Color(0xFF10B981).copy(alpha = 0.35f)
+                                )
+                            ),
+                            shape = RoundedCornerShape(22.dp)
+                        )
+                        .padding(horizontal = 18.dp, vertical = 16.dp)
                 ) {
                     Column(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalAlignment = Alignment.CenterHorizontally
+                        modifier = Modifier.fillMaxWidth()
                     ) {
-                        // Reassuring Merchant Status with smooth transition
+                        // 1. Top Telemetry Row: Cryptographic Security Badge & Live Radar Handshake
                         Row(
+                            modifier = Modifier.fillMaxWidth(),
                             verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.Center,
-                            modifier = Modifier.fillMaxWidth()
+                            horizontalArrangement = Arrangement.SpaceBetween
                         ) {
-                            Box(
+                            // Left: Bank-Grade Vault Badge
+                            Row(
                                 modifier = Modifier
-                                    .size(8.dp)
-                                    .clip(CircleShape)
-                                    .background(EmeraldJama)
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            AnimatedContent(
-                                targetState = currentStatusIndex,
-                                transitionSpec = { fadeIn(tween(200)) togetherWith fadeOut(tween(150)) },
-                                label = "statusCrossfade"
-                            ) { idx ->
-                                Text(
-                                    text = statusTexts.getOrElse(idx) { strings.splashStepReady },
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = DarkNavy,
-                                    textAlign = TextAlign.Center
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(Color(0xFFECFDF5))
+                                    .border(1.dp, Color(0xFFA7F3D0), RoundedCornerShape(8.dp))
+                                    .padding(horizontal = 8.dp, vertical = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Security,
+                                    contentDescription = null,
+                                    tint = Color(0xFF059669),
+                                    modifier = Modifier.size(12.dp)
                                 )
+                                Spacer(modifier = Modifier.width(5.dp))
+                                Text(
+                                    text = "256-BIT AES ENCRYPTED",
+                                    fontSize = 9.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFF047857),
+                                    letterSpacing = 0.6.sp
+                                )
+                            }
+
+                            // Right: Pulsing Radar Beacon + Live Percent
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                // Live Radar Beacon Canvas
+                                Box(
+                                    modifier = Modifier.size(18.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Canvas(modifier = Modifier.fillMaxSize()) {
+                                        val center = Offset(size.width / 2f, size.height / 2f)
+                                        // Animated expanding ping wave
+                                        val pingRadius = 4f + (radarPulse * 16f)
+                                        val pingAlpha = (1f - radarPulse).coerceIn(0f, 0.7f)
+                                        drawCircle(
+                                            color = Color(0xFF10B981).copy(alpha = pingAlpha),
+                                            radius = pingRadius,
+                                            center = center
+                                        )
+                                        // Solid inner core
+                                        drawCircle(
+                                            color = Color(0xFF10B981),
+                                            radius = 4.5f,
+                                            center = center
+                                        )
+                                    }
+                                }
+
+                                Spacer(modifier = Modifier.width(6.dp))
+
+                                // Percentage Badge Pill
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(6.dp))
+                                        .background(ElevatedSlate)
+                                        .border(0.75.dp, Color(0xFFE2E8F0), RoundedCornerShape(6.dp))
+                                        .padding(horizontal = 6.dp, vertical = 2.dp)
+                                ) {
+                                    Text(
+                                        text = "${(progressBarProgress.value * 100).toInt()}%",
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Black,
+                                        color = DarkNavy
+                                    )
+                                }
                             }
                         }
 
-                        Spacer(modifier = Modifier.height(10.dp))
+                        Spacer(modifier = Modifier.height(14.dp))
 
-                        // High-End Gradient Linear Progress Bar
+                        // 2. Centerpiece Dynamic Loading Step: Modern Icon Squircle + Title + Subtitle
+                        AnimatedContent(
+                            targetState = currentStatusIndex,
+                            transitionSpec = { fadeIn(tween(200)) togetherWith fadeOut(tween(150)) },
+                            label = "statusCrossfade"
+                        ) { idx ->
+                            val stepIcon = when (idx) {
+                                0 -> Icons.Default.Lock
+                                1 -> Icons.Default.Security
+                                else -> Icons.Default.CheckCircle
+                            }
+                            val iconTint = when (idx) {
+                                0 -> Color(0xFF2563EB)
+                                1 -> Color(0xFF4F46E5)
+                                else -> Color(0xFF10B981)
+                            }
+                            val iconBg = when (idx) {
+                                0 -> Color(0xFFEFF6FF)
+                                1 -> Color(0xFFEEF2FF)
+                                else -> Color(0xFFECFDF5)
+                            }
+                            val iconBorder = when (idx) {
+                                0 -> Color(0xFFBFDBFE)
+                                1 -> Color(0xFFC7D2FE)
+                                else -> Color(0xFFA7F3D0)
+                            }
+
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                // Squircle Icon Container
+                                Box(
+                                    modifier = Modifier
+                                        .size(38.dp)
+                                        .clip(RoundedCornerShape(10.dp))
+                                        .background(iconBg)
+                                        .border(1.dp, iconBorder, RoundedCornerShape(10.dp)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = stepIcon,
+                                        contentDescription = null,
+                                        tint = iconTint,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
+
+                                Spacer(modifier = Modifier.width(12.dp))
+
+                                // Text Stack: Status Title + Cryptographic Subtitle
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = statusTexts.getOrElse(idx) { strings.splashStepReady },
+                                        fontSize = 13.5.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = DarkNavy,
+                                        maxLines = 1
+                                    )
+                                    Spacer(modifier = Modifier.height(2.dp))
+                                    Text(
+                                        text = statusSubtitles.getOrElse(idx) { strings.splashStepSubReady },
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Normal,
+                                        color = Color(0xFF64748B),
+                                        maxLines = 1
+                                    )
+                                }
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(14.dp))
+
+                        // 3. Fluid Neon Progress Bar with Animated Laser Shimmer Beam
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(5.dp)
-                                .clip(RoundedCornerShape(2.5.dp))
-                                .background(ElevatedSlate)
+                                .height(7.dp)
+                                .clip(RoundedCornerShape(3.5.dp))
+                                .background(Color(0xFFF1F5F9))
+                                .border(0.5.dp, Color(0xFFE2E8F0), RoundedCornerShape(3.5.dp))
                         ) {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth(progressBarProgress.value)
-                                    .height(5.dp)
-                                    .clip(RoundedCornerShape(2.5.dp))
-                                    .background(
-                                        Brush.horizontalGradient(
-                                            listOf(
-                                                BrandPrimaryBlue,
-                                                Color(0xFF38BDF8),
-                                                Color(0xFFF59E0B)
+                            val curProgress = progressBarProgress.value.coerceIn(0f, 1f)
+                            if (curProgress > 0.01f) {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth(curProgress)
+                                        .height(7.dp)
+                                        .clip(RoundedCornerShape(3.5.dp))
+                                        .background(
+                                            Brush.horizontalGradient(
+                                                colors = listOf(
+                                                    Color(0xFF2563EB),
+                                                    Color(0xFF4F46E5),
+                                                    Color(0xFF06B6D4),
+                                                    Color(0xFF10B981)
+                                                )
                                             )
                                         )
-                                    )
-                            )
+                                ) {
+                                    // Animated specular laser shimmer traveling across the active bar
+                                    Canvas(modifier = Modifier.fillMaxSize()) {
+                                        val barWidth = size.width
+                                        val beamCenter = laserShimmerProgress * barWidth
+                                        val beamWidth = 60f
+                                        drawRect(
+                                            brush = Brush.horizontalGradient(
+                                                colors = listOf(
+                                                    Color.Transparent,
+                                                    Color.White.copy(alpha = 0.65f),
+                                                    Color.Transparent
+                                                ),
+                                                startX = beamCenter - beamWidth,
+                                                endX = beamCenter + beamWidth
+                                            )
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(14.dp))
+
+                        // 4. Integrated Cryptographic Trust Pills
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(text = "🛡️", fontSize = 10.sp)
+                                Spacer(modifier = Modifier.width(3.dp))
+                                Text(
+                                    text = "DPDP 2023 Safe",
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = Color(0xFF64748B)
+                                )
+                            }
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(text = "🔒", fontSize = 10.sp)
+                                Spacer(modifier = Modifier.width(3.dp))
+                                Text(
+                                    text = "SQLiteCipher",
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = Color(0xFF64748B)
+                                )
+                            }
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(text = "⚡", fontSize = 10.sp)
+                                Spacer(modifier = Modifier.width(3.dp))
+                                Text(
+                                    text = "Offline First",
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = Color(0xFF64748B)
+                                )
+                            }
                         }
                     }
                 }
@@ -723,12 +825,12 @@ fun SplashScreen(
                     modifier = Modifier
                         .clip(RoundedCornerShape(12.dp))
                         .background(ElevatedSlate)
-                        .padding(horizontal = 12.dp, vertical = 5.dp),
+                        .padding(horizontal = 14.dp, vertical = 6.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "🇮🇳 Trusted by Indian Vyaparis • 100% Safe & Secure",
-                        fontSize = 10.sp,
+                        text = "🇮🇳 Bank-Grade Merchant Protection • Made in Bharat",
+                        fontSize = 10.5.sp,
                         fontWeight = FontWeight.SemiBold,
                         color = TextMuted,
                         letterSpacing = 0.4.sp

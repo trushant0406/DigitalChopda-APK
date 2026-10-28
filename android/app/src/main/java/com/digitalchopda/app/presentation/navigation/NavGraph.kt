@@ -102,8 +102,12 @@ fun DigitalChopdaNavGraph(
             )
         }
 
-        // Screen 2: Login & Register Screen
-        composable(Screen.LoginRegister.route) {
+        // Screen 2: Login & Register Screen (Seamless Crossfade Transition from Splash)
+        composable(
+            route = Screen.LoginRegister.route,
+            enterTransition = { fadeIn(animationSpec = tween(400)) },
+            exitTransition = { fadeOut(animationSpec = tween(300)) }
+        ) {
             LoginRegisterScreen(
                 authRepository = app.authRepository,
                 languageManager = app.languageManager,

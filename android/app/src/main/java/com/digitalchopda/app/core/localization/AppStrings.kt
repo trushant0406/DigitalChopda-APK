@@ -11,6 +11,9 @@ data class AppStrings(
     val splashStepInit: String,
     val splashStepVault: String,
     val splashStepReady: String,
+    val splashStepSubInit: String = "Authenticating local hardware keystore",
+    val splashStepSubVault: String = "Decrypting tamper-proof AES-256 database",
+    val splashStepSubReady: String = "Zero-knowledge merchant session active",
 
     // Navigation Dock
     val navChopda: String,
@@ -165,6 +168,9 @@ val EnglishStrings = AppStrings(
     splashStepInit = "✨ Opening Your Business Ledger...",
     splashStepVault = "🛡️ Verifying Bank-Grade Security...",
     splashStepReady = "🚀 Ready for Daily Vyapar • 100%",
+    splashStepSubInit = "Authenticating local hardware keystore",
+    splashStepSubVault = "Decrypting offline SQLiteCipher database",
+    splashStepSubReady = "Zero-knowledge merchant session active",
 
     navChopda = "Chopda",
     navParty = "Party",
@@ -287,6 +293,9 @@ val GujaratiStrings = AppStrings(
     splashStepInit = "✨ તમારી સુરક્ષિત ખાતાવહી શરૂ થઈ રહી છે...",
     splashStepVault = "🛡️ બેંક જેવી સુરક્ષા ચકાસી રહ્યા છીએ...",
     splashStepReady = "🚀 રોજના વેપાર માટે તૈયાર • ૧૦૦%",
+    splashStepSubInit = "હાર્ડવેર કીસ્ટોર અને સુરક્ષા ચકાસણી",
+    splashStepSubVault = "AES-૨૫૬ એન્ક્રિપ્ટેડ ડેટાબેઝ ડિક્રિપ્શન",
+    splashStepSubReady = "સુરક્ષિત વેપાર સત્ર સફળતાપૂર્વક સક્રિય",
 
     navChopda = "ચોપડો",
     navParty = "પાર્ટી",
@@ -431,6 +440,9 @@ val HindiStrings = AppStrings(
     splashStepInit = "✨ आपका सुरक्षित बही-खाता खुल रहा है...",
     splashStepVault = "🛡️ बैंक-स्तरीय सुरक्षा की पुष्टि हो रही है...",
     splashStepReady = "🚀 दैनिक व्यापार के लिए तैयार • 100%",
+    splashStepSubInit = "हार्डवेयर कीस्टोर और सुरक्षा प्रमाणीकरण",
+    splashStepSubVault = "AES-256 एन्क्रिप्टेड डेटाबेस डिक्रिप्शन",
+    splashStepSubReady = "सुरक्षित व्यापार सत्र सफलतापूर्वक सक्रिय",
 
     navChopda = "चोपड़ा",
     navParty = "पार्टी",

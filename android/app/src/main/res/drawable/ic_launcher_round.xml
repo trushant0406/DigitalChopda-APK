@@ -1,28 +1,68 @@
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <!-- Round Background: Sacred Chopda Cloth Deep Red -->
+    
+    <!-- Circular Background with Linear Gradient -->
+    <path android:pathData="M54,4 A50,50 0 1 0 54,104 A50,50 0 1 0 54,4 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:type="linear"
+                android:startX="0"
+                android:startY="0"
+                android:endX="108"
+                android:endY="108"
+                android:startColor="#3B82F6"
+                android:centerColor="#6366F1"
+                android:endColor="#10B981" />
+        </aapt:attr>
+    </path>
+
+    <!-- Inner Specular White Border -->
     <path
-        android:fillColor="#991B1B"
-        android:pathData="M54,4 A50,50 0 1 0 54,104 A50,50 0 1 0 54,4 Z" />
-    <!-- Outer Gold Ring -->
-    <path
+        android:strokeColor="#FFFFFF"
+        android:strokeAlpha="0.38"
+        android:strokeWidth="1.8"
         android:fillColor="#00000000"
-        android:strokeColor="#F59E0B"
-        android:strokeWidth="3"
-        android:pathData="M54,7 A47,47 0 1 0 54,101 A47,47 0 1 0 54,7 Z" />
-    <!-- Book Body Inside Circle -->
+        android:pathData="M54,6 A48,48 0 1 0 54,102 A48,48 0 1 0 54,6 Z" />
+
+    <!-- Open Chopda Book - Left Page -->
     <path
-        android:fillColor="#DC2626"
-        android:pathData="M32,24h44v60h-44z" />
-    <!-- Golden Spine -->
+        android:fillColor="#FFFFFF"
+        android:fillAlpha="0.96"
+        android:pathData="M24,28 h28 v42 h-26 a2,2 0 0 1 -2,-2 z" />
+
+    <!-- Open Chopda Book - Right Page -->
     <path
-        android:fillColor="#F59E0B"
-        android:pathData="M32,24h8v60h-8z" />
-    <!-- Gold Rupee Emblem -->
+        android:fillColor="#FFFFFF"
+        android:fillAlpha="0.92"
+        android:pathData="M56,28 h26 a2,2 0 0 1 2,2 v40 h-28 z" />
+
+    <!-- Center Spine Divider Line -->
     <path
-        android:fillColor="#FDE047"
-        android:pathData="M46,40h16v4h-16z M46,47h16v4h-10l10,16h-5l-10,-16v-4z" />
+        android:strokeColor="#4F46E5"
+        android:strokeWidth="2.8"
+        android:strokeLineCap="round"
+        android:fillColor="#00000000"
+        android:pathData="M54,27 v44" />
+
+    <!-- Left Page: Rupee Symbol (₹) -->
+    <path
+        android:strokeColor="#4F46E5"
+        android:strokeWidth="2.6"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:fillColor="#00000000"
+        android:pathData="M31,38 h11 M31,44 h10.5 M41.5,44 c2,0 3.5,1.5 3.5,3.5 c0,2 -1.5,3.5 -3.5,3.5 L33,60" />
+
+    <!-- Right Page: Dynamic Emerald Checkmark (✓) -->
+    <path
+        android:strokeColor="#10B981"
+        android:strokeWidth="4"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:fillColor="#00000000"
+        android:pathData="M60,49 L66,56 L78,40" />
 </vector>
