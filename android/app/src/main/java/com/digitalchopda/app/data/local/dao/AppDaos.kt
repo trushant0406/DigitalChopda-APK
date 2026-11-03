@@ -100,6 +100,9 @@ interface InvoiceDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertInvoice(invoice: InvoiceEntity): Long
 
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertAllInvoices(invoices: List<InvoiceEntity>): List<Long>
+
     @Update
     suspend fun updateInvoice(invoice: InvoiceEntity)
 
@@ -159,6 +162,9 @@ interface PaymentDao {
 
     @Query("UPDATE payments SET syncStatus = :syncStatus, serverPaymentId = :serverId, receiptNumber = :receiptNumber WHERE id = :id")
     suspend fun markSynced(id: Long, serverId: Long, receiptNumber: String, syncStatus: String = "SYNCED")
+
+    @Query("UPDATE payments SET syncStatus = :syncStatus WHERE id = :id")
+    suspend fun updateSyncStatus(id: Long, syncStatus: String)
 
     @Query("SELECT * FROM payments WHERE id = :id LIMIT 1")
     suspend fun getPaymentById(id: Long): PaymentEntity?
@@ -221,8 +227,17 @@ interface CustomerDao {
     @Query("SELECT * FROM customers WHERE companyId = :companyId AND phone = :phone LIMIT 1")
     suspend fun getCustomerByPhone(companyId: Long, phone: String): CustomerEntity?
 
+    @Query("SELECT * FROM customers WHERE companyId = :companyId AND phone = :phone AND LOWER(TRIM(name)) = LOWER(TRIM(:name)) LIMIT 1")
+    suspend fun getCustomerByNameAndPhone(companyId: Long, name: String, phone: String): CustomerEntity?
+
+    @Query("SELECT * FROM customers WHERE companyId = :companyId AND phone = :phone")
+    suspend fun getCustomersByPhone(companyId: Long, phone: String): List<CustomerEntity>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertCustomer(customer: CustomerEntity): Long
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertAllCustomers(customers: List<CustomerEntity>): List<Long>
 
     @Update
     suspend fun updateCustomer(customer: CustomerEntity)
@@ -415,6 +430,9 @@ interface ProductDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertProduct(product: ProductEntity): Long
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertAll(products: List<ProductEntity>): List<Long>
 
     @Update
     suspend fun updateProduct(product: ProductEntity)

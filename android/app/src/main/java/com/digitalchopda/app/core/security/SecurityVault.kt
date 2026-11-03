@@ -101,12 +101,15 @@ class TokenStorage(context: Context) {
         const val URL_OFFICE_WIFI = "http://10.74.4.212:3000/api/"
         const val URL_TAILSCALE_DEV = "http://100.99.250.0:3000/api/"
         const val URL_EMULATOR = "http://10.0.2.2:3000/api/"
-        val DEFAULT_BASE_URL: String
-            get() = if (com.digitalchopda.app.BuildConfig.DEBUG) URL_LOCAL_ADB else URL_CLOUD_PROD
+        val DEFAULT_BASE_URL: String = URL_TAILSCALE_DEV
     }
 
     fun getBaseUrl(): String {
-        return prefs.getString(KEY_SERVER_URL, DEFAULT_BASE_URL) ?: DEFAULT_BASE_URL
+        val saved = prefs.getString(KEY_SERVER_URL, null)
+        if (saved.isNullOrBlank() || saved.contains("app.digitalchopda.in")) {
+            return URL_TAILSCALE_DEV
+        }
+        return saved
     }
 
     fun setBaseUrl(url: String) {
@@ -120,6 +123,14 @@ class TokenStorage(context: Context) {
         prefs.edit()
             .putString(KEY_ACCESS_TOKEN, vault.encrypt(accessToken))
             .putString(KEY_REFRESH_TOKEN, vault.encrypt(refreshToken))
+            .apply()
+    }
+
+    fun clearTokens() {
+        prefs.edit()
+            .remove(KEY_ACCESS_TOKEN)
+            .remove(KEY_REFRESH_TOKEN)
+            .putBoolean(KEY_IS_LOGGED_IN, false)
             .apply()
     }
 

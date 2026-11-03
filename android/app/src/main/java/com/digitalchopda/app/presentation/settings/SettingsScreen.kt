@@ -485,7 +485,7 @@ fun SettingsScreen(
                             Column {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Text(
-                                        text = "GST Tax Hub & CA Compliance",
+                                        text = "GST & Tax Summary",
                                         style = MaterialTheme.typography.titleMedium.copy(
                                             fontWeight = FontWeight.Bold,
                                             color = DarkNavy,
@@ -494,14 +494,14 @@ fun SettingsScreen(
                                     )
                                     Spacer(modifier = Modifier.width(6.dp))
                                     StatusPill(
-                                        text = "LIVE",
+                                        text = "TAX",
                                         textColor = EmeraldJama,
                                         backgroundColor = EmeraldJamaBg
                                     )
                                 }
                                 Spacer(modifier = Modifier.height(2.dp))
                                 Text(
-                                    text = "GSTR-1, GSTR-3B Summary, Tax Invoices & ITC",
+                                    text = "Tax Liability, ITC Inward Credit & CA Export",
                                     style = MaterialTheme.typography.bodySmall.copy(
                                         color = TextSubtle,
                                         fontSize = 12.sp
@@ -1650,9 +1650,7 @@ fun BankAndUpiConfigDialog(
         }
     ) {
         Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .verticalScroll(rememberScrollState())
+            modifier = Modifier.fillMaxWidth()
         ) {
             Text(
                 text = "These payment details appear on generated Tax Invoices, Quotations, and receipts for customer direct NEFT/RTGS/UPI transfers.",

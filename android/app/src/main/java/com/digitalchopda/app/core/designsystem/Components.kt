@@ -1945,21 +1945,21 @@ fun ChopdaPdfLoadingOverlay(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.Center
                 ) {
-                    // Auspicious Invocation Pill
+                    // Enterprise Brand Pill
                     Row(
                         modifier = Modifier
                             .clip(RoundedCornerShape(20.dp))
-                            .background(Color(0x22F59E0B))
-                            .border(1.dp, Color(0xFFF59E0B).copy(alpha = 0.35f), RoundedCornerShape(20.dp))
+                            .background(BrandPrimaryBlue.copy(alpha = 0.15f))
+                            .border(1.dp, BrandPrimaryBlue.copy(alpha = 0.35f), RoundedCornerShape(20.dp))
                             .padding(horizontal = 12.dp, vertical = 4.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            text = "|| 卐 શુભ લાભ • શ્રી ગણેશાય નમઃ 卐 ||",
+                            text = "DIGITAL CHOPDA ENTERPRISE",
                             fontSize = 10.sp,
                             fontWeight = FontWeight.Bold,
-                            color = Color(0xFFFDE68A),
-                            letterSpacing = 0.6.sp
+                            color = BrandPrimaryBlue,
+                            letterSpacing = 0.8.sp
                         )
                     }
 

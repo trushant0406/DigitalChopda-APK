@@ -530,7 +530,7 @@ fun DashboardScreen(
                                 DashboardStatCard(
                                     label = "Payment pending",
                                     value = "$unpaidCount",
-                                    subValue = "₹${com.digitalchopda.app.util.formatINR(unpaidAmt)} pending",
+                                    subValue = "${com.digitalchopda.app.util.formatINR(unpaidAmt)} pending",
                                     accentColor = DangerRed,
                                     modifier = Modifier.weight(1f),
                                     onClick = onNavigateToBilling
@@ -579,7 +579,7 @@ fun DashboardScreen(
                                 )
                                 DashboardStatCard(
                                     label = "Total Sales",
-                                    value = "₹${com.digitalchopda.app.util.formatINR(totalSales)}",
+                                    value = com.digitalchopda.app.util.formatINR(totalSales),
                                     subValue = "$invoiceCount Invoices generated",
                                     accentColor = ImperialGold,
                                     modifier = Modifier.weight(1f),
@@ -1389,7 +1389,7 @@ fun RokadCashDrawerCard(
             Spacer(modifier = Modifier.height(10.dp))
 
             Text(
-                text = "₹ ${com.digitalchopda.app.util.formatINR(closingCash)}",
+                text = com.digitalchopda.app.util.formatINR(closingCash),
                 style = MaterialTheme.typography.displaySmall.copy(
                     fontWeight = FontWeight.Black,
                     color = ImperialGoldLight
@@ -1409,15 +1409,15 @@ fun RokadCashDrawerCard(
             ) {
                 Column {
                     Text("Opening Balance", style = MaterialTheme.typography.labelSmall.copy(color = TextSubtle))
-                    Text("₹ ${com.digitalchopda.app.util.formatINR(openingBalance)}", style = MaterialTheme.typography.titleMedium.copy(color = TextWhite, fontWeight = FontWeight.Bold))
+                    Text(com.digitalchopda.app.util.formatINR(openingBalance), style = MaterialTheme.typography.titleMedium.copy(color = TextWhite, fontWeight = FontWeight.Bold))
                 }
                 Column {
                     Text("Total Inflow (+)", style = MaterialTheme.typography.labelSmall.copy(color = EmeraldJama))
-                    Text("+₹ ${com.digitalchopda.app.util.formatINR(totalInflow)}", style = MaterialTheme.typography.titleMedium.copy(color = EmeraldJama, fontWeight = FontWeight.Bold))
+                    Text("+ ${com.digitalchopda.app.util.formatINR(totalInflow)}", style = MaterialTheme.typography.titleMedium.copy(color = EmeraldJama, fontWeight = FontWeight.Bold))
                 }
                 Column {
                     Text("Total Outflow (-)", style = MaterialTheme.typography.labelSmall.copy(color = RubyUdhar))
-                    Text("-₹ ${com.digitalchopda.app.util.formatINR(totalOutflow)}", style = MaterialTheme.typography.titleMedium.copy(color = RubyUdhar, fontWeight = FontWeight.Bold))
+                    Text("- ${com.digitalchopda.app.util.formatINR(totalOutflow)}", style = MaterialTheme.typography.titleMedium.copy(color = RubyUdhar, fontWeight = FontWeight.Bold))
                 }
             }
         }
@@ -1517,7 +1517,7 @@ fun RecentInvoiceCard(
             }
             Column(horizontalAlignment = Alignment.End) {
                 Text(
-                    text = "₹${com.digitalchopda.app.util.formatINR(invoice.grandTotal)}",
+                    text = com.digitalchopda.app.util.formatINR(invoice.grandTotal),
                     style = MaterialTheme.typography.titleMedium.copy(
                         fontWeight = FontWeight.Bold,
                         color = if (isPaid) EmeraldJama else RubyUdhar,

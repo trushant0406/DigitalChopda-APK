@@ -897,4 +897,15 @@ class DigitalChopdaUnitTestSuite {
         assertEquals(8846.0, result.grandTotal, 0.01)
         assertEquals(101L, longTitleItem.itemId)
     }
+
+    @Test
+    fun testRetrofitInterfaceEagerValidation() {
+        val retrofit = Retrofit.Builder()
+            .baseUrl("http://localhost:4000/api/")
+            .addConverterFactory(GsonConverterFactory.create())
+            .validateEagerly(true)
+            .build()
+        val api = retrofit.create(DigitalChopdaApiService::class.java)
+        assertNotNull(api)
+    }
 }

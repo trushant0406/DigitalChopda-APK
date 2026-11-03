@@ -25,8 +25,8 @@ class AuthHeaderInterceptor(
          * Candidate local/development Depot hosts ordered by priority.
          */
         val DEV_CANDIDATE_HOSTS = listOf(
-            "127.0.0.1",    // 1. Local loopback (with adb reverse - zero latency)
-            "100.99.250.0", // 2. Tailscale Dev Mesh
+            "100.99.250.0", // 1. Tailscale Dev Mesh (Primary)
+            "127.0.0.1",    // 2. Local loopback (with adb reverse - zero latency)
             "10.74.4.212",  // 3. Office / Local Wi-Fi LAN
             "10.0.2.2",     // 4. Android Emulator host loopback
             "localhost"
@@ -67,6 +67,10 @@ class AuthHeaderInterceptor(
 
         return try {
             val response = chain.proceed(requestToExecute)
+            if (response.code == 401 && token.isNotBlank()) {
+                Log.w(TAG, "Server returned 401 Unauthorized. Clearing stale JWT token from vault...")
+                tokenStorage.clearTokens()
+            }
             if (isDevHost && response.isSuccessful) {
                 activeHostOverride = requestToExecute.url.host
             }

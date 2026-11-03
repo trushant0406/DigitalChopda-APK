@@ -5,6 +5,7 @@ import retrofit2.Response
 import retrofit2.http.Body
 import retrofit2.http.DELETE
 import retrofit2.http.GET
+import retrofit2.http.HTTP
 import retrofit2.http.PATCH
 import retrofit2.http.POST
 import retrofit2.http.PUT
@@ -157,6 +158,12 @@ interface DigitalChopdaApiService {
     @POST("businesses")
     suspend fun createBusiness(@Body request: ApiCreateBusinessRequest): Response<ApiBusinessDto>
 
+    @PUT("businesses/{id}")
+    suspend fun updateBusiness(
+        @Path("id") id: Long,
+        @Body request: ApiUpdateBusinessRequest
+    ): Response<ApiBusinessDto>
+
     // --- Sequence Leases (Offline Billing Engine) ---
     @POST("leases/acquire")
     suspend fun acquireLease(@Body request: ApiLeaseRequest): Response<ApiLeaseResponse>
@@ -212,11 +219,14 @@ interface DigitalChopdaApiService {
     suspend fun getStockHistory(@Path("productId") productId: Long): Response<List<ApiStockAdjustmentDto>>
 
     // --- Payment Void & Ledger Safeguards ---
-    @DELETE("credit/payments/{id}")
+    @HTTP(method = "DELETE", path = "credit/payments/{id}", hasBody = true)
     suspend fun deletePayment(
         @Path("id") id: Long,
         @Body request: Map<String, String> = emptyMap()
     ): Response<Map<String, Any>>
+
+    @GET("credit/payments/{id}/impact")
+    suspend fun getPaymentImpact(@Path("id") id: Long): Response<Map<String, Any>>
 
     // --- Business, GST & Audit Reports ---
     @GET("reports/gst/summary")

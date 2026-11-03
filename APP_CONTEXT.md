@@ -73,7 +73,9 @@ Database Class: `ChopdaDatabase.kt` (Room SQLite)
 2. **Dynamic UPI QR Code**: `UpiQrDialog.kt` generates instant ZXing QR codes encoded with standard NPCI UPI payload: `upi://pay?pa={vpa}&pn={name}&am={amount}&tn={invoiceNo}`.
 3. **Bluetooth Thermal Receipt Printing**: `ThermalPrinterManager.kt` connects to 58mm/80mm ESC/POS printers over Bluetooth SPP.
 4. **Barcode Scanning**: `BarcodeScannerDialog.kt` powered by CameraX and ML Kit Barcode API.
-5. **PDF Generation**: `InvoicePdfGenerator.kt` compiles standard A4 and 3-inch thermal PDF receipts with FileProvider sharing.
+5. **PDF Generation & Native Sharing**: `InvoicePdfGenerator.kt` compiles standard A4 and 3-inch thermal PDF receipts. Invoices and documents use native Android intents (`Intent.ACTION_SEND` via `ReportExportHelper.launchShare` for system sharing, and `Intent.ACTION_VIEW` via FileProvider for external high-resolution PDF viewing) rather than sluggish in-app PDF renderers.
+6. **Instant Bill Saved Bottom Sheet**: Upon saving a sales invoice or quotation (`CreateInvoiceScreen.kt`), the app opens an immediate, distraction-free bottom sheet (`ChopdaModalDialog`) with 1-tap WhatsApp dispatch, thermal slip printing, native PDF sharing, view bill details (`DocumentDetailScreen.kt`), and + New Bill counter reset.
+7. **Mobile-First GST & Tax Summary**: `GstHubScreen.kt` provides clear tax liability metrics (Total Outward Tax, Inward ITC, Net Estimated Tax Payable, and CA Excel export) without fake desktop filing buttons or ungrounded countdown timers, directing statutory GSTN returns to the Web Command Center.
 
 ---
 
@@ -207,6 +209,12 @@ DEVICE=emulator-5554 ./run_e2e_tests.sh
 
 ### 7.6 Utilities (`util/`)
 * **`FormatUtils.kt`**: Helper functions for Indian currency formatting (`₹ 1,23,456.00`), phone number sanitation, and date-time formatting.
+
+### 7.7 Network & API Layer (`core/network/`)
+* **`DigitalChopdaApiService.kt`**: 51 Retrofit REST endpoints with full backward/forward compatibility.
+  * Payment deletion: `@HTTP(method = "DELETE", path = "credit/payments/{id}", hasBody = true)` with optional void reason.
+  * Payment pre-deletion impact analysis: `@GET("credit/payments/{id}/impact")`.
+  * Multi-invoice Auto-FIFO settlement and idempotency deduplication guards.
 
 ---
 

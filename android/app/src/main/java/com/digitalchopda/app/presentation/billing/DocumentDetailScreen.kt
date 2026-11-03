@@ -67,6 +67,7 @@ import androidx.compose.ui.draw.blur
 import com.digitalchopda.app.core.designsystem.BorderStrokeDark
 import com.digitalchopda.app.core.designsystem.BrandPrimaryBlue
 import com.digitalchopda.app.core.designsystem.ChopdaPdfLoadingOverlay
+import com.digitalchopda.app.core.document.ReportExportHelper
 import com.digitalchopda.app.core.designsystem.DangerRed
 import com.digitalchopda.app.core.designsystem.DarkNavy
 import com.digitalchopda.app.core.designsystem.DeepObsidianCanvas
@@ -183,7 +184,7 @@ fun DocumentDetailScreen(
 
     val dateFormat = remember { SimpleDateFormat("dd MMM yyyy, hh:mm a", Locale.getDefault()) }
 
-    fun openPdf() {
+    fun openPdf(viewInExternalApp: Boolean = false) {
         val doc = document ?: return
         isGeneratingPdf = true
         scope.launch {
@@ -239,46 +240,41 @@ fun DocumentDetailScreen(
                 }
 
                 isGeneratingPdf = false
-                val name = when (doc) {
-                    is DocumentModel.InvoiceDoc -> doc.entity.customerName
-                    is DocumentModel.QuotationDoc -> doc.entity.customerName
-                    is DocumentModel.CreditNoteDoc -> doc.entity.customerName
-                }
-                val phone = when (doc) {
-                    is DocumentModel.InvoiceDoc -> doc.entity.customerPhone
-                    is DocumentModel.QuotationDoc -> doc.entity.customerPhone
-                    is DocumentModel.CreditNoteDoc -> doc.entity.customerPhone
-                }
                 val number = when (doc) {
                     is DocumentModel.InvoiceDoc -> doc.entity.invoiceNumber
                     is DocumentModel.QuotationDoc -> doc.entity.quotationNumber
                     is DocumentModel.CreditNoteDoc -> doc.entity.creditNoteNumber
                 }
-                val id = when (doc) {
-                    is DocumentModel.InvoiceDoc -> doc.entity.id
-                    is DocumentModel.QuotationDoc -> doc.entity.id
-                    is DocumentModel.CreditNoteDoc -> doc.entity.id
-                }
-                val serverId = when (doc) {
-                    is DocumentModel.InvoiceDoc -> doc.entity.serverOrderId ?: 0L
-                    is DocumentModel.QuotationDoc -> doc.entity.serverQuotationId ?: 0L
-                    is DocumentModel.CreditNoteDoc -> doc.entity.serverCreditNoteId ?: 0L
-                }
-                val dt = when (doc) {
-                    is DocumentModel.InvoiceDoc -> "invoice"
-                    is DocumentModel.QuotationDoc -> "quotation"
-                    is DocumentModel.CreditNoteDoc -> "credit_note"
-                }
 
-                onNavigateToPdfViewer(
-                    pdfFile.absolutePath,
-                    id,
-                    name,
-                    phone,
-                    number,
-                    dt,
-                    serverId
-                )
+                if (viewInExternalApp) {
+                    val uri = androidx.core.content.FileProvider.getUriForFile(
+                        context,
+                        "${context.packageName}.provider",
+                        pdfFile
+                    )
+                    val viewIntent = Intent(Intent.ACTION_VIEW).apply {
+                        setDataAndType(uri, "application/pdf")
+                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    }
+                    try {
+                        context.startActivity(viewIntent)
+                    } catch (_: Exception) {
+                        ReportExportHelper.launchShare(
+                            context = context,
+                            file = pdfFile,
+                            mimeType = "application/pdf",
+                            chooserTitle = "Share $number"
+                        )
+                    }
+                } else {
+                    ReportExportHelper.launchShare(
+                        context = context,
+                        file = pdfFile,
+                        mimeType = "application/pdf",
+                        chooserTitle = "Share $number"
+                    )
+                }
             } catch (e: Exception) {
                 isGeneratingPdf = false
                 Toast.makeText(context, "Failed to render PDF: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
@@ -319,41 +315,31 @@ fun DocumentDetailScreen(
 
                 isGeneratingPdf = false
                 if (pdfFile != null && pdfFile.exists()) {
-                    val name = when (doc) {
-                        is DocumentModel.InvoiceDoc -> doc.entity.customerName
-                        is DocumentModel.QuotationDoc -> doc.entity.customerName
-                        is DocumentModel.CreditNoteDoc -> doc.entity.customerName
-                    }
-                    val phone = when (doc) {
-                        is DocumentModel.InvoiceDoc -> doc.entity.customerPhone
-                        is DocumentModel.QuotationDoc -> doc.entity.customerPhone
-                        is DocumentModel.CreditNoteDoc -> doc.entity.customerPhone
-                    }
                     val number = when (doc) {
                         is DocumentModel.InvoiceDoc -> doc.entity.invoiceNumber
                         is DocumentModel.QuotationDoc -> doc.entity.quotationNumber
                         is DocumentModel.CreditNoteDoc -> doc.entity.creditNoteNumber
                     }
-                    val id = when (doc) {
-                        is DocumentModel.InvoiceDoc -> doc.entity.id
-                        is DocumentModel.QuotationDoc -> doc.entity.id
-                        is DocumentModel.CreditNoteDoc -> doc.entity.id
-                    }
-                    val serverId = when (doc) {
-                        is DocumentModel.InvoiceDoc -> doc.entity.serverOrderId ?: 0L
-                        is DocumentModel.QuotationDoc -> doc.entity.serverQuotationId ?: 0L
-                        is DocumentModel.CreditNoteDoc -> doc.entity.serverCreditNoteId ?: 0L
-                    }
-
-                    onNavigateToPdfViewer(
-                        pdfFile.absolutePath,
-                        id,
-                        name,
-                        phone,
-                        "$number-LABEL",
-                        "shipping_label",
-                        serverId
+                    val uri = androidx.core.content.FileProvider.getUriForFile(
+                        context,
+                        "${context.packageName}.provider",
+                        pdfFile
                     )
+                    val viewIntent = Intent(Intent.ACTION_VIEW).apply {
+                        setDataAndType(uri, "application/pdf")
+                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    }
+                    try {
+                        context.startActivity(viewIntent)
+                    } catch (_: Exception) {
+                        ReportExportHelper.launchShare(
+                            context = context,
+                            file = pdfFile,
+                            mimeType = "application/pdf",
+                            chooserTitle = "Shipping Label $number"
+                        )
+                    }
                 } else {
                     Toast.makeText(
                         context,
@@ -481,7 +467,7 @@ fun DocumentDetailScreen(
                             )
                         }
                     }
-                    IconButton(onClick = { openPdf() }) {
+                    IconButton(onClick = { openPdf(viewInExternalApp = true) }) {
                         Icon(
                             imageVector = Icons.Default.Description,
                             contentDescription = "View PDF",
@@ -637,7 +623,7 @@ fun DocumentDetailScreen(
                         )
                     }
 
-                    // Option 2: See as PDF Button
+                    // Option 2: Share PDF Button
                     Box(
                         modifier = Modifier
                             .weight(1.3f)
@@ -645,7 +631,7 @@ fun DocumentDetailScreen(
                             .clip(RoundedCornerShape(12.dp))
                             .background(BrandPrimaryBlue)
                             .bouncyClick {
-                                if (!isGeneratingPdf) openPdf()
+                                if (!isGeneratingPdf) openPdf(viewInExternalApp = false)
                             },
                         contentAlignment = Alignment.Center
                     ) {
@@ -654,14 +640,14 @@ fun DocumentDetailScreen(
                         } else {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Icon(
-                                    imageVector = Icons.Default.Description,
+                                    imageVector = Icons.Default.Share,
                                     contentDescription = null,
                                     tint = Color.White,
                                     modifier = Modifier.size(18.dp)
                                 )
                                 Spacer(modifier = Modifier.width(8.dp))
                                 Text(
-                                    text = "See as PDF",
+                                    text = "Share PDF",
                                     style = MaterialTheme.typography.labelMedium.copy(
                                         fontWeight = FontWeight.Bold,
                                         color = Color.White

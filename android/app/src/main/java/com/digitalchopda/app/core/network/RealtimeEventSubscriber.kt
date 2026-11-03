@@ -123,6 +123,10 @@ object RealtimeEventSubscriber {
                         }
                     } else {
                         Log.w(TAG, "SSE connection to $host failed with code: ${response.code}")
+                        if (response.code == 401 && token.isNotBlank()) {
+                            Log.w(TAG, "Stale token rejected by SSE (401). Clearing stale token...")
+                            tokenStorage.clearTokens()
+                        }
                     }
                 } catch (e: Exception) {
                     Log.d(TAG, "SSE host $host dropped/unreachable: ${e.message}")

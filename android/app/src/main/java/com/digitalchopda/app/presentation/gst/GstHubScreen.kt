@@ -496,10 +496,10 @@ fun GstHubScreen(
                 }
             }
 
-            // Statutory Return Header
+            // Tax Breakdown & Compliance Header
             item {
                 Text(
-                    text = "STATUTORY RETURNS",
+                    text = "TAX LIABILITY BREAKDOWN",
                     style = MaterialTheme.typography.labelSmall.copy(
                         color = TextSubtle,
                         letterSpacing = 1.2.sp,
@@ -510,7 +510,7 @@ fun GstHubScreen(
                 )
             }
 
-            // GSTR-1 Card
+            // Clean Real Tax Summary Card
             item {
                 ChopdaCard(
                     modifier = Modifier.fillMaxWidth(),
@@ -526,7 +526,7 @@ fun GstHubScreen(
                         ) {
                             Column {
                                 Text(
-                                    text = "GSTR-1 (Outward Sales)",
+                                    text = "Monthly Return Period",
                                     style = MaterialTheme.typography.titleMedium.copy(
                                         color = DarkNavy,
                                         fontWeight = FontWeight.Bold,
@@ -535,7 +535,7 @@ fun GstHubScreen(
                                 )
                                 Spacer(modifier = Modifier.height(2.dp))
                                 Text(
-                                    text = "18 Invoices Ready • Due 11th",
+                                    text = "${reportData.period} • ${reportData.totalInvoices} Invoices Recorded",
                                     style = MaterialTheme.typography.bodySmall.copy(
                                         color = TextSubtle,
                                         fontSize = 12.sp
@@ -543,134 +543,96 @@ fun GstHubScreen(
                                 )
                             }
                             StatusPill(
-                                text = "READY TO FILE",
+                                text = "RECONCILED",
                                 textColor = EmeraldJama,
                                 backgroundColor = EmeraldJama.copy(alpha = 0.12f)
                             )
                         }
 
-                        Spacer(modifier = Modifier.height(12.dp))
+                        Spacer(modifier = Modifier.height(14.dp))
 
-                        Box(
+                        // Tax Component Breakdown
+                        Column(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clip(RoundedCornerShape(10.dp))
-                                .background(BrandPrimaryBlue)
-                                .bouncyClick {
-                                    Toast.makeText(context, "Preparing GSTR-1 JSON Package...", Toast.LENGTH_SHORT).show()
-                                }
-                                .padding(vertical = 12.dp),
-                            contentAlignment = Alignment.Center
+                                .background(ElevatedSlate)
+                                .padding(12.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            Text(
-                                text = "+ File GSTR-1 (18 Invoices Ready)",
-                                color = Color.White,
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 13.sp
-                            )
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text("Total Outward Tax (Output GST)", style = MaterialTheme.typography.bodySmall.copy(color = TextSubtle))
+                                Text("₹ %.0f".format(reportData.totalOutwardTaxLiability), style = MaterialTheme.typography.bodySmall.copy(color = DarkNavy, fontWeight = FontWeight.Bold))
+                            }
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text("Input Tax Credit (Inward ITC)", style = MaterialTheme.typography.bodySmall.copy(color = TextSubtle))
+                                Text("₹ %.0f".format(reportData.inputTaxCredit), style = MaterialTheme.typography.bodySmall.copy(color = EmeraldJama, fontWeight = FontWeight.Bold))
+                            }
+                            HorizontalDivider(color = BorderStrokeDark, thickness = 0.8.dp)
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text("Net Estimated Tax Payable", style = MaterialTheme.typography.bodyMedium.copy(color = DarkNavy, fontWeight = FontWeight.Bold))
+                                Text("₹ %.0f".format(reportData.netGstPayable), style = MaterialTheme.typography.bodyMedium.copy(color = RubyUdhar, fontWeight = FontWeight.Black))
+                            }
                         }
                     }
                 }
             }
 
-            // GSTR-3B Card
+            // Web Command Center Statutory Filing Info Card
             item {
                 ChopdaCard(
                     modifier = Modifier.fillMaxWidth(),
                     cornerRadius = 14.dp,
-                    borderColor = BorderStrokeDark,
-                    backgroundColor = MidnightCardSurface
+                    borderColor = BrandPrimaryBlue.copy(alpha = 0.25f),
+                    backgroundColor = BrandPrimaryBlue.copy(alpha = 0.04f)
                 ) {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(14.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
+                        Box(
+                            modifier = Modifier
+                                .size(36.dp)
+                                .clip(CircleShape)
+                                .background(BrandPrimaryBlue.copy(alpha = 0.12f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.CheckCircle,
+                                contentDescription = null,
+                                tint = BrandPrimaryBlue,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(12.dp))
                         Column {
                             Text(
-                                text = "GSTR-3B (Monthly Summary)",
-                                style = MaterialTheme.typography.titleMedium.copy(
-                                    color = DarkNavy,
+                                text = "GSTN Return Filing Notice",
+                                style = MaterialTheme.typography.titleSmall.copy(
                                     fontWeight = FontWeight.Bold,
-                                    fontSize = 15.sp
+                                    color = DarkNavy,
+                                    fontSize = 13.5.sp
                                 )
                             )
                             Spacer(modifier = Modifier.height(2.dp))
                             Text(
-                                text = "Due 20th Oct",
+                                text = "Official GSTR-1 JSON upload & Rule 88A setoff can be filed directly from the Web Command Center at digitalchopda.in",
                                 style = MaterialTheme.typography.bodySmall.copy(
                                     color = TextSubtle,
-                                    fontSize = 12.sp
+                                    fontSize = 11.5.sp,
+                                    lineHeight = 16.sp
                                 )
-                            )
-                        }
-
-                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            StatusPill(
-                                text = "9 Days Left",
-                                textColor = DarkNavy,
-                                backgroundColor = ElevatedSlate
-                            )
-                            StatusPill(
-                                text = "PENDING",
-                                textColor = WarningAmber,
-                                backgroundColor = WarningAmber.copy(alpha = 0.12f)
-                            )
-                        }
-                    }
-                }
-            }
-
-            // GSTR-2B Card (Soft green tint)
-            item {
-                ChopdaCard(
-                    modifier = Modifier.fillMaxWidth(),
-                    cornerRadius = 14.dp,
-                    borderColor = EmeraldJama.copy(alpha = 0.3f),
-                    backgroundColor = EmeraldJama.copy(alpha = 0.04f)
-                ) {
-                    Column(modifier = Modifier.padding(14.dp)) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                text = "GSTR-2B (ITC Auto-drafted)",
-                                style = MaterialTheme.typography.titleSmall.copy(
-                                    color = DarkNavy,
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 14.sp
-                                )
-                            )
-                            Text(
-                                text = "Matched GSTR-2B: 100% (₹25,750 Available)",
-                                style = MaterialTheme.typography.labelSmall.copy(
-                                    color = EmeraldJama,
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 11.sp
-                                )
-                            )
-                        }
-
-                        Spacer(modifier = Modifier.height(8.dp))
-
-                        // Solid green progress bar
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(5.dp)
-                                .clip(RoundedCornerShape(3.dp))
-                                .background(EmeraldJama.copy(alpha = 0.15f))
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth(1f)
-                                    .height(5.dp)
-                                    .clip(RoundedCornerShape(3.dp))
-                                    .background(EmeraldJama)
                             )
                         }
                     }

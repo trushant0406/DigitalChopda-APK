@@ -471,12 +471,12 @@ fun PartyScreen(
             onSave = { newParty ->
                 scope.launch {
                     val res = customerRepository.createParty(newParty)
-                    showAddPartyDialog = false
                     if (res.isSuccess) {
+                        showAddPartyDialog = false
                         Toast.makeText(context, "✓ Party '${newParty.name}' added successfully!", Toast.LENGTH_SHORT).show()
                         customerRepository.syncContactsWithServer(activeCompany.id)
                     } else {
-                        Toast.makeText(context, "Failed to save: ${res.exceptionOrNull()?.message}", Toast.LENGTH_LONG).show()
+                        Toast.makeText(context, "⚠️ ${res.exceptionOrNull()?.message ?: "Failed to save party"}", Toast.LENGTH_LONG).show()
                     }
                 }
             }

@@ -49,9 +49,13 @@ import androidx.compose.material.icons.filled.PersonOutline
 import androidx.compose.material.icons.filled.Print
 import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material.icons.filled.Search
-import com.digitalchopda.app.core.designsystem.ChopdaModalDialog
+import androidx.compose.material.icons.filled.Chat
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.ShoppingBag
+import com.digitalchopda.app.core.designsystem.ChopdaModalDialog
+import com.digitalchopda.app.core.document.ReportExportHelper
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material3.AlertDialog
@@ -166,6 +170,7 @@ fun CreateInvoiceScreen(
     initialPartyName: String = "",
     initialPartyPhone: String = "",
     onNavigateBack: () -> Unit,
+    onNavigateToDocumentDetail: (docType: String, docId: Long) -> Unit = { _, _ -> },
     onNavigateToPdfViewer: (filePath: String, invoiceId: Long, customerName: String, customerPhone: String, invoiceNumber: String, docType: String, serverOrderId: Long) -> Unit = { _, _, _, _, _, _, _ -> },
     viewModel: InvoiceViewModel = androidx.lifecycle.viewmodel.compose.viewModel(
         factory = InvoiceViewModel.Factory(
@@ -232,6 +237,8 @@ fun CreateInvoiceScreen(
     var showUpiQrDialog by remember { mutableStateOf(false) }
     var showBarcodeScanner by remember { mutableStateOf(false) }
     val thermalSheetState = rememberModalBottomSheetState()
+    var billSuccessData by remember { mutableStateOf<BillSuccessData?>(null) }
+    var showCreatedWhatsAppDialog by remember { mutableStateOf(false) }
 
     Box(modifier = Modifier.fillMaxSize()) {
         Scaffold(
@@ -442,14 +449,16 @@ fun CreateInvoiceScreen(
                                         val docType = if (isQuotationMode) "quotation" else "invoice"
                                         val docTypeTitle = if (isQuotationMode) "Quotation" else "Tax Invoice"
                                         Toast.makeText(context, "$docTypeTitle ${invoice.invoiceNumber} Ready!", Toast.LENGTH_SHORT).show()
-                                        onNavigateToPdfViewer(
-                                            pdfFile.absolutePath,
-                                            invoice.id,
-                                            invoice.customerName,
-                                            invoice.customerPhone,
-                                            invoice.invoiceNumber,
-                                            docType,
-                                            invoice.serverOrderId ?: 0L
+                                        billSuccessData = BillSuccessData(
+                                            docType = docType,
+                                            docTypeTitle = docTypeTitle,
+                                            invoiceId = invoice.id,
+                                            invoiceNumber = invoice.invoiceNumber,
+                                            customerName = invoice.customerName,
+                                            customerPhone = invoice.customerPhone,
+                                            grandTotal = invoice.grandTotal,
+                                            pdfFile = pdfFile,
+                                            serverOrderId = invoice.serverOrderId
                                         )
                                     },
                                     onError = { err ->
@@ -1765,6 +1774,240 @@ fun CreateInvoiceScreen(
         )
     }
 
+    if (billSuccessData != null) {
+        val bill = billSuccessData!!
+        ChopdaModalDialog(
+            onDismissRequest = {
+                billSuccessData = null
+                onNavigateBack()
+            },
+            title = "${bill.docTypeTitle} Saved!",
+            subtitle = "${bill.invoiceNumber} • ${bill.customerName}",
+            icon = Icons.Default.CheckCircle,
+            iconTint = EmeraldJama,
+            isBottomSheet = true,
+            showCloseButton = true
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 16.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                // Grand Total Display
+                Text(
+                    text = CurrencyFormatter.formatINR(bill.grandTotal),
+                    style = MaterialTheme.typography.headlineMedium.copy(
+                        fontWeight = FontWeight.Black,
+                        color = Color.White
+                    )
+                )
+                Spacer(modifier = Modifier.height(18.dp))
+
+                // Action 1: WhatsApp Bill
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(48.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(Color(0xFF25D366))
+                        .bouncyClick {
+                            showCreatedWhatsAppDialog = true
+                        },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Default.Chat,
+                            contentDescription = "WhatsApp",
+                            tint = Color.White,
+                            modifier = Modifier.size(19.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "WhatsApp Bill to Customer",
+                            style = MaterialTheme.typography.labelLarge.copy(
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White,
+                                fontSize = 13.5.sp
+                            )
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                // Action 2 & 3: Print Slip & Share PDF in Row
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    // Print Thermal Slip
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(46.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(ElevatedSlate)
+                            .border(1.dp, BorderStrokeDark, RoundedCornerShape(12.dp))
+                            .bouncyClick {
+                                showThermalPreview = true
+                            },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Default.Print,
+                                contentDescription = "Print",
+                                tint = ImperialGold,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "Print Slip",
+                                style = MaterialTheme.typography.labelMedium.copy(
+                                    fontWeight = FontWeight.Bold,
+                                    color = TextWhite
+                                )
+                            )
+                        }
+                    }
+
+                    // Share PDF
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(46.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(ElevatedSlate)
+                            .border(1.dp, BorderStrokeDark, RoundedCornerShape(12.dp))
+                            .bouncyClick {
+                                bill.pdfFile?.let { file ->
+                                    ReportExportHelper.launchShare(
+                                        context = context,
+                                        file = file,
+                                        mimeType = "application/pdf",
+                                        chooserTitle = "Share ${bill.invoiceNumber}"
+                                    )
+                                }
+                            },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Default.Share,
+                                contentDescription = "Share",
+                                tint = BrandPrimaryBlue,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "Share PDF",
+                                style = MaterialTheme.typography.labelMedium.copy(
+                                    fontWeight = FontWeight.Bold,
+                                    color = TextWhite
+                                )
+                            )
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                // Action 4: View Complete Details
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(44.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(Color.Transparent)
+                        .border(1.dp, BrandPrimaryBlue.copy(alpha = 0.45f), RoundedCornerShape(12.dp))
+                        .bouncyClick {
+                            val currentBill = bill
+                            billSuccessData = null
+                            onNavigateToDocumentDetail(currentBill.docType, currentBill.invoiceId)
+                        },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Default.Description,
+                            contentDescription = "Details",
+                            tint = BrandPrimaryBlue,
+                            modifier = Modifier.size(17.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = "View Bill Details",
+                            style = MaterialTheme.typography.labelMedium.copy(
+                                fontWeight = FontWeight.SemiBold,
+                                color = BrandPrimaryBlue
+                            )
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(14.dp))
+
+                // Action 5 & 6: New Bill or Done
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    OutlinedButton(
+                        onClick = {
+                            billSuccessData = null
+                            onNavigateBack()
+                        },
+                        modifier = Modifier.weight(1f).height(44.dp),
+                        shape = RoundedCornerShape(10.dp)
+                    ) {
+                        Text("Done", color = TextMuted)
+                    }
+
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(44.dp)
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(BrandPrimaryBlue)
+                            .bouncyClick {
+                                billSuccessData = null
+                                viewModel.resetForNewBill()
+                            },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "+ New Bill",
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White,
+                            fontSize = 13.sp
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    if (showCreatedWhatsAppDialog && billSuccessData != null) {
+        val bill = billSuccessData!!
+        WhatsAppDispatchDialog(
+            docType = bill.docType,
+            docId = bill.invoiceId,
+            serverOrderId = bill.serverOrderId,
+            docNumber = bill.invoiceNumber,
+            partyName = bill.customerName,
+            partyPhone = bill.customerPhone,
+            amount = bill.grandTotal,
+            upiVpa = activeCompany.upiVpa ?: "",
+            firmName = activeCompany.firmName,
+            billingRepository = billingRepository,
+            quotationRepository = quotationRepository,
+            pdfFilePath = bill.pdfFile?.absolutePath,
+            onDismiss = { showCreatedWhatsAppDialog = false }
+        )
+    }
+
     // Thermal Slip Receipt Preview Modal
     if (showThermalPreview) {
         ModalBottomSheet(
@@ -2613,3 +2856,15 @@ fun ChangeCustomerDialog(
         }
     }
 }
+
+data class BillSuccessData(
+    val docType: String,
+    val docTypeTitle: String,
+    val invoiceId: Long,
+    val invoiceNumber: String,
+    val customerName: String,
+    val customerPhone: String,
+    val grandTotal: Double,
+    val pdfFile: java.io.File?,
+    val serverOrderId: Long?
+)

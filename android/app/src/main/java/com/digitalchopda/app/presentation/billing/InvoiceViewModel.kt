@@ -280,6 +280,16 @@ class InvoiceViewModel(
         return true
     }
 
+    fun resetForNewBill() {
+        _customerName.value = "Walk-in Customer"
+        _customerPhone.value = ""
+        _customerGstin.value = ""
+        _selectedStatus.value = InvoiceStatus.PAID
+        _paidAmount.value = ""
+        _selectedPaymentMode.value = PaymentMode.UPI
+        _lineItems.value = emptyList()
+    }
+
     fun buildCurrentInvoice(): Invoice {
         val parsedPaid = _paidAmount.value.toDoubleOrNull() ?: 0.0
         return createInvoiceUseCase.buildInvoice(

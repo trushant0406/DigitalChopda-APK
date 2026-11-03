@@ -254,6 +254,9 @@ fun DigitalChopdaNavGraph(
                 initialPartyName = partyName,
                 initialPartyPhone = partyPhone,
                 onNavigateBack = { navController.popBackStack() },
+                onNavigateToDocumentDetail = { docType, docId ->
+                    navController.navigate(Screen.DocumentDetail.createRoute(docType, docId))
+                },
                 onNavigateToPdfViewer = { filePath, invoiceId, customerName, customerPhone, invoiceNumber, docType, serverOrderId ->
                     navController.navigate(
                         Screen.PdfViewer.createRoute(

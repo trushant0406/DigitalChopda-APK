@@ -21,7 +21,12 @@ data class ApiBusinessDto(
     @SerializedName("trade_name") val tradeName: String?,
     @SerializedName("invoice_prefix") val invoicePrefix: String?,
     val status: String?,
-    @SerializedName("user_role") val userRole: String?
+    @SerializedName("user_role") val userRole: String?,
+    @SerializedName("bank_name") val bankName: String? = null,
+    @SerializedName("bank_account_no") val bankAccountNo: String? = null,
+    @SerializedName("bank_ifsc") val bankIfsc: String? = null,
+    @SerializedName("bank_branch") val bankBranch: String? = null,
+    val vpa: String? = null
 )
 
 data class ApiCreateBusinessRequest(
@@ -31,6 +36,20 @@ data class ApiCreateBusinessRequest(
     val phone: String? = null,
     val address: String? = null,
     @SerializedName("invoice_prefix") val invoicePrefix: String? = "INV-"
+)
+
+data class ApiUpdateBusinessRequest(
+    val name: String? = null,
+    @SerializedName("trade_name") val tradeName: String? = null,
+    val gstin: String? = null,
+    val mobile: String? = null,
+    val address: String? = null,
+    @SerializedName("bank_name") val bankName: String? = null,
+    @SerializedName("bank_account_no") val bankAccountNo: String? = null,
+    @SerializedName("bank_ifsc") val bankIfsc: String? = null,
+    @SerializedName("bank_branch") val bankBranch: String? = null,
+    val vpa: String? = null,
+    @SerializedName("invoice_prefix") val invoicePrefix: String? = null
 )
 
 data class ApiLoginResponse(

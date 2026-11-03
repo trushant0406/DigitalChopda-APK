@@ -114,6 +114,7 @@ class InvoicePdfGenerator(val context: Context) {
         y += 20f
 
         // Tax & Totals Breakdown (Right side)
+        val startTotalsY = y
         paint.color = Color.parseColor("#334155")
         canvas.drawText("Taxable Subtotal:", 350f, y, paint)
         canvas.drawText("₹ %.2f".format(invoice.subtotal), 480f, y, paint)
@@ -138,6 +139,43 @@ class InvoicePdfGenerator(val context: Context) {
         paint.textSize = 12f
         canvas.drawText("GRAND TOTAL:", 350f, y, paint)
         canvas.drawText("₹ %.2f".format(invoice.grandTotal), 480f, y, paint)
+
+        // Bank Details & Payment Info (Left side)
+        if (company.bankName.isNotBlank() || company.bankAccountNo.isNotBlank() || company.upiVpa.isNotBlank()) {
+            var bankY = startTotalsY
+            paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            paint.textSize = 9.5f
+            paint.color = Color.parseColor("#0F172A")
+            canvas.drawText("BANK & PAYMENT DETAILS", 36f, bankY, paint)
+            bankY += 15f
+
+            paint.typeface = Typeface.DEFAULT
+            paint.textSize = 8.5f
+            paint.color = Color.parseColor("#475569")
+
+            if (company.bankName.isNotBlank()) {
+                canvas.drawText("Bank: ${company.bankName}", 36f, bankY, paint)
+                bankY += 13f
+            }
+            if (company.bankAccountNo.isNotBlank()) {
+                canvas.drawText("A/C No: ${company.bankAccountNo}", 36f, bankY, paint)
+                bankY += 13f
+            }
+            if (company.bankIfsc.isNotBlank()) {
+                canvas.drawText("IFSC: ${company.bankIfsc}", 36f, bankY, paint)
+                bankY += 13f
+            }
+            if (company.bankBranch.isNotBlank()) {
+                canvas.drawText("Branch: ${company.bankBranch}", 36f, bankY, paint)
+                bankY += 13f
+            }
+            if (company.upiVpa.isNotBlank()) {
+                paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+                paint.color = Color.parseColor("#059669") // Emerald green
+                canvas.drawText("UPI VPA: ${company.upiVpa}", 36f, bankY, paint)
+                bankY += 13f
+            }
+        }
 
         // Footer
         paint.typeface = Typeface.DEFAULT
