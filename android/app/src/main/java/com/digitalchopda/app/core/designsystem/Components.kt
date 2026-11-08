@@ -167,6 +167,9 @@ fun ChopdaModalDialog(
 ) {
     if (isBottomSheet) {
         val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+        val configuration = LocalConfiguration.current
+        val maxSheetHeight = configuration.screenHeightDp.dp * maxHeightFraction
+
         ModalBottomSheet(
             onDismissRequest = onDismissRequest,
             sheetState = sheetState,
@@ -177,8 +180,10 @@ fun ChopdaModalDialog(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 20.dp, vertical = 12.dp)
+                    .heightIn(max = maxSheetHeight)
+                    .statusBarsPadding()
                     .navigationBarsPadding()
+                    .padding(horizontal = 20.dp, vertical = 10.dp)
             ) {
                 // Ergonomic Top Drag Handle
                 Box(
@@ -198,7 +203,7 @@ fun ChopdaModalDialog(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Row(
-                        modifier = Modifier.weight(1f, fill = false),
+                        modifier = Modifier.weight(1f),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         if (icon != null) {
@@ -218,14 +223,16 @@ fun ChopdaModalDialog(
                             }
                             Spacer(modifier = Modifier.width(10.dp))
                         }
-                        Column {
+                        Column(modifier = Modifier.weight(1f)) {
                             Text(
                                 text = title,
                                 style = MaterialTheme.typography.titleMedium.copy(
                                     fontWeight = FontWeight.Bold,
                                     color = DarkNavy,
                                     fontSize = 17.sp
-                                )
+                                ),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
                             )
                             if (!subtitle.isNullOrBlank()) {
                                 Spacer(modifier = Modifier.height(2.dp))
@@ -234,7 +241,9 @@ fun ChopdaModalDialog(
                                     style = MaterialTheme.typography.bodySmall.copy(
                                         color = TextMuted,
                                         fontSize = 12.sp
-                                    )
+                                    ),
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis
                                 )
                             }
                         }

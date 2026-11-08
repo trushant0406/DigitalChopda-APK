@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
@@ -397,7 +398,7 @@ fun SubscriptionPlansDialog(
         icon = Icons.Default.Diamond,
         iconTint = BrandPrimaryBlue,
         widthFraction = 1f,
-        maxHeightFraction = 0.92f,
+        maxHeightFraction = 0.88f,
         isBottomSheet = true,
         scrollable = true
     ) {
@@ -487,7 +488,7 @@ fun SubscriptionPlansDialog(
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Column {
+                            Column(modifier = Modifier.weight(1f)) {
                                 Text(
                                     text = plan.name,
                                     style = MaterialTheme.typography.titleMedium.copy(
@@ -508,18 +509,21 @@ fun SubscriptionPlansDialog(
                             }
 
                             if (plan.popular) {
+                                Spacer(modifier = Modifier.width(8.dp))
                                 Box(
                                     modifier = Modifier
                                         .clip(RoundedCornerShape(4.dp))
                                         .background(Color(0xFFFEF3C7))
                                         .border(0.8.dp, Color(0xFFFDE68A), RoundedCornerShape(4.dp))
-                                        .padding(horizontal = 6.dp, vertical = 2.dp)
+                                        .padding(horizontal = 7.dp, vertical = 3.dp)
                                 ) {
                                     Text(
                                         text = "MOST POPULAR",
                                         fontSize = 9.sp,
                                         fontWeight = FontWeight.Black,
-                                        color = Color(0xFFB45309)
+                                        color = Color(0xFFB45309),
+                                        maxLines = 1,
+                                        softWrap = false
                                     )
                                 }
                             }
@@ -622,6 +626,7 @@ fun SubscriptionPlansDialog(
                     }
                 }
             }
+            Spacer(modifier = Modifier.height(32.dp))
         }
     }
 
@@ -673,7 +678,8 @@ fun SubscriptionUpgradeSheet(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 20.dp)
-                .padding(bottom = 32.dp)
+                .navigationBarsPadding()
+                .padding(bottom = 24.dp)
                 .verticalScroll(rememberScrollState()),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {

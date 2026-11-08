@@ -212,8 +212,6 @@ fun SettingsScreen(
     var showInvoicePrefixDialog by remember { mutableStateOf(false) }
     var showUpiVpaDialog by remember { mutableStateOf(false) }
     var showPrinterDialog by remember { mutableStateOf(false) }
-    var showEnclaveInfoDialog by remember { mutableStateOf(false) }
-    var showExportLedgerDialog by remember { mutableStateOf(false) }
     var showGstHub by remember { mutableStateOf(false) }
 
     val settingsPrefs = remember { context.getSharedPreferences("chopda_settings_prefs", Context.MODE_PRIVATE) }
@@ -1104,28 +1102,6 @@ fun SettingsScreen(
                                     )
                                 )
                             }
-
-                            HorizontalDivider(color = BorderStrokeDark, modifier = Modifier.padding(vertical = 8.dp))
-
-                            // Local SQLite Room Enclave Diagnostics
-                            SettingsRowItem(
-                                icon = Icons.Default.Security,
-                                title = "Local SQLite Room Enclave",
-                                subtitle = "12 Tables • Offline-first AES-256 local encrypted storage",
-                                trailingText = "HEALTHY",
-                                onClick = { showEnclaveInfoDialog = true }
-                            )
-
-                            HorizontalDivider(color = BorderStrokeDark, modifier = Modifier.padding(vertical = 8.dp))
-
-                            // Export My Ledger (DPDP 2023)
-                            SettingsRowItem(
-                                icon = Icons.Default.Download,
-                                title = "Export Merchant Ledger (DPDP 2023)",
-                                subtitle = "72-month statutory CGST compliance audit archive",
-                                trailingText = "EXPORT",
-                                onClick = { showExportLedgerDialog = true }
-                            )
                         }
                     }
                 }
@@ -1578,24 +1554,6 @@ fun SettingsScreen(
                 printerRollWidth = width
                 settingsPrefs.edit().putInt("printer_roll_width", width).apply()
                 Toast.makeText(context, "Printer roll set to ${width}mm", Toast.LENGTH_SHORT).show()
-            }
-        )
-    }
-
-    if (showEnclaveInfoDialog) {
-        DatabaseEnclaveInfoDialog(
-            company = activeCompany,
-            onDismiss = { showEnclaveInfoDialog = false }
-        )
-    }
-
-    if (showExportLedgerDialog) {
-        ExportLedgerDialog(
-            company = activeCompany,
-            onDismiss = { showExportLedgerDialog = false },
-            onExportConfirmed = {
-                showExportLedgerDialog = false
-                Toast.makeText(context, "Ledger export saved to device Downloads! (DPDP 2023 Archive)", Toast.LENGTH_LONG).show()
             }
         )
     }
@@ -2136,148 +2094,6 @@ fun ThermalPrinterConfigDialog(
                     color = BrandPrimaryBlue,
                     fontWeight = FontWeight.Bold,
                     fontSize = 12.5.sp
-                )
-            }
-        }
-    }
-}
-
-@Composable
-fun DatabaseEnclaveInfoDialog(
-    company: Company,
-    onDismiss: () -> Unit
-) {
-    ChopdaModalDialog(
-        onDismissRequest = onDismiss,
-        title = "Local SQLite Room Enclave",
-        subtitle = "Zero-cloud leak cryptographic storage",
-        icon = Icons.Default.Security,
-        iconTint = BrandPrimaryBlue,
-        widthFraction = 0.92f,
-        maxHeightFraction = 0.65f,
-        buttons = {
-            Button(
-                onClick = onDismiss,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(46.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = BrandPrimaryBlue),
-                shape = RoundedCornerShape(10.dp)
-            ) {
-                Text("GOT IT", color = Color.White, fontWeight = FontWeight.Bold)
-            }
-        }
-    ) {
-        Column(
-            modifier = Modifier.fillMaxWidth(),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            val stats = listOf(
-                "Active Firm" to company.firmName,
-                "Database Engine" to "Room SQLite v14 (WAL Mode)",
-                "Local Entities" to "12 Relational Tables",
-                "Data Isolation" to "100% Local Sandboxed Enclave",
-                "Offline Leases" to "Active Prefix: ${company.invoicePrefix}",
-                "Compliance" to "DPDP Act 2023 & Section 36 CGST"
-            )
-
-            stats.forEach { (label, value) ->
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(ElevatedSlate)
-                        .padding(horizontal = 12.dp, vertical = 9.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = label,
-                        style = MaterialTheme.typography.bodySmall.copy(
-                            color = TextSubtle,
-                            fontSize = 12.sp
-                        )
-                    )
-                    Text(
-                        text = value,
-                        style = MaterialTheme.typography.bodySmall.copy(
-                            color = DarkNavy,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 12.sp
-                        )
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
-fun ExportLedgerDialog(
-    company: Company,
-    onDismiss: () -> Unit,
-    onExportConfirmed: () -> Unit
-) {
-    ChopdaModalDialog(
-        onDismissRequest = onDismiss,
-        title = "Export Merchant Ledger",
-        subtitle = "Statutory DPDP 2023 & CGST Archive",
-        icon = Icons.Default.Download,
-        iconTint = BrandPrimaryBlue,
-        widthFraction = 0.92f,
-        maxHeightFraction = 0.60f,
-        buttons = {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                OutlinedButton(
-                    onClick = onDismiss,
-                    modifier = Modifier
-                        .weight(1f)
-                        .height(46.dp),
-                    shape = RoundedCornerShape(10.dp),
-                    border = BorderStroke(1.dp, BorderStrokeDark)
-                ) {
-                    Text("Cancel", color = TextMuted, fontWeight = FontWeight.SemiBold)
-                }
-                Button(
-                    onClick = onExportConfirmed,
-                    modifier = Modifier
-                        .weight(1f)
-                        .height(46.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = BrandPrimaryBlue),
-                    shape = RoundedCornerShape(10.dp)
-                ) {
-                    Text("EXPORT NOW", color = Color.White, fontWeight = FontWeight.Bold)
-                }
-            }
-        }
-    ) {
-        Column(modifier = Modifier.fillMaxWidth()) {
-            Text(
-                text = "Under the Digital Personal Data Protection (DPDP) Act 2023 and Section 36 of CGST Rules, merchants are entitled to export a complete, portable audit archive of all invoices, parties, items, and sequence leases for ${company.firmName}.",
-                style = MaterialTheme.typography.bodySmall.copy(
-                    color = TextSubtle,
-                    fontSize = 12.5.sp,
-                    lineHeight = 18.sp
-                )
-            )
-            Spacer(modifier = Modifier.height(12.dp))
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(ElevatedSlate)
-                    .padding(10.dp)
-            ) {
-                Text(
-                    text = "Archive Format: JSON + CSV Package\nDestination: Device Downloads Folder\nStatus: 100% Offline Enclave Ready",
-                    style = MaterialTheme.typography.labelSmall.copy(
-                        color = DarkNavy,
-                        fontSize = 11.5.sp,
-                        lineHeight = 16.sp
-                    )
                 )
             }
         }
