@@ -181,9 +181,9 @@ fun ChopdaModalDialog(
                 modifier = Modifier
                     .fillMaxWidth()
                     .heightIn(max = maxSheetHeight)
-                    .statusBarsPadding()
                     .navigationBarsPadding()
-                    .padding(horizontal = 20.dp, vertical = 10.dp)
+                    .padding(horizontal = 20.dp)
+                    .padding(top = 8.dp, bottom = 12.dp)
             ) {
                 // Ergonomic Top Drag Handle
                 Box(
@@ -194,7 +194,7 @@ fun ChopdaModalDialog(
                         .clip(CircleShape)
                         .background(BorderStrokeDark)
                 )
-                Spacer(modifier = Modifier.height(14.dp))
+                Spacer(modifier = Modifier.height(12.dp))
 
                 // Standardized Header Row
                 Row(
