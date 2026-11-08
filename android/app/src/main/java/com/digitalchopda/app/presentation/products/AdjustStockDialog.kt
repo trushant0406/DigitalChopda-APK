@@ -97,7 +97,7 @@ fun AdjustStockDialog(
     }
 
     val reasonPresets = when (adjustmentType) {
-        "add" -> listOf("Supplier Delivery", "Customer Return", "Inventory Found", "Other Intake")
+        "add" -> listOf("Supplier Delivery", "Customer Return", "Inventory Found", "Other Inward / Purchase")
         "reduce" -> listOf("Damaged Goods", "Physical Theft / Loss", "Scrap / Expired", "Sample", "Internal Use")
         else -> listOf("Physical Shelf Audit", "Annual Stock Count", "Correction of Error")
     }

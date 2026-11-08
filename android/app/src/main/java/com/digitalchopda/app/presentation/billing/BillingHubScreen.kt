@@ -605,7 +605,7 @@ fun BillingHubScreen(
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(
-                                text = "📥 Intake",
+                                text = "📥 Purchases",
                                 style = MaterialTheme.typography.labelSmall.copy(
                                     fontWeight = if (selectedSection == 3) FontWeight.Bold else FontWeight.Medium,
                                     color = if (selectedSection == 3) Color.White else TextMuted,

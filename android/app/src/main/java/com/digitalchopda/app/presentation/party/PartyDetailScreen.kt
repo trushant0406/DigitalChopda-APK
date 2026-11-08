@@ -257,7 +257,7 @@ fun PartyDetailScreen(
                             )
                         }
 
-                        // Inward Purchase Action (Stock & Cargo Intake)
+                        // Inward Purchase Action (Stock & Vendor Purchase)
                         if (purchaseRepository != null) {
                             IconButton(
                                 onClick = { showRecordPurchaseDialog = true }
@@ -850,7 +850,7 @@ fun PartyDetailScreen(
         )
     }
 
-    // Modal Dialog: Record Inward Purchase (Cargo / Stock Intake)
+    // Modal Dialog: Record Inward Purchase (Vendor Stock Purchase)
     if (showRecordPurchaseDialog && purchaseRepository != null) {
         RecordPurchaseDialog(
             companyId = activeCompany.id,
