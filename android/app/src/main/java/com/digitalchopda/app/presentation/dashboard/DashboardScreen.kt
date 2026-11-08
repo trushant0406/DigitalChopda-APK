@@ -4,8 +4,11 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
+import java.text.BreakIterator
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
@@ -83,14 +86,17 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -134,6 +140,7 @@ import com.digitalchopda.app.data.work.InvoiceSyncWorker
 import com.digitalchopda.app.domain.model.Company
 import com.digitalchopda.app.presentation.settings.CompanySwitchSheet
 import com.digitalchopda.app.util.CurrencyFormatter
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 data class PartyViewItem(
@@ -1635,8 +1642,15 @@ fun QuickActionCard(
 }
 
 /**
- * 🛸 Floating Capsule Glass Navigation Dock
- * Perfectly centered items (weight 1f) with solid BrandPrimaryBlue active state (matching Billing design)
+ * 🛸 Split-Island Dynamic Glass Navigation Dock
+ * Features:
+ * 1. Island Detachment Architecture: The selected tab stands alone in its own distinct floating island pod with a glowing blue border.
+ *    The non-selected tabs on its left and right dynamically form their own separate glass islands.
+ * 2. Boundary Safety: Smoothly handles leftmost tab (tab 0: no left island) and rightmost tab (tab 4: no right island) without clipping or layout breaking.
+ * 3. 1-Second Staggered Slot Reel Tumbler Animation:
+ *    - Icon drops down from top (-24dp -> 0dp) with spring ratchet bounce.
+ *    - Text rolls up from bottom (+16dp -> 0dp) one-by-one character with grapheme cluster safety for Indic and Latin scripts.
+ * 4. Surface Integrity: Selected tab retains clean MidnightCardSurface with a sleek ElectricBrandCyan / BrandPrimaryBlue border (no solid color wash).
  */
 @Composable
 fun FloatingCapsuleDock(
@@ -1654,143 +1668,322 @@ fun FloatingCapsuleDock(
         )
     }
 
-    val density = LocalDensity.current
-    var dockWidthDp by remember { mutableStateOf(0.dp) }
-    var dockHeightDp by remember { mutableStateOf(0.dp) }
+    val safeTab = currentTab.coerceIn(0, items.size - 1)
+    val selectedItem = items[safeTab]
+
+    val leftTabs = remember(safeTab, items) {
+        items.mapIndexed { idx, item -> idx to item }.filter { it.first < safeTab }
+    }
+    val rightTabs = remember(safeTab, items) {
+        items.mapIndexed { idx, item -> idx to item }.filter { it.first > safeTab }
+    }
 
     Box(
         modifier = Modifier
             .fillMaxWidth()
             .navigationBarsPadding()
-            .padding(start = 16.dp, end = 16.dp, top = 2.dp, bottom = 8.dp)
+            .padding(start = 12.dp, end = 12.dp, top = 2.dp, bottom = 8.dp)
     ) {
-        Box(
+        Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .shadow(10.dp, RoundedCornerShape(24.dp), spotColor = Color(0x33000000), ambientColor = Color(0x22000000))
-                .clip(RoundedCornerShape(24.dp))
-                .background(MidnightCardSurface)
-                .border(1.dp, BorderStrokeDark, RoundedCornerShape(24.dp))
-                .padding(horizontal = 4.dp, vertical = 4.dp)
-        ) {
-            if (dockWidthDp > 0.dp && dockHeightDp > 0.dp) {
-                val tabCount = items.size
-                val tabWidth = dockWidthDp / tabCount
-                val animatedTabOffset by animateDpAsState(
-                    targetValue = tabWidth * currentTab,
+                .animateContentSize(
                     animationSpec = spring(
-                        dampingRatio = 0.76f,
+                        dampingRatio = 0.82f,
                         stiffness = Spring.StiffnessMediumLow
-                    ),
-                    label = "dockPillOffset"
-                )
-
-                // 1. Sliding Magnetic Gradient Pill
+                    )
+                ),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // 1. Left Island Pod (Only present when currentTab > 0)
+            if (leftTabs.isNotEmpty()) {
                 Box(
                     modifier = Modifier
-                        .offset(x = animatedTabOffset)
-                        .width(tabWidth)
-                        .height(dockHeightDp)
-                        .padding(2.dp)
-                        .clip(RoundedCornerShape(18.dp))
-                        .background(
-                            Brush.verticalGradient(
-                                colors = listOf(
-                                    BrandPrimaryBlue,
-                                    Color(0xFF1E40AF)
-                                )
-                            )
-                        )
-                        .border(
-                            width = 1.dp,
-                            brush = Brush.verticalGradient(
-                                colors = listOf(
-                                    Color(0x8893C5FD),
-                                    Color(0x111E40AF)
-                                )
-                            ),
-                            shape = RoundedCornerShape(18.dp)
-                        )
+                        .weight(leftTabs.size.toFloat())
+                        .shadow(8.dp, RoundedCornerShape(22.dp), spotColor = Color(0x33000000), ambientColor = Color(0x22000000))
+                        .clip(RoundedCornerShape(22.dp))
+                        .background(MidnightCardSurface)
+                        .border(1.dp, BorderStrokeDark, RoundedCornerShape(22.dp))
+                        .padding(horizontal = 2.dp, vertical = 4.dp)
                 ) {
-                    // Innovative Upward Beam / Projection Accent pointing towards content area
-                    Box(
-                        modifier = Modifier
-                            .align(Alignment.TopCenter)
-                            .width(18.dp)
-                            .height(2.5.dp)
-                            .clip(RoundedCornerShape(bottomStart = 2.dp, bottomEnd = 2.dp))
-                            .background(ElectricBrandCyan)
-                    )
-                }
-            }
-
-            // 2. Interactive Row of Tabs
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .onSizeChanged { size ->
-                        with(density) {
-                            dockWidthDp = size.width.toDp()
-                            dockHeightDp = size.height.toDp()
-                        }
-                    },
-                horizontalArrangement = Arrangement.SpaceEvenly,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                items.forEachIndexed { index, (label, icon, _) ->
-                    val isSelected = currentTab == index
-                    val animatedItemColor by animateColorAsState(
-                        targetValue = if (isSelected) Color.White else TextSubtle,
-                        animationSpec = tween(durationMillis = 180),
-                        label = "dockItemColor"
-                    )
-                    val iconScale by animateFloatAsState(
-                        targetValue = if (isSelected) 1.15f else 1.0f,
-                        animationSpec = spring(
-                            dampingRatio = 0.65f,
-                            stiffness = Spring.StiffnessMediumLow
-                        ),
-                        label = "dockIconScale"
-                    )
-
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .clip(RoundedCornerShape(18.dp))
-                            .bouncyClick { onTabSelect(index) }
-                            .padding(vertical = 7.dp),
-                        contentAlignment = Alignment.Center
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceEvenly,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.Center
-                        ) {
-                            Icon(
-                                imageVector = icon,
-                                contentDescription = label,
-                                tint = animatedItemColor,
-                                modifier = Modifier
-                                    .size(20.dp)
-                                    .graphicsLayer {
-                                        scaleX = iconScale
-                                        scaleY = iconScale
-                                    }
-                            )
-                            Spacer(modifier = Modifier.height(3.dp))
-                            Text(
-                                text = label,
-                                style = MaterialTheme.typography.labelSmall.copy(
-                                    fontSize = 10.5.sp,
-                                    fontWeight = if (isSelected) FontWeight.ExtraBold else FontWeight.Medium,
-                                    color = animatedItemColor
-                                ),
-                                maxLines = 1,
-                                modifier = Modifier.basicMarquee(iterations = Int.MAX_VALUE)
+                        leftTabs.forEach { (index, item) ->
+                            UnselectedTabItem(
+                                label = item.first,
+                                icon = item.second,
+                                onClick = { onTabSelect(index) },
+                                modifier = Modifier.weight(1f)
                             )
                         }
                     }
                 }
             }
+
+            // 2. Selected Standalone Island Pod (Alone with Blue Border & Clean Surface)
+            Box(
+                modifier = Modifier
+                    .weight(1.25f)
+                    .shadow(
+                        elevation = 12.dp,
+                        shape = RoundedCornerShape(22.dp),
+                        spotColor = BrandPrimaryBlue.copy(alpha = 0.45f),
+                        ambientColor = Color(0x22000000)
+                    )
+                    .clip(RoundedCornerShape(22.dp))
+                    .background(MidnightCardSurface) // Clean dark card surface - no solid wash!
+                    .border(
+                        width = 1.6.dp,
+                        brush = Brush.verticalGradient(
+                            colors = listOf(
+                                ElectricBrandCyan,
+                                BrandPrimaryBlue
+                            )
+                        ),
+                        shape = RoundedCornerShape(22.dp)
+                    )
+                    .padding(horizontal = 2.dp, vertical = 4.dp)
+            ) {
+                SelectedTabItem(
+                    label = selectedItem.first,
+                    icon = selectedItem.second,
+                    onClick = { onTabSelect(safeTab) },
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+
+            // 3. Right Island Pod (Only present when currentTab < items.size - 1)
+            if (rightTabs.isNotEmpty()) {
+                Box(
+                    modifier = Modifier
+                        .weight(rightTabs.size.toFloat())
+                        .shadow(8.dp, RoundedCornerShape(22.dp), spotColor = Color(0x33000000), ambientColor = Color(0x22000000))
+                        .clip(RoundedCornerShape(22.dp))
+                        .background(MidnightCardSurface)
+                        .border(1.dp, BorderStrokeDark, RoundedCornerShape(22.dp))
+                        .padding(horizontal = 2.dp, vertical = 4.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceEvenly,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        rightTabs.forEach { (index, item) ->
+                            UnselectedTabItem(
+                                label = item.first,
+                                icon = item.second,
+                                onClick = { onTabSelect(index) },
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * UnselectedTabItem:
+ * Clean, subtle tab item living inside the Left or Right unselected island pods.
+ */
+@Composable
+private fun UnselectedTabItem(
+    label: String,
+    icon: ImageVector,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Box(
+        modifier = modifier
+            .clip(RoundedCornerShape(18.dp))
+            .bouncyClick(onClick)
+            .padding(vertical = 7.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = label,
+                tint = TextSubtle,
+                modifier = Modifier.size(20.dp)
+            )
+            Spacer(modifier = Modifier.height(3.dp))
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelSmall.copy(
+                    fontSize = 10.5.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = TextSubtle
+                ),
+                maxLines = 1,
+                modifier = Modifier.basicMarquee(iterations = Int.MAX_VALUE)
+            )
+        }
+    }
+}
+
+/**
+ * SelectedTabItem:
+ * Lives alone in the standalone selected island pod.
+ * Triggers a 1-second animation where:
+ * 1. Icon drops down from top (-24dp -> 0dp) with spring ratchet bounce.
+ * 2. Text rolls up from bottom (+16dp -> 0dp) letter-by-letter with mechanical gear lag.
+ */
+@Composable
+private fun SelectedTabItem(
+    label: String,
+    icon: ImageVector,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val density = LocalDensity.current
+    val haptic = LocalHapticFeedback.current
+    var spinTrigger by remember { mutableIntStateOf(0) }
+
+    val iconAnim = remember { Animatable(0f) }
+
+    LaunchedEffect(label, spinTrigger) {
+        try {
+            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+        } catch (_: Exception) {}
+
+        iconAnim.snapTo(0f)
+        iconAnim.animateTo(
+            targetValue = 1f,
+            animationSpec = spring(
+                dampingRatio = 0.54f, // Mechanical spring bounce
+                stiffness = 240f      // Luxurious 1-second motion
+            )
+        )
+    }
+
+    Box(
+        modifier = modifier
+            .clip(RoundedCornerShape(18.dp))
+            .bouncyClick {
+                onClick()
+                spinTrigger++
+            }
+            .padding(vertical = 7.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center,
+            modifier = Modifier.clipToBounds()
+        ) {
+            val cameraDist = 16f * density.density
+            val iconProgress = iconAnim.value
+            val iconScale = 0.95f + (iconProgress * 0.20f)
+            val iconAlpha = iconProgress.coerceIn(0f, 1f)
+
+            Icon(
+                imageVector = icon,
+                contentDescription = label,
+                tint = BrandPrimaryBlue,
+                modifier = Modifier
+                    .size(20.dp)
+                    .graphicsLayer {
+                        cameraDistance = cameraDist
+                        translationY = (1f - iconProgress) * -26.dp.toPx()
+                        rotationX = (1f - iconProgress) * -80f
+                        scaleX = iconScale
+                        scaleY = iconScale
+                        alpha = iconAlpha
+                    }
+            )
+
+            Spacer(modifier = Modifier.height(3.dp))
+
+            // Staggered reel text revealing letter by letter from bottom
+            StaggeredReelText(
+                text = label,
+                trigger = spinTrigger
+            )
+        }
+    }
+}
+
+/**
+ * StaggeredReelText:
+ * Breaks string into grapheme clusters (preventing combining glyph issues in Indic languages)
+ * and animates each letter upward from bottom with a staggered delay across ~1 second.
+ */
+@Composable
+private fun StaggeredReelText(
+    text: String,
+    trigger: Int,
+    modifier: Modifier = Modifier
+) {
+    val density = LocalDensity.current
+    val clusters = remember(text) {
+        val list = mutableListOf<String>()
+        val iterator = BreakIterator.getCharacterInstance()
+        iterator.setText(text)
+        var start = iterator.first()
+        var end = iterator.next()
+        while (end != BreakIterator.DONE) {
+            list.add(text.substring(start, end))
+            start = end
+            end = iterator.next()
+        }
+        list
+    }
+
+    val charAnims = remember(clusters) {
+        List(clusters.size) { Animatable(1f) }
+    }
+
+    LaunchedEffect(text, trigger) {
+        charAnims.forEach { it.snapTo(0f) }
+        charAnims.forEachIndexed { index, anim ->
+            launch {
+                delay(index * 55L)
+                anim.animateTo(
+                    targetValue = 1f,
+                    animationSpec = spring(
+                        dampingRatio = 0.62f, // Crisp mechanical ratchet rebound
+                        stiffness = 200f      // Luxurious 1-second letter roll
+                    )
+                )
+            }
+        }
+    }
+
+    Row(
+        modifier = modifier,
+        horizontalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        val cameraDist = 16f * density.density
+        clusters.forEachIndexed { index, cluster ->
+            val progress = charAnims.getOrNull(index)?.value ?: 1f
+            val alphaVal = progress.coerceIn(0f, 1f)
+
+            Text(
+                text = cluster,
+                style = MaterialTheme.typography.labelSmall.copy(
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = BrandPrimaryBlue
+                ),
+                maxLines = 1,
+                softWrap = false,
+                modifier = Modifier.graphicsLayer {
+                    cameraDistance = cameraDist
+                    translationY = (1f - progress) * 18.dp.toPx()
+                    rotationX = (1f - progress) * 65f
+                    alpha = alphaVal
+                }
+            )
         }
     }
 }
