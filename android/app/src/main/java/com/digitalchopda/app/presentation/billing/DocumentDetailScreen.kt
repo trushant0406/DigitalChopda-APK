@@ -67,6 +67,7 @@ import androidx.compose.ui.draw.blur
 import com.digitalchopda.app.core.designsystem.BorderStrokeDark
 import com.digitalchopda.app.core.designsystem.BrandPrimaryBlue
 import com.digitalchopda.app.core.designsystem.ChopdaPdfLoadingOverlay
+import com.digitalchopda.app.core.designsystem.UniversalShareSheet
 import com.digitalchopda.app.core.document.ReportExportHelper
 import com.digitalchopda.app.core.designsystem.DangerRed
 import com.digitalchopda.app.core.designsystem.DarkNavy
@@ -160,6 +161,8 @@ fun DocumentDetailScreen(
     var showDeleteConfirmDialog by remember { mutableStateOf(false) }
     var showConvertConfirmDialog by remember { mutableStateOf(false) }
     var showRevisionHistoryDialog by remember { mutableStateOf(false) }
+    var showUniversalShareSheet by remember { mutableStateOf(false) }
+    var currentGeneratedPdf by remember { mutableStateOf<File?>(null) }
 
     LaunchedEffect(docType, docId) {
         activeCompany = companyRepository.getActiveCompany()
@@ -631,7 +634,27 @@ fun DocumentDetailScreen(
                             .clip(RoundedCornerShape(12.dp))
                             .background(BrandPrimaryBlue)
                             .bouncyClick {
-                                if (!isGeneratingPdf) openPdf(viewInExternalApp = false)
+                                if (!isGeneratingPdf && document != null) {
+                                    scope.launch {
+                                        isGeneratingPdf = true
+                                        try {
+                                            val pdfFile: File? = withContext(Dispatchers.IO) {
+                                                when (val doc = document) {
+                                                    is DocumentModel.InvoiceDoc -> pdfGenerator.generateInvoicePdf(activeCompany, doc.entity.toDomain())
+                                                    is DocumentModel.QuotationDoc -> pdfGenerator.generateQuotationPdf(activeCompany, doc.entity)
+                                                    is DocumentModel.CreditNoteDoc -> pdfGenerator.generateCreditNotePdf(activeCompany, doc.entity)
+                                                    null -> null
+                                                }
+                                            }
+                                            currentGeneratedPdf = pdfFile
+                                            showUniversalShareSheet = true
+                                        } catch (e: Exception) {
+                                            Toast.makeText(context, "Failed to render PDF: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
+                                        } finally {
+                                            isGeneratingPdf = false
+                                        }
+                                    }
+                                }
                             },
                         contentAlignment = Alignment.Center
                     ) {
@@ -1551,6 +1574,28 @@ fun DocumentDetailScreen(
             billingRepository = billingRepository,
             quotationRepository = quotationRepository,
             onDismiss = { showWhatsAppDialog = false }
+        )
+    }
+
+    // 🛸 Enterprise Universal Share Bottom Sheet
+    if (showUniversalShareSheet && document != null) {
+        val (docNum, cName, cPhone, grandTotal, docTitle) = when (val doc = document!!) {
+            is DocumentModel.InvoiceDoc -> listOf(doc.entity.invoiceNumber, doc.entity.customerName, doc.entity.customerPhone, doc.entity.grandTotal.toString(), "Tax Invoice")
+            is DocumentModel.QuotationDoc -> listOf(doc.entity.quotationNumber, doc.entity.customerName, doc.entity.customerPhone, doc.entity.grandTotal.toString(), "Quotation")
+            is DocumentModel.CreditNoteDoc -> listOf(doc.entity.creditNoteNumber, doc.entity.customerName, doc.entity.customerPhone, doc.entity.totalAmount.toString(), "Credit Note")
+        }
+        val totalVal = grandTotal.toDoubleOrNull() ?: 0.0
+        val captionMsg = "Hello $cName,\nPlease find your $docTitle $docNum for ₹ ${com.digitalchopda.app.util.CurrencyFormatter.formatINR(totalVal)} from ${activeCompany.firmName}.\nThank you for your business!"
+        UniversalShareSheet(
+            title = "Share $docTitle",
+            subtitle = "$docNum • $cName",
+            documentFile = currentGeneratedPdf,
+            captionMessage = captionMsg,
+            recipientPhone = cPhone,
+            onPrintClick = {
+                openPdf(viewInExternalApp = false)
+            },
+            onDismiss = { showUniversalShareSheet = false }
         )
     }
 

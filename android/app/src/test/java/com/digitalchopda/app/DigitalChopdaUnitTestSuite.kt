@@ -33,6 +33,14 @@ import com.digitalchopda.app.data.local.entity.InvoiceEntity
 import com.digitalchopda.app.data.local.entity.PaymentEntity
 import com.digitalchopda.app.data.local.entity.PurchaseEntity
 import com.digitalchopda.app.data.local.entity.SupplierEntity
+import com.digitalchopda.app.data.local.entity.CompanyEntity
+import com.digitalchopda.app.data.local.entity.PurchaseOrderEntity
+import com.digitalchopda.app.data.local.entity.DebitNoteEntity
+import com.digitalchopda.app.core.network.ApiPayPurchaseRequest
+import com.digitalchopda.app.core.network.ApiSubscriptionStatusResponse
+import com.digitalchopda.app.core.network.ApiCreatePurchaseOrderRequest
+import com.digitalchopda.app.core.network.ApiCreateDebitNoteRequest
+import com.google.gson.Gson
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -317,7 +325,7 @@ class DigitalChopdaUnitTestSuite {
         assertEquals(AppLanguage.ENGLISH, manager.currentLanguage.value)
         assertEquals(EnglishStrings, manager.strings.value)
         assertEquals("DigitalChopda", manager.strings.value.appName)
-        assertEquals("Chopda", manager.strings.value.navChopda)
+        assertEquals("Dashboard", manager.strings.value.navChopda)
         assertEquals("Billing", manager.strings.value.navBilling)
 
         // 2. Cycle to Gujarati
@@ -326,7 +334,7 @@ class DigitalChopdaUnitTestSuite {
         assertEquals(AppLanguage.GUJARATI, manager.currentLanguage.value)
         assertEquals(GujaratiStrings, manager.strings.value)
         assertEquals("ડિજિટલ ચોપડો", manager.strings.value.appName)
-        assertEquals("ચોપડો", manager.strings.value.navChopda)
+        assertEquals("ડેશબોર્ડ", manager.strings.value.navChopda)
         assertEquals("બિલિંગ", manager.strings.value.navBilling)
 
         // 3. Cycle to Hindi
@@ -335,7 +343,7 @@ class DigitalChopdaUnitTestSuite {
         assertEquals(AppLanguage.HINDI, manager.currentLanguage.value)
         assertEquals(HindiStrings, manager.strings.value)
         assertEquals("डिजिटल चोपड़ा", manager.strings.value.appName)
-        assertEquals("चोपड़ा", manager.strings.value.navChopda)
+        assertEquals("डैशबोर्ड", manager.strings.value.navChopda)
         assertEquals("बिलिंग", manager.strings.value.navBilling)
         assertEquals("थर्मल बिल", manager.strings.value.thermalSlipBtn)
 
@@ -417,7 +425,7 @@ class DigitalChopdaUnitTestSuite {
 
         // English appName
         assertEquals("DigitalChopda", EnglishStrings.appName)
-        assertEquals("Chopda", EnglishStrings.navChopda)
+        assertEquals("Dashboard", EnglishStrings.navChopda)
         assertEquals("LOGIN", EnglishStrings.loginTab)
     }
 
@@ -907,5 +915,71 @@ class DigitalChopdaUnitTestSuite {
             .build()
         val api = retrofit.create(DigitalChopdaApiService::class.java)
         assertNotNull(api)
+    }
+
+    @Test
+    fun testRoomV19EntitiesAndPurchaseOrderDebitNoteModels() {
+        val company = CompanyEntity(
+            id = 1L,
+            firmName = "Textile Hub",
+            ownerName = "Rajesh Shah",
+            whatsappBotEnabled = true,
+            plan = "GROWTH PRO",
+            isExpired = false
+        )
+        assertTrue(company.whatsappBotEnabled)
+        assertEquals("GROWTH PRO", company.plan)
+        assertFalse(company.isExpired)
+
+        val po = PurchaseOrderEntity(
+            companyId = 1L,
+            supplierId = 5L,
+            orderNumber = "PO-0001",
+            totalAmount = 45000.0,
+            status = "open"
+        )
+        assertEquals("PO-0001", po.orderNumber)
+        assertEquals(45000.0, po.totalAmount, 0.001)
+
+        val dn = DebitNoteEntity(
+            companyId = 1L,
+            supplierId = 5L,
+            purchaseId = 12L,
+            debitNoteNumber = "DN-0001",
+            totalAmount = 5000.0,
+            reason = "goods_returned"
+        )
+        assertEquals("DN-0001", dn.debitNoteNumber)
+        assertEquals(12L, dn.purchaseId)
+
+        val payment = PaymentEntity(
+            companyId = 1L,
+            customerId = 5L,
+            amount = 15000.0,
+            isJama = false,
+            purchaseId = 12L
+        )
+        assertEquals(12L, payment.purchaseId)
+    }
+
+    @Test
+    fun testSubscriptionAndPayPurchaseRequestSerialization() {
+        val gson = Gson()
+        val payReq = ApiPayPurchaseRequest(
+            amount = 12500.0,
+            paymentMode = "BANK_TRANSFER",
+            referenceNumber = "UTR9928172",
+            notes = "Settling invoice batch"
+        )
+        val json = gson.toJson(payReq)
+        assertTrue(json.contains("\"amount\":12500.0"))
+        assertTrue(json.contains("\"payment_mode\":\"BANK_TRANSFER\""))
+
+        val subJson = """{"plan":"GROWTH PRO","status":"active","is_expired":false,"days_remaining":28}"""
+        val sub = gson.fromJson(subJson, ApiSubscriptionStatusResponse::class.java)
+        assertEquals("GROWTH PRO", sub.plan)
+        assertEquals("active", sub.status)
+        assertFalse(sub.isExpired)
+        assertEquals(28, sub.daysRemaining)
     }
 }

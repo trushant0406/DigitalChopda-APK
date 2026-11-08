@@ -20,6 +20,9 @@ data class Company(
     val bankAccountNo: String = "",
     val bankIfsc: String = "",
     val bankBranch: String = "",
+    val whatsappBotEnabled: Boolean = false,
+    val plan: String = "STARTER",
+    val isExpired: Boolean = false,
     val createdAt: Long = System.currentTimeMillis()
 )
 
@@ -101,6 +104,31 @@ data class Product(
     val expiryDate: String? = null,
     val showInOnlineStore: Boolean = true,
     val createdAt: Long = System.currentTimeMillis()
+)
+
+@Immutable
+data class ProductCustomerPurchase(
+    val invoiceId: Long,
+    val invoiceNumber: String,
+    val customerName: String,
+    val customerPhone: String,
+    val quantity: Int,
+    val unitPrice: Double,
+    val totalAmount: Double,
+    val invoiceDate: Long,
+    val status: String
+)
+
+@Immutable
+data class ProductSupplierReceipt(
+    val purchaseId: Long,
+    val purchaseNumber: String,
+    val supplierName: String,
+    val supplierPhone: String = "",
+    val quantity: Double,
+    val unitPrice: Double,
+    val totalAmount: Double,
+    val purchaseDate: Long
 )
 
 @Immutable

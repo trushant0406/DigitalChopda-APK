@@ -7,21 +7,27 @@ sealed class Screen(val route: String) {
     data object Dashboard : Screen("dashboard")
     data object Party : Screen("party")
     data object Billing : Screen("billing")
-    data object CreateInvoice : Screen("create_invoice?mode={mode}&editId={editId}&partyId={partyId}&partyName={partyName}&partyPhone={partyPhone}") {
+    data object CreateInvoice : Screen("create_invoice?mode={mode}&editId={editId}&partyId={partyId}&partyName={partyName}&partyPhone={partyPhone}&productId={productId}&productName={productName}") {
         fun createRoute(
             mode: String = "invoice",
             editId: Long = 0L,
             partyId: Long = 0L,
             partyName: String = "",
-            partyPhone: String = ""
+            partyPhone: String = "",
+            productId: Long = 0L,
+            productName: String = ""
         ): String {
             val encName = if (partyName.isNotBlank()) java.net.URLEncoder.encode(partyName, "UTF-8") else ""
             val encPhone = if (partyPhone.isNotBlank()) java.net.URLEncoder.encode(partyPhone, "UTF-8") else ""
-            return "create_invoice?mode=$mode&editId=$editId&partyId=$partyId&partyName=$encName&partyPhone=$encPhone"
+            val encProd = if (productName.isNotBlank()) java.net.URLEncoder.encode(productName, "UTF-8") else ""
+            return "create_invoice?mode=$mode&editId=$editId&partyId=$partyId&partyName=$encName&partyPhone=$encPhone&productId=$productId&productName=$encProd"
         }
     }
     data object Products : Screen("products")
     data object Stock : Screen("products") // Aliased to products
+    data object ProductDetail : Screen("product_detail/{productId}") {
+        fun createRoute(productId: Long): String = "product_detail/$productId"
+    }
     data object Leads : Screen("leads")
     data object GstHub : Screen("gst_hub")
     data object Settings : Screen("settings")

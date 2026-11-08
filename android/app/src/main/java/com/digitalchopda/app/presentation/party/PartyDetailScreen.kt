@@ -5,6 +5,7 @@ import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
 import androidx.compose.foundation.background
+import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -32,8 +33,11 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowDownward
 import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.Call
+import androidx.compose.material.icons.filled.Chat
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Inventory2
+import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Payment
 import androidx.compose.material.icons.filled.Person
@@ -178,7 +182,8 @@ fun PartyDetailScreen(
                                 color = DarkNavy,
                                 fontSize = 16.sp
                             ),
-                            maxLines = 1
+                            maxLines = 1,
+                            modifier = Modifier.basicMarquee(iterations = Int.MAX_VALUE)
                         )
                         Text(
                             text = partyDetail?.customer?.phone ?: "",
@@ -223,7 +228,12 @@ fun PartyDetailScreen(
                                 showPaymentReminderDialog = true
                             }
                         ) {
-                            Text("💬", fontSize = 18.sp)
+                            Icon(
+                                imageVector = Icons.Default.Chat,
+                                contentDescription = "Payment Reminder",
+                                tint = EmeraldJama,
+                                modifier = Modifier.size(20.dp)
+                            )
                         }
 
                         // Customer Payment Portal (CPP) Sharing
@@ -231,14 +241,20 @@ fun PartyDetailScreen(
                             onClick = {
                                 val portalUrl = "https://app.digitalchopda.in/portal/${customer.phone}"
                                 val shareText = "Dear ${customer.name},\nView your real-time ledger statement and unpaid bills online:\n$portalUrl\n\nThank you,\n${activeCompany.firmName}"
-                                val intent = Intent(Intent.ACTION_SEND).apply {
-                                    type = "text/plain"
-                                    putExtra(Intent.EXTRA_TEXT, shareText)
-                                }
-                                context.startActivity(Intent.createChooser(intent, "Share Customer Portal (CPP)"))
+                                com.digitalchopda.app.core.document.UniversalShareEngine.shareTextMessage(
+                                    context = context,
+                                    message = shareText,
+                                    recipientPhone = customer.phone,
+                                    chooserTitle = "Share Customer Portal (CPP)"
+                                )
                             }
                         ) {
-                            Text("🌐", fontSize = 18.sp)
+                            Icon(
+                                imageVector = Icons.Default.Language,
+                                contentDescription = "Customer Portal",
+                                tint = BrandPrimaryBlue,
+                                modifier = Modifier.size(20.dp)
+                            )
                         }
 
                         // Inward Purchase Action (Stock & Cargo Intake)
@@ -246,7 +262,12 @@ fun PartyDetailScreen(
                             IconButton(
                                 onClick = { showRecordPurchaseDialog = true }
                             ) {
-                                Text("📦", fontSize = 18.sp)
+                                Icon(
+                                    imageVector = Icons.Default.Inventory2,
+                                    contentDescription = "Record Inward Purchase",
+                                    tint = ImperialGold,
+                                    modifier = Modifier.size(20.dp)
+                                )
                             }
                         }
                     }
@@ -530,10 +551,11 @@ fun PartyDetailScreen(
                             Box(
                                 modifier = Modifier
                                     .weight(1f)
+                                    .height(34.dp)
                                     .clip(RoundedCornerShape(8.dp))
                                     .background(if (isSelected) BrandPrimaryBlue else Color.Transparent)
                                     .clickable { selectedTab = index }
-                                    .padding(vertical = 8.dp),
+                                    .padding(horizontal = 4.dp),
                                 contentAlignment = Alignment.Center
                             ) {
                                 Text(
@@ -543,7 +565,8 @@ fun PartyDetailScreen(
                                         color = if (isSelected) Color.White else DarkNavy,
                                         fontSize = 11.sp
                                     ),
-                                    maxLines = 1
+                                    maxLines = 1,
+                                    modifier = Modifier.basicMarquee(iterations = Int.MAX_VALUE)
                                 )
                             }
                         }
@@ -652,10 +675,12 @@ fun PartyDetailScreen(
                                 onPrintClick = {
                                     Toast.makeText(context, "Printing Invoice ${inv.invoiceNumber} via Bluetooth", Toast.LENGTH_SHORT).show()
                                 },
-                                onReceivePaymentClick = {
-                                    invoiceForPayment = inv
-                                    showPaymentInDialog = true
-                                }
+                                onReceivePaymentClick = if (inv.balanceDue > 0.01 && !inv.status.equals("PAID", ignoreCase = true)) {
+                                    {
+                                        invoiceForPayment = inv
+                                        showPaymentInDialog = true
+                                    }
+                                } else null
                             )
                         }
                     }
@@ -752,7 +777,9 @@ fun PartyDetailScreen(
 
     // Modal Dialog: Record Payment In (જમા)
     if (showPaymentInDialog) {
-        val unpaidInvoices = partyDetail?.invoices?.filter { !it.status.equals("PAID", ignoreCase = true) } ?: emptyList()
+        val unpaidInvoices = partyDetail?.invoices?.filter {
+            !it.status.equals("PAID", ignoreCase = true) && it.balanceDue > 0.01
+        } ?: emptyList()
         RecordPaymentDialog(
             isJama = true,
             partyName = partyDetail?.customer?.name ?: "Customer",
@@ -956,7 +983,12 @@ private fun PartyInvoiceCard(
     onPrintClick: () -> Unit,
     onReceivePaymentClick: (() -> Unit)? = null
 ) {
-    val isFullyPaid = invoice.status.equals("PAID", ignoreCase = true)
+    val isFullyPaid = invoice.status.equals("PAID", ignoreCase = true) || invoice.balanceDue <= 0.01
+    val effectiveStatus = when {
+        invoice.balanceDue <= 0.01 || invoice.status.equals("PAID", ignoreCase = true) -> "PAID"
+        invoice.paidAmount > 0.0 || invoice.status.equals("PARTIAL", ignoreCase = true) -> "PARTIAL"
+        else -> invoice.status.ifBlank { "UNPAID" }
+    }
     ChopdaCard(
         modifier = Modifier.fillMaxWidth(),
         cornerRadius = 14.dp,
@@ -989,13 +1021,13 @@ private fun PartyInvoiceCard(
                 }
 
                 StatusPill(
-                    text = invoice.status,
-                    textColor = when (invoice.status) {
+                    text = effectiveStatus,
+                    textColor = when (effectiveStatus) {
                         "PAID" -> EmeraldJama
                         "PARTIAL" -> BrandPrimaryBlue
                         else -> RubyUdhar
                     },
-                    backgroundColor = when (invoice.status) {
+                    backgroundColor = when (effectiveStatus) {
                         "PAID" -> EmeraldJama.copy(alpha = 0.12f)
                         "PARTIAL" -> BrandPrimaryBlue.copy(alpha = 0.12f)
                         else -> RubyUdhar.copy(alpha = 0.12f)
@@ -1021,7 +1053,7 @@ private fun PartyInvoiceCard(
                             fontSize = 16.sp
                         )
                     )
-                    if (!isFullyPaid) {
+                    if (!isFullyPaid && invoice.balanceDue > 0.01) {
                         Text(
                             text = "Due: ₹ ${String.format(java.util.Locale.US, "%.2f", invoice.balanceDue)}",
                             style = MaterialTheme.typography.labelSmall.copy(
@@ -1030,11 +1062,20 @@ private fun PartyInvoiceCard(
                                 fontSize = 11.5.sp
                             )
                         )
+                    } else {
+                        Text(
+                            text = "✓ Paid in Full",
+                            style = MaterialTheme.typography.labelSmall.copy(
+                                color = EmeraldJama,
+                                fontWeight = FontWeight.SemiBold,
+                                fontSize = 11.5.sp
+                            )
+                        )
                     }
                 }
 
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    if (!isFullyPaid && onReceivePaymentClick != null) {
+                    if (!isFullyPaid && invoice.balanceDue > 0.01 && onReceivePaymentClick != null) {
                         Button(
                             onClick = onReceivePaymentClick,
                             shape = RoundedCornerShape(8.dp),

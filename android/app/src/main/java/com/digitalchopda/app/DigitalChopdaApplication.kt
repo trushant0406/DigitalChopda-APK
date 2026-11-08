@@ -88,13 +88,9 @@ class DigitalChopdaApplication : Application() {
 
         languageManager = com.digitalchopda.app.core.localization.LanguageManager(this)
         biometricAuthManager = com.digitalchopda.app.core.security.BiometricAuthManager(this)
-        com.digitalchopda.app.core.sound.SoundEffectsManager.init(this)
         database = ChopdaDatabase.getInstance(this)
-        CoroutineScope(Dispatchers.IO).launch {
-            ChopdaDatabase.ensureSeedData(database)
-        }
         tokenStorage = TokenStorage(this)
-        apiService = NetworkClient.getApiService(tokenStorage)
+        apiService = NetworkClient.getApiService(tokenStorage, this)
         pdfGenerator = InvoicePdfGenerator(this)
         printerManager = BluetoothPrinterManager(this)
 
@@ -117,11 +113,16 @@ class DigitalChopdaApplication : Application() {
             productRepository = productRepository
         )
 
-        // Optimization 6: Schedule Automated WorkManager Background Outbox Sync & Instant Reconnect Monitor
-        try {
-            com.digitalchopda.app.data.work.InvoiceSyncWorker.schedulePeriodicSync(this)
-            com.digitalchopda.app.core.network.InstantNetworkSyncMonitor.start(this)
-            com.digitalchopda.app.core.network.RealtimeEventSubscriber.start(this)
-        } catch (_: Exception) {}
+        // 🏎️ Cold-Start Acceleration: Offload secondary background engines & soundbox to background thread
+        CoroutineScope(Dispatchers.Default).launch {
+            try {
+                com.digitalchopda.app.core.sound.SoundEffectsManager.init(this@DigitalChopdaApplication)
+                com.digitalchopda.app.data.work.InvoiceSyncWorker.schedulePeriodicSync(this@DigitalChopdaApplication)
+                com.digitalchopda.app.core.network.InstantNetworkSyncMonitor.start(this@DigitalChopdaApplication)
+                com.digitalchopda.app.core.network.RealtimeEventSubscriber.start(this@DigitalChopdaApplication)
+            } catch (e: Exception) {
+                android.util.Log.w("DigitalChopda", "Background service initialization warning", e)
+            }
+        }
     }
 }

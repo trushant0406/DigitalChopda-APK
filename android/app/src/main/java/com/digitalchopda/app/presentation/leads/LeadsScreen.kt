@@ -24,6 +24,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Chat
 import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.Phone
 import androidx.compose.material.icons.filled.Search
@@ -454,15 +455,23 @@ fun LeadsScreen(
                                         .clip(RoundedCornerShape(8.dp))
                                         .background(ElevatedSlate)
                                         .clickable {
-                                            val cleanPhone = lead.phone.replace("[^0-9]".toRegex(), "")
-                                            val intent = Intent(Intent.ACTION_VIEW).apply {
-                                                data = Uri.parse("https://wa.me/$cleanPhone?text=Namaste%20${Uri.encode(lead.customerName)},%20regarding%20your%20requirement%20from%20DigitalChopda.")
-                                            }
-                                            context.startActivity(intent)
+                                            val text = "Namaste ${lead.customerName}, regarding your requirement from ${activeCompany.firmName}."
+                                            com.digitalchopda.app.core.document.UniversalShareEngine.shareTextMessage(
+                                                context = context,
+                                                message = text,
+                                                recipientPhone = lead.phone,
+                                                chooserTitle = "Chat with ${lead.customerName}",
+                                                preferWhatsApp = true
+                                            )
                                         },
                                     contentAlignment = Alignment.Center
                                 ) {
-                                    Text("💬", fontSize = 16.sp)
+                                    Icon(
+                                        imageVector = Icons.Default.Chat,
+                                        contentDescription = "WhatsApp",
+                                        tint = com.digitalchopda.app.core.designsystem.WhatsAppGreen,
+                                        modifier = Modifier.size(18.dp)
+                                    )
                                 }
                             }
                         }

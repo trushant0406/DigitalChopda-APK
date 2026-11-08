@@ -6,6 +6,10 @@ import androidx.room.withTransaction
 import com.digitalchopda.app.data.local.entity.ProductEntity
 import com.digitalchopda.app.data.local.entity.PurchaseEntity
 import com.digitalchopda.app.data.local.entity.PurchaseItemEntity
+import com.digitalchopda.app.data.local.entity.PurchaseOrderEntity
+import com.digitalchopda.app.data.local.entity.PurchaseOrderItemEntity
+import com.digitalchopda.app.data.local.entity.DebitNoteEntity
+import com.digitalchopda.app.data.local.entity.DebitNoteItemEntity
 import com.digitalchopda.app.data.local.entity.StockAdjustmentEntity
 import com.digitalchopda.app.data.local.entity.SupplierEntity
 import com.digitalchopda.app.domain.model.Purchase
@@ -87,7 +91,8 @@ class PurchaseRepository(
                         quantity = item.quantity,
                         unitPrice = item.unitPrice,
                         gstRate = item.gstRate,
-                        hsnCode = item.hsnCode?.trim()?.ifBlank { null }
+                        hsnCode = item.hsnCode?.trim()?.ifBlank { null },
+                        totalAmount = item.totalAmount
                     )
                 }
                 db.purchaseDao().insertPurchaseItems(itemEntities)
@@ -308,7 +313,7 @@ class PurchaseRepository(
         }
     }
 
-    suspend fun syncPurchasesWithServer(companyId: Long): Result<Int> {
+    suspend fun syncPurchasesWithServer(companyId: Long, serverPurchases: List<com.digitalchopda.app.core.network.ApiPurchaseDto>? = null): Result<Int> {
         val api = apiService ?: return Result.success(0)
         return kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
             try {
@@ -319,11 +324,15 @@ class PurchaseRepository(
                     android.util.Log.w("PurchaseRepo", "Outbox flush before purchases fetch had errors", e)
                 }
 
-                val res = api.getPurchases()
-                if (!res.isSuccessful || res.body() == null) {
-                    return@withContext Result.failure(Exception("Failed to fetch purchases: ${res.code()}"))
+                val remotePurchases: List<com.digitalchopda.app.core.network.ApiPurchaseDto> = if (serverPurchases != null) {
+                    serverPurchases
+                } else {
+                    val res = api.getPurchases()
+                    if (!res.isSuccessful || res.body() == null) {
+                        return@withContext Result.failure(Exception("Failed to fetch purchases: ${res.code()}"))
+                    }
+                    res.body()!!
                 }
-                val remotePurchases = res.body()!!
                 var syncedCount = 0
                 for (p in remotePurchases) {
                     val pBizId = p.businessId
@@ -373,7 +382,8 @@ class PurchaseRepository(
                                     quantity = item.quantity,
                                     unitPrice = item.unitPrice,
                                     gstRate = item.gstRate,
-                                    hsnCode = item.hsnCode
+                                    hsnCode = item.hsnCode,
+                                    totalAmount = if (item.totalAmount > 0.0) item.totalAmount else (item.quantity * item.unitPrice * (1.0 + item.gstRate / 100.0))
                                 )
                             }
                             db.purchaseDao().insertPurchaseItems(itemEntities)
@@ -424,5 +434,49 @@ class PurchaseRepository(
 
     suspend fun getSupplierById(id: Long): SupplierEntity? {
         return db.supplierDao().getSupplierById(id)
+    }
+
+    // --- Purchase Orders ---
+    fun getPurchaseOrders(companyId: Long): Flow<List<PurchaseOrderEntity>> {
+        return db.purchaseOrderDao().getAllOrders(companyId)
+    }
+
+    suspend fun getPurchaseOrderById(orderId: Long): PurchaseOrderEntity? {
+        return db.purchaseOrderDao().getOrderById(orderId)
+    }
+
+    suspend fun getPurchaseOrderItems(orderId: Long): List<PurchaseOrderItemEntity> {
+        return db.purchaseOrderDao().getOrderItems(orderId)
+    }
+
+    suspend fun savePurchaseOrder(order: PurchaseOrderEntity, items: List<PurchaseOrderItemEntity>): Long {
+        return db.withTransaction {
+            val orderId = db.purchaseOrderDao().insertOrder(order)
+            val updatedItems = items.map { it.copy(purchaseOrderId = orderId) }
+            db.purchaseOrderDao().insertOrderItems(updatedItems)
+            orderId
+        }
+    }
+
+    // --- Debit Notes (Purchase Returns) ---
+    fun getDebitNotes(companyId: Long): Flow<List<DebitNoteEntity>> {
+        return db.debitNoteDao().getAllDebitNotes(companyId)
+    }
+
+    suspend fun getDebitNoteById(debitNoteId: Long): DebitNoteEntity? {
+        return db.debitNoteDao().getDebitNoteById(debitNoteId)
+    }
+
+    suspend fun getDebitNoteItems(debitNoteId: Long): List<DebitNoteItemEntity> {
+        return db.debitNoteDao().getDebitNoteItems(debitNoteId)
+    }
+
+    suspend fun saveDebitNote(debitNote: DebitNoteEntity, items: List<DebitNoteItemEntity>): Long {
+        return db.withTransaction {
+            val dnId = db.debitNoteDao().insertDebitNote(debitNote)
+            val updatedItems = items.map { it.copy(debitNoteId = dnId) }
+            db.debitNoteDao().insertDebitNoteItems(updatedItems)
+            dnId
+        }
     }
 }

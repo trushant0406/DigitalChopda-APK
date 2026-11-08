@@ -28,6 +28,18 @@ interface DigitalChopdaApiService {
     @POST("auth/verify-otp")
     suspend fun verifyOtp(@Body request: ApiVerifyOtpRequest): Response<ApiLoginResponse>
 
+    @POST("auth/send-email-otp")
+    suspend fun sendEmailOtp(@Body request: ApiSendEmailOtpRequest): Response<ApiSendEmailOtpResponse>
+
+    @POST("auth/verify-email-otp")
+    suspend fun verifyEmailOtp(@Body request: ApiVerifyEmailOtpRequest): Response<ApiLoginResponse>
+
+    @POST("auth/register")
+    suspend fun register(@Body request: ApiRegisterRequest): Response<ApiLoginResponse>
+
+    @POST("auth/reset-password")
+    suspend fun resetPassword(@Body request: ApiResetPasswordRequest): Response<ApiGenericSuccessResponse>
+
     @GET("auth/me")
     suspend fun getMe(): Response<ApiLoginResponse>
 
@@ -81,6 +93,9 @@ interface DigitalChopdaApiService {
 
     @GET("dashboard/summary")
     suspend fun getDashboardSummary(): Response<ApiDashboardSummaryResponse>
+
+    @GET("dashboard/analytics")
+    suspend fun getDashboardAnalytics(@retrofit2.http.Query("period") period: String = "30d"): Response<ApiDashboardAnalyticsResponse>
 
     @GET("settings/status")
     suspend fun getSettingsStatus(): Response<ApiSettingsStatusResponse>
@@ -211,6 +226,42 @@ interface DigitalChopdaApiService {
     @GET("purchases/next-number")
     suspend fun getNextPurchaseNumber(): Response<ApiNextNumberResponse>
 
+    @POST("purchases/{id}/pay")
+    suspend fun payPurchase(
+        @Path("id") id: Long,
+        @Body request: ApiPayPurchaseRequest
+    ): Response<ApiGenericSuccessResponse>
+
+    // --- Purchase Orders (PO) (Migration 057) ---
+    @GET("purchases/orders")
+    suspend fun getPurchaseOrders(): Response<List<ApiPurchaseOrderDto>>
+
+    @POST("purchases/orders")
+    suspend fun createPurchaseOrder(@Body request: ApiCreatePurchaseOrderRequest): Response<ApiPurchaseOrderDto>
+
+    @GET("purchases/orders/{id}")
+    suspend fun getPurchaseOrderById(@Path("id") id: Long): Response<ApiPurchaseOrderDto>
+
+    @PATCH("purchases/orders/{id}/status")
+    suspend fun updatePurchaseOrderStatus(
+        @Path("id") id: Long,
+        @Body request: Map<String, String>
+    ): Response<ApiPurchaseOrderDto>
+
+    // --- Debit Notes (Purchase Returns) (Migration 057) ---
+    @GET("purchases/debit-notes")
+    suspend fun getDebitNotes(): Response<List<ApiDebitNoteDto>>
+
+    @POST("purchases/debit-notes")
+    suspend fun createDebitNote(@Body request: ApiCreateDebitNoteRequest): Response<ApiDebitNoteDto>
+
+    @GET("purchases/debit-notes/{id}")
+    suspend fun getDebitNoteById(@Path("id") id: Long): Response<ApiDebitNoteDto>
+
+    // --- Subscription & Plan Gating ---
+    @GET("subscription/status")
+    suspend fun getSubscriptionStatus(): Response<ApiSubscriptionStatusResponse>
+
     // --- Stock Adjustments & Inventory Audit ---
     @POST("inventory/adjust")
     suspend fun adjustStock(@Body request: ApiStockAdjustmentRequest): Response<ApiStockAdjustmentResponse>
@@ -322,5 +373,20 @@ interface DigitalChopdaApiService {
 
     @GET("reports/anomalies")
     suspend fun getPreFilingAnomalies(): Response<List<ApiPreFilingAnomalyDto>>
+
+    // --- Unified Fast Sync ---
+    @POST("sync/fast-sync")
+    suspend fun fastSync(@Body request: ApiFastSyncRequest): Response<ApiFastSyncResponse>
+
+    @GET("sync/fast-sync")
+    suspend fun fastSyncGet(@Query("since") since: String? = null): Response<ApiFastSyncResponse>
+
+    // --- Tri-Platform App Version & Force Update ---
+    @GET("app/version-check")
+    suspend fun checkAppVersion(
+        @Query("platform") platform: String = "android",
+        @Query("version") version: String? = null,
+        @Query("build") build: Int? = null
+    ): Response<ApiAppVersionResponse>
 }
 

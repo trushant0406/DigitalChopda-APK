@@ -15,6 +15,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import com.digitalchopda.app.core.network.InstantNetworkSyncMonitor
 import androidx.compose.foundation.background
+import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -302,6 +303,47 @@ fun DashboardScreen(
                     },
                     onFilterClick = {}
                 )
+            }
+
+            // 1.5 Fuel Gauge: Expired Trial Alert Banner
+            if (activeCompany.isExpired) {
+                item {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(Color(0xFFFFF1F2))
+                            .border(1.dp, Color(0xFFFECDD3), RoundedCornerShape(10.dp))
+                            .clickable { onNavigateToSettings() }
+                            .padding(horizontal = 12.dp, vertical = 8.dp)
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Text("🚨", fontSize = 14.sp)
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = "Free Trial Ended. Tap to upgrade plan.",
+                                    fontSize = 11.5.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFF9F1239)
+                                )
+                            }
+                            Text(
+                                text = "Renew ›",
+                                fontSize = 11.5.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFFE11D48)
+                            )
+                        }
+                    }
+                }
             }
 
             // 2. Sacred Indian Chopda Ledger Cockpit (Dual Vault Card)
@@ -1451,7 +1493,8 @@ fun DashboardStatCard(
                     color = TextMuted,
                     fontWeight = FontWeight.SemiBold
                 ),
-                maxLines = 1
+                maxLines = 1,
+                modifier = Modifier.basicMarquee(iterations = Int.MAX_VALUE)
             )
             Spacer(modifier = Modifier.height(6.dp))
             Text(
@@ -1460,7 +1503,9 @@ fun DashboardStatCard(
                     fontWeight = FontWeight.Black,
                     color = accentColor,
                     fontSize = 20.sp
-                )
+                ),
+                maxLines = 1,
+                modifier = Modifier.basicMarquee(iterations = Int.MAX_VALUE)
             )
             if (subValue != null) {
                 Spacer(modifier = Modifier.height(4.dp))
@@ -1470,7 +1515,8 @@ fun DashboardStatCard(
                         color = TextSubtle,
                         fontSize = 11.sp
                     ),
-                    maxLines = 1
+                    maxLines = 1,
+                    modifier = Modifier.basicMarquee(iterations = Int.MAX_VALUE)
                 )
             }
         }
@@ -1737,7 +1783,9 @@ fun FloatingCapsuleDock(
                                     fontSize = 10.5.sp,
                                     fontWeight = if (isSelected) FontWeight.ExtraBold else FontWeight.Medium,
                                     color = animatedItemColor
-                                )
+                                ),
+                                maxLines = 1,
+                                modifier = Modifier.basicMarquee(iterations = Int.MAX_VALUE)
                             )
                         }
                     }

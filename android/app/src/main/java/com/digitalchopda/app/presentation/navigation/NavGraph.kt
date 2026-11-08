@@ -23,6 +23,7 @@ import com.digitalchopda.app.presentation.leads.LeadsScreen
 import com.digitalchopda.app.presentation.main.MainContainerScreen
 import com.digitalchopda.app.presentation.party.PartyDetailScreen
 import com.digitalchopda.app.presentation.pdf.PdfViewerScreen
+import com.digitalchopda.app.presentation.products.ProductDetailScreen
 import com.digitalchopda.app.presentation.products.ProductsScreen
 import com.digitalchopda.app.presentation.settings.SettingsScreen
 import com.digitalchopda.app.presentation.splash.SplashScreen
@@ -128,6 +129,9 @@ fun DigitalChopdaNavGraph(
                 onNavigateToPartyDetail = { partyId, initialTab ->
                     navController.navigate(Screen.PartyDetail.createRoute(partyId, initialTab))
                 },
+                onNavigateToProductDetail = { productId ->
+                    navController.navigate(Screen.ProductDetail.createRoute(productId))
+                },
                 onNavigateToCreateInvoice = { mode, editId ->
                     navController.navigate(Screen.CreateInvoice.createRoute(mode, editId))
                 },
@@ -229,7 +233,9 @@ fun DigitalChopdaNavGraph(
                 navArgument("editId") { type = NavType.LongType; defaultValue = 0L },
                 navArgument("partyId") { type = NavType.LongType; defaultValue = 0L },
                 navArgument("partyName") { type = NavType.StringType; defaultValue = "" },
-                navArgument("partyPhone") { type = NavType.StringType; defaultValue = "" }
+                navArgument("partyPhone") { type = NavType.StringType; defaultValue = "" },
+                navArgument("productId") { type = NavType.LongType; defaultValue = 0L },
+                navArgument("productName") { type = NavType.StringType; defaultValue = "" }
             )
         ) { backStackEntry ->
             val mode = backStackEntry.arguments?.getString("mode") ?: "invoice"
@@ -239,6 +245,9 @@ fun DigitalChopdaNavGraph(
             val partyName = if (rawName.isNotBlank()) java.net.URLDecoder.decode(rawName, "UTF-8") else ""
             val rawPhone = backStackEntry.arguments?.getString("partyPhone") ?: ""
             val partyPhone = if (rawPhone.isNotBlank()) java.net.URLDecoder.decode(rawPhone, "UTF-8") else ""
+            val productId = backStackEntry.arguments?.getLong("productId") ?: 0L
+            val rawProdName = backStackEntry.arguments?.getString("productName") ?: ""
+            val productName = if (rawProdName.isNotBlank()) java.net.URLDecoder.decode(rawProdName, "UTF-8") else ""
             CreateInvoiceScreen(
                 billingRepository = app.billingRepository,
                 companyRepository = app.companyRepository,
@@ -253,6 +262,8 @@ fun DigitalChopdaNavGraph(
                 initialPartyId = partyId,
                 initialPartyName = partyName,
                 initialPartyPhone = partyPhone,
+                initialProductId = productId,
+                initialProductName = productName,
                 onNavigateBack = { navController.popBackStack() },
                 onNavigateToDocumentDetail = { docType, docId ->
                     navController.navigate(Screen.DocumentDetail.createRoute(docType, docId))
@@ -321,6 +332,9 @@ fun DigitalChopdaNavGraph(
                 onNavigateToPartyDetail = { partyId, initialTab ->
                     navController.navigate(Screen.PartyDetail.createRoute(partyId, initialTab))
                 },
+                onNavigateToProductDetail = { productId ->
+                    navController.navigate(Screen.ProductDetail.createRoute(productId))
+                },
                 onNavigateToCreateInvoice = { mode, editId ->
                     navController.navigate(Screen.CreateInvoice.createRoute(mode, editId))
                 },
@@ -368,6 +382,9 @@ fun DigitalChopdaNavGraph(
                 onNavigateToPartyDetail = { partyId, initialTab ->
                     navController.navigate(Screen.PartyDetail.createRoute(partyId, initialTab))
                 },
+                onNavigateToProductDetail = { productId ->
+                    navController.navigate(Screen.ProductDetail.createRoute(productId))
+                },
                 onNavigateToCreateInvoice = { mode, editId ->
                     navController.navigate(Screen.CreateInvoice.createRoute(mode, editId))
                 },
@@ -401,6 +418,9 @@ fun DigitalChopdaNavGraph(
                 onNavigateToLeads = { navController.navigate(Screen.Leads.route) },
                 onNavigateToPartyDetail = { partyId, initialTab ->
                     navController.navigate(Screen.PartyDetail.createRoute(partyId, initialTab))
+                },
+                onNavigateToProductDetail = { productId ->
+                    navController.navigate(Screen.ProductDetail.createRoute(productId))
                 },
                 onNavigateToCreateInvoice = { mode, editId ->
                     navController.navigate(Screen.CreateInvoice.createRoute(mode, editId))
@@ -471,6 +491,35 @@ fun DigitalChopdaNavGraph(
                             invoiceNumber = invoiceNumber
                         )
                     )
+                }
+            )
+        }
+
+        // Screen 8.6: Product 360° Unified Detail Hub (Stock Cockpit, Passbook, Customer Breakdown, Inward Receipts)
+        composable(
+            route = Screen.ProductDetail.route,
+            arguments = listOf(
+                navArgument("productId") { type = NavType.LongType }
+            )
+        ) { backStackEntry ->
+            val productId = backStackEntry.arguments?.getLong("productId") ?: 0L
+            ProductDetailScreen(
+                productId = productId,
+                productRepository = app.productRepository,
+                companyRepository = app.companyRepository,
+                onNavigateBack = { navController.popBackStack() },
+                onNavigateToCreateInvoice = { prodId, prodName ->
+                    navController.navigate(
+                        Screen.CreateInvoice.createRoute(
+                            mode = "invoice",
+                            editId = 0L,
+                            productId = prodId,
+                            productName = prodName
+                        )
+                    )
+                },
+                onNavigateToDocumentDetail = { docType, docId ->
+                    navController.navigate(Screen.DocumentDetail.createRoute(docType, docId))
                 }
             )
         }

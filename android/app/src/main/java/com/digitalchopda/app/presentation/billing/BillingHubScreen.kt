@@ -6,6 +6,7 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
+import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -22,6 +23,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -68,6 +70,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -141,39 +144,17 @@ fun BillingHubScreen(
     onNavigateToPdfViewer: (filePath: String, invoiceId: Long, customerName: String, customerPhone: String, invoiceNumber: String) -> Unit
 ) {
     val context = LocalContext.current
-    var activeCompany by remember {
-        mutableStateOf(
-            Company(
-                id = 1L,
-                firmName = "Sharma Traders",
-                ownerName = "Amit Sharma",
-                gstin = "24AAACS1429B1Z8",
-                phone = "+91 98765 43210",
-                address = "Surat, Gujarat",
-                isActive = true
-            )
+    val activeCompanyFlowVal by companyRepository.getActiveCompanyFlow().collectAsState(initial = null)
+    val activeCompany = activeCompanyFlowVal ?: remember {
+        Company(
+            id = 1L,
+            firmName = "My Business",
+            ownerName = "Admin User",
+            isActive = true
         )
     }
-
     val coroutineScope = rememberCoroutineScope()
     var isSyncing by remember { mutableStateOf(false) }
-
-    LaunchedEffect(Unit) {
-        activeCompany = companyRepository.getActiveCompany()
-    }
-
-    LaunchedEffect(activeCompany.id) {
-        isSyncing = true
-        try {
-            billingRepository.syncInvoicesWithServer(activeCompany.id)
-            quotationRepository.syncQuotationsWithServer(activeCompany.id)
-            purchaseRepository?.syncPurchasesWithServer(activeCompany.id)
-        } catch (e: Exception) {
-            android.util.Log.e("BillingHubScreen", "Auto-sync error", e)
-        } finally {
-            isSyncing = false
-        }
-    }
 
     var selectedSection by rememberSaveable { mutableIntStateOf(0) } // 0: Invoices, 1: Quotations, 2: Sales Returns, 3: Purchases
     var searchQuery by rememberSaveable { mutableStateOf("") }
@@ -190,6 +171,14 @@ fun BillingHubScreen(
     val pendingSyncCount by billingRepository.observePendingSyncCount().collectAsState(initial = 0)
     val isOnline by InstantNetworkSyncMonitor.isOnline.collectAsState()
     val isSyncingOutbox by InstantNetworkSyncMonitor.isSyncing.collectAsState()
+
+    val invoiceListState = rememberLazyListState()
+    val focusManager = LocalFocusManager.current
+    LaunchedEffect(invoiceListState.isScrollInProgress) {
+        if (invoiceListState.isScrollInProgress) {
+            focusManager.clearFocus()
+        }
+    }
 
     val dateFormat = remember { SimpleDateFormat("dd MMM yyyy", Locale.getDefault()) }
 
@@ -280,53 +269,9 @@ fun BillingHubScreen(
                                 else -> "Syncing $pendingSyncCount pending items with Central Depot..."
                             }
                             Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
-                            coroutineScope.launch {
-                                isSyncing = true
-                                try {
-                                    billingRepository.syncInvoicesWithServer(activeCompany.id)
-                                    quotationRepository.syncQuotationsWithServer(activeCompany.id)
-                                } catch (e: Exception) {
-                                    android.util.Log.e("BillingHubScreen", "Manual sync error", e)
-                                } finally {
-                                    isSyncing = false
-                                }
-                            }
                         },
-                        modifier = Modifier.padding(end = 4.dp)
+                        modifier = Modifier.padding(end = 12.dp)
                     )
-
-                    if (isSyncing) {
-                        CircularProgressIndicator(
-                            modifier = Modifier
-                                .padding(end = 12.dp)
-                                .size(20.dp),
-                            strokeWidth = 2.dp,
-                            color = BrandPrimaryBlue
-                        )
-                    } else {
-                        IconButton(
-                            onClick = {
-                                coroutineScope.launch {
-                                    isSyncing = true
-                                    try {
-                                        billingRepository.syncInvoicesWithServer(activeCompany.id)
-                                        quotationRepository.syncQuotationsWithServer(activeCompany.id)
-                                        purchaseRepository?.syncPurchasesWithServer(activeCompany.id)
-                                    } catch (e: Exception) {
-                                        android.util.Log.e("BillingHubScreen", "Manual sync error", e)
-                                    } finally {
-                                        isSyncing = false
-                                    }
-                                }
-                            }
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Refresh,
-                                contentDescription = "Sync Documents",
-                                tint = BrandPrimaryBlue
-                            )
-                        }
-                    }
                 }
             )
             HorizontalDivider(color = BorderStrokeDark, thickness = 0.8.dp)
@@ -736,6 +681,7 @@ fun BillingHubScreen(
                                 }
                             } else {
                                 LazyColumn(
+                                    state = invoiceListState,
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .weight(1f),
@@ -1039,16 +985,21 @@ fun InvoiceItemCard(
                         style = MaterialTheme.typography.bodyMedium.copy(
                             fontWeight = FontWeight.Bold,
                             color = TextWhite
-                        )
+                        ),
+                        maxLines = 1,
+                        modifier = Modifier.basicMarquee(iterations = Int.MAX_VALUE)
                     )
                     if (invoice.itemsSummary.isNotBlank()) {
                         Text(
                             text = invoice.itemsSummary,
                             style = MaterialTheme.typography.bodySmall.copy(color = TextMuted),
-                            maxLines = 1
+                            maxLines = 1,
+                            modifier = Modifier.basicMarquee(iterations = Int.MAX_VALUE)
                         )
                     }
                 }
+
+                Spacer(modifier = Modifier.width(8.dp))
 
                 Column(horizontalAlignment = Alignment.End) {
                     Text(

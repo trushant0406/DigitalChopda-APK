@@ -190,10 +190,13 @@ class InvoicePdfGenerator(val context: Context) {
         val cleanNumber = invoice.invoiceNumber.replace("/", "_")
         val pdfFile = File(invoicesDir, "Invoice_$cleanNumber.pdf")
 
-        FileOutputStream(pdfFile).use { out ->
-            document.writeTo(out)
+        try {
+            FileOutputStream(pdfFile).use { out ->
+                document.writeTo(out)
+            }
+        } finally {
+            document.close()
         }
-        document.close()
 
         return pdfFile
     }
@@ -325,10 +328,13 @@ class InvoicePdfGenerator(val context: Context) {
         val cleanNumber = quotation.quotationNumber.replace("/", "_")
         val pdfFile = File(quotesDir, "Quotation_$cleanNumber.pdf")
 
-        FileOutputStream(pdfFile).use { out ->
-            document.writeTo(out)
+        try {
+            FileOutputStream(pdfFile).use { out ->
+                document.writeTo(out)
+            }
+        } finally {
+            document.close()
         }
-        document.close()
         return pdfFile
     }
 
@@ -463,10 +469,13 @@ class InvoicePdfGenerator(val context: Context) {
         val cleanNumber = creditNote.creditNoteNumber.replace("/", "_")
         val pdfFile = File(creditNotesDir, "CreditNote_$cleanNumber.pdf")
 
-        FileOutputStream(pdfFile).use { out ->
-            document.writeTo(out)
+        try {
+            FileOutputStream(pdfFile).use { out ->
+                document.writeTo(out)
+            }
+        } finally {
+            document.close()
         }
-        document.close()
         return pdfFile
     }
 
@@ -639,10 +648,13 @@ class InvoicePdfGenerator(val context: Context) {
         val cleanNumber = invoice.invoiceNumber.replace("/", "_")
         val pdfFile = File(labelsDir, "ShippingLabel_$cleanNumber.pdf")
 
-        FileOutputStream(pdfFile).use { out ->
-            document.writeTo(out)
+        try {
+            FileOutputStream(pdfFile).use { out ->
+                document.writeTo(out)
+            }
+        } finally {
+            document.close()
         }
-        document.close()
         return pdfFile
     }
 
@@ -738,10 +750,13 @@ class InvoicePdfGenerator(val context: Context) {
         val cleanNumber = receiptNumber.replace("/", "_")
         val pdfFile = File(receiptsDir, "Receipt_$cleanNumber.pdf")
 
-        FileOutputStream(pdfFile).use { out ->
-            document.writeTo(out)
+        try {
+            FileOutputStream(pdfFile).use { out ->
+                document.writeTo(out)
+            }
+        } finally {
+            document.close()
         }
-        document.close()
         return pdfFile
     }
 

@@ -56,6 +56,7 @@ import com.digitalchopda.app.core.designsystem.DarkNavy
 import com.digitalchopda.app.core.designsystem.ElevatedSlate
 import com.digitalchopda.app.core.designsystem.EmeraldJama
 import com.digitalchopda.app.core.designsystem.EmeraldJamaBg
+import com.digitalchopda.app.core.designsystem.ImperialGold
 import com.digitalchopda.app.core.designsystem.MidnightCardSurface
 import com.digitalchopda.app.core.designsystem.RubyUdhar
 import com.digitalchopda.app.core.designsystem.TextMuted
@@ -109,12 +110,15 @@ fun PaymentReminderDialog(
                 modifier = Modifier.fillMaxWidth(),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
+                // Primary: WhatsApp Priority
                 Button(
                     onClick = {
-                        UpiPaymentUtils.launchWhatsApp(
+                        com.digitalchopda.app.core.document.UniversalShareEngine.shareTextMessage(
                             context = context,
-                            phoneNumber = partyPhone,
-                            message = message
+                            message = message,
+                            recipientPhone = partyPhone,
+                            chooserTitle = "Share Reminder with $partyName",
+                            preferWhatsApp = true
                         )
                         onDismiss()
                     },
@@ -139,17 +143,72 @@ fun PaymentReminderDialog(
                     )
                 }
 
+                // Secondary: Multi-App Chooser & Copy
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    OutlinedButton(
+                        onClick = {
+                            com.digitalchopda.app.core.document.UniversalShareEngine.shareTextMessage(
+                                context = context,
+                                message = message,
+                                recipientPhone = partyPhone,
+                                chooserTitle = "Share Reminder with $partyName",
+                                preferWhatsApp = false
+                            )
+                            onDismiss()
+                        },
+                        shape = RoundedCornerShape(10.dp),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, BorderStrokeDark),
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(44.dp)
+                    ) {
+                        Text(
+                            text = "OTHER APPS",
+                            color = BrandPrimaryBlue,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+
+                    OutlinedButton(
+                        onClick = {
+                            com.digitalchopda.app.core.document.UniversalShareEngine.copyToClipboard(
+                                context = context,
+                                label = "Payment Reminder",
+                                text = message
+                            )
+                            onDismiss()
+                        },
+                        shape = RoundedCornerShape(10.dp),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, BorderStrokeDark),
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(44.dp)
+                    ) {
+                        Text(
+                            text = "COPY TEXT",
+                            color = ImperialGold,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+
                 OutlinedButton(
                     onClick = onDismiss,
                     shape = RoundedCornerShape(10.dp),
                     border = androidx.compose.foundation.BorderStroke(1.dp, BorderStrokeDark),
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(44.dp)
+                        .height(40.dp)
                 ) {
                     Text(
                         text = "CANCEL",
                         color = TextMuted,
+                        fontSize = 12.sp,
                         fontWeight = FontWeight.SemiBold
                     )
                 }

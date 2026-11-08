@@ -89,6 +89,11 @@ class CompanyRepository(
                 companyId
             )
         } catch (_: Exception) {}
+        try {
+            com.digitalchopda.app.core.network.InstantNetworkSyncMonitor.triggerManualSync(
+                com.digitalchopda.app.DigitalChopdaApplication.instance
+            )
+        } catch (_: Exception) {}
     }
 
     suspend fun addCompany(company: Company): Long {
@@ -145,7 +150,10 @@ class CompanyRepository(
             bankName = company.bankName,
             bankAccountNo = company.bankAccountNo,
             bankIfsc = company.bankIfsc,
-            bankBranch = company.bankBranch
+            bankBranch = company.bankBranch,
+            whatsappBotEnabled = company.whatsappBotEnabled,
+            plan = company.plan,
+            isExpired = company.isExpired
         )
         db.companyDao().updateCompany(entity)
 
@@ -169,7 +177,8 @@ class CompanyRepository(
                     bankIfsc = company.bankIfsc.ifBlank { null },
                     bankBranch = company.bankBranch.ifBlank { null },
                     vpa = company.upiVpa.ifBlank { null },
-                    invoicePrefix = company.invoicePrefix.ifBlank { null }
+                    invoicePrefix = company.invoicePrefix.ifBlank { null },
+                    whatsappBotEnabled = company.whatsappBotEnabled
                 )
                 apiService.updateBusiness(company.id, req)
             } catch (e: Exception) {
@@ -197,7 +206,10 @@ class CompanyRepository(
                         bankName = biz.bankName ?: existingCompany?.bankName ?: "",
                         bankAccountNo = biz.bankAccountNo ?: existingCompany?.bankAccountNo ?: "",
                         bankIfsc = biz.bankIfsc ?: existingCompany?.bankIfsc ?: "",
-                        bankBranch = biz.bankBranch ?: existingCompany?.bankBranch ?: ""
+                        bankBranch = biz.bankBranch ?: existingCompany?.bankBranch ?: "",
+                        whatsappBotEnabled = biz.whatsappBotEnabled ?: existingCompany?.whatsappBotEnabled ?: false,
+                        plan = biz.plan ?: existingCompany?.plan ?: "STARTER",
+                        isExpired = (biz.subscriptionStatus?.equals("EXPIRED", ignoreCase = true) ?: existingCompany?.isExpired ?: false)
                     )
                     db.companyDao().insertCompany(entity)
 
@@ -219,7 +231,10 @@ class CompanyRepository(
                         bankName = biz.bankName ?: existingCompany?.bankName ?: "",
                         bankAccountNo = biz.bankAccountNo ?: existingCompany?.bankAccountNo ?: "",
                         bankIfsc = biz.bankIfsc ?: existingCompany?.bankIfsc ?: "",
-                        bankBranch = biz.bankBranch ?: existingCompany?.bankBranch ?: ""
+                        bankBranch = biz.bankBranch ?: existingCompany?.bankBranch ?: "",
+                        whatsappBotEnabled = biz.whatsappBotEnabled ?: existingCompany?.whatsappBotEnabled ?: false,
+                        plan = biz.plan ?: existingCompany?.plan ?: "STARTER",
+                        isExpired = (biz.subscriptionStatus?.equals("EXPIRED", ignoreCase = true) ?: existingCompany?.isExpired ?: false)
                     )
                 })
             } else {
@@ -248,6 +263,20 @@ class CompanyRepository(
         val api = apiService ?: return Result.failure(IllegalStateException("No network client"))
         return try {
             val res = api.reconnectWhatsAppWeb()
+            if (res.isSuccessful && res.body() != null) {
+                Result.success(res.body()!!)
+            } else {
+                Result.failure(Exception("HTTP ${res.code()}"))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun getSubscriptionStatus(): Result<com.digitalchopda.app.core.network.ApiSubscriptionStatusResponse> {
+        val api = apiService ?: return Result.failure(IllegalStateException("No network client"))
+        return try {
+            val res = api.getSubscriptionStatus()
             if (res.isSuccessful && res.body() != null) {
                 Result.success(res.body()!!)
             } else {
@@ -309,7 +338,7 @@ class BillingRepository(
         return db.invoiceDao().getInvoiceCount(companyId)
     }
 
-    suspend fun syncInvoicesWithServer(companyId: Long): Result<Int> {
+    suspend fun syncInvoicesWithServer(companyId: Long, serverOrders: List<com.digitalchopda.app.core.network.ApiOrderDto>? = null): Result<Int> {
         val api = apiService ?: return Result.success(0)
         return kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
             try {
@@ -320,16 +349,20 @@ class BillingRepository(
                     android.util.Log.w("BillingRepo", "Outbox flush before order fetch had errors", e)
                 }
 
-                val res = api.getOrders()
-                if (!res.isSuccessful || res.body() == null) {
-                    return@withContext Result.failure(Exception("Failed to fetch orders: ${res.code()}"))
+                val remoteOrders: List<com.digitalchopda.app.core.network.ApiOrderDto> = if (serverOrders != null) {
+                    serverOrders
+                } else {
+                    val res = api.getOrders()
+                    if (!res.isSuccessful || res.body() == null) {
+                        return@withContext Result.failure(Exception("Failed to fetch orders: ${res.code()}"))
+                    }
+                    res.body()!!
                 }
-                val remoteOrders = res.body()!!
                 var syncedCount = 0
                 db.withTransaction {
                     for (o in remoteOrders) {
-                        val oBizId = o.businessId ?: 1L
-                        if (oBizId != companyId && companyId != 1L) {
+                        val oBizId = o.businessId ?: companyId
+                        if (oBizId != companyId) {
                             continue
                         }
                         val invoiceNum = o.invoiceNumber ?: o.orderNumber ?: "INV-${o.id}"
@@ -867,6 +900,16 @@ class BillingRepository(
         val api = apiService ?: return null
         return try {
             val res = api.getDashboardSummary()
+            if (res.isSuccessful) res.body() else null
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    suspend fun fetchDashboardAnalytics(period: String = "30d"): com.digitalchopda.app.core.network.ApiDashboardAnalyticsResponse? {
+        val api = apiService ?: return null
+        return try {
+            val res = api.getDashboardAnalytics(period)
             if (res.isSuccessful) res.body() else null
         } catch (_: Exception) {
             null
@@ -1742,7 +1785,7 @@ class CustomerRepository(
         }
     }
 
-    suspend fun syncContactsWithServer(companyId: Long): Result<Int> {
+    suspend fun syncContactsWithServer(companyId: Long, serverContacts: List<com.digitalchopda.app.core.network.ApiContactDto>? = null): Result<Int> {
         val api = apiService ?: return Result.failure(IllegalStateException("No network client"))
         return try {
             // First push any unsynced offline customers created locally
@@ -1778,9 +1821,16 @@ class CustomerRepository(
                 }
             }
 
-            val res = api.getContacts()
-            if (res.isSuccessful && res.body() != null) {
-                val contacts = res.body()!!
+            val contacts: List<com.digitalchopda.app.core.network.ApiContactDto> = if (serverContacts != null) {
+                serverContacts
+            } else {
+                val res = api.getContacts()
+                if (res.isSuccessful && res.body() != null) {
+                    res.body()!!
+                } else {
+                    return Result.failure(Exception("Failed to fetch contacts: ${res.code()}"))
+                }
+            }
                 val localCustomers = db.customerDao().getCustomersSync(companyId)
                 val byServerId = localCustomers.filter { it.serverContactId != null }.associateBy { it.serverContactId }
                 val byPhone = localCustomers.associateBy { it.phone }
@@ -1792,6 +1842,9 @@ class CustomerRepository(
                         val existing = byServerId[c.id]
                             ?: byPhone[c.phone]
                             ?: byNormalizedPhone[normPhone]
+                        val openingBal = c.openingBalance ?: 0.0
+                        val defaultOpening = if (c.openingBalanceType?.equals("to_receive", ignoreCase = true) == true) openingBal else if (c.openingBalanceType?.equals("to_pay", ignoreCase = true) == true) -openingBal else 0.0
+                        val resolvedBalance = c.outstanding ?: c.balance ?: defaultOpening
                         val entity = CustomerEntity(
                             id = existing?.id ?: 0,
                             companyId = companyId,
@@ -1799,18 +1852,18 @@ class CustomerRepository(
                             phone = c.phone,
                             gstin = c.gstin ?: "",
                             pan = c.pan ?: "",
-                            balance = c.outstanding ?: c.balance ?: 0.0,
+                            balance = resolvedBalance,
                             address = c.billingAddress ?: c.city ?: "",
                             city = c.city ?: "",
                             state = c.state ?: "",
                             creditLimit = c.creditLimit ?: 0.0,
-                            openingBalance = c.openingBalance ?: 0.0,
-                            openingBalanceType = c.openingBalanceType ?: if ((c.outstanding ?: c.balance ?: 0.0) >= 0) "to_receive" else "to_pay",
+                            openingBalance = openingBal,
+                            openingBalanceType = c.openingBalanceType ?: if (resolvedBalance >= 0) "to_receive" else "to_pay",
                             partyType = c.partyType ?: "customer",
                             partyTag = c.partyTag ?: "Active Party",
                             serverContactId = c.id,
                             clientReferenceId = existing?.clientReferenceId ?: java.util.UUID.randomUUID().toString(),
-                            serverOutstanding = c.outstanding ?: c.balance ?: 0.0
+                            serverOutstanding = resolvedBalance
                         )
                         db.customerDao().insertCustomer(entity)
                     }
@@ -1835,11 +1888,7 @@ class CustomerRepository(
                         }
                     }
                 }
-
                 Result.success(contacts.size)
-            } else {
-                Result.failure(Exception("Failed to fetch contacts: ${res.code()}"))
-            }
         } catch (e: Exception) {
             Result.failure(e)
         }
@@ -2069,7 +2118,7 @@ class QuotationRepository(
         }
     }
 
-    suspend fun syncQuotationsWithServer(companyId: Long): Result<Int> {
+    suspend fun syncQuotationsWithServer(companyId: Long, serverQuotations: List<com.digitalchopda.app.core.network.ApiQuotationDto>? = null): Result<Int> {
         val api = apiService ?: return Result.success(0)
         return kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
             try {
@@ -2080,11 +2129,15 @@ class QuotationRepository(
                     android.util.Log.w("QuotationRepo", "Outbox flush before quotation fetch had errors", e)
                 }
 
-                val res = api.getQuotations()
-                if (!res.isSuccessful || res.body() == null) {
-                    return@withContext Result.failure(Exception("Failed to fetch quotations: ${res.code()}"))
+                val remoteQuotations: List<com.digitalchopda.app.core.network.ApiQuotationDto> = if (serverQuotations != null) {
+                    serverQuotations
+                } else {
+                    val res = api.getQuotations()
+                    if (!res.isSuccessful || res.body() == null) {
+                        return@withContext Result.failure(Exception("Failed to fetch quotations: ${res.code()}"))
+                    }
+                    res.body()!!
                 }
-                val remoteQuotations = res.body()!!
                 var syncedCount = 0
                 for (q in remoteQuotations) {
                     val qBizId = q.businessId ?: 1L
@@ -2441,7 +2494,7 @@ class CreditNoteRepository(
         return synced
     }
 
-    suspend fun syncCreditNotesWithServer(companyId: Long): Result<Int> {
+    suspend fun syncCreditNotesWithServer(companyId: Long, serverCreditNotes: List<com.digitalchopda.app.core.network.ApiCreditNoteDto>? = null): Result<Int> {
         val api = apiService ?: return Result.success(0)
         return kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
             try {
@@ -2451,11 +2504,15 @@ class CreditNoteRepository(
                     android.util.Log.w("CreditNoteRepo", "Outbox flush before credit notes fetch had errors", e)
                 }
 
-                val res = api.getCreditNotes()
-                if (!res.isSuccessful || res.body() == null) {
-                    return@withContext Result.failure(Exception("Failed to fetch credit notes: ${res.code()}"))
+                val remoteList: List<com.digitalchopda.app.core.network.ApiCreditNoteDto> = if (serverCreditNotes != null) {
+                    serverCreditNotes
+                } else {
+                    val res = api.getCreditNotes()
+                    if (!res.isSuccessful || res.body() == null) {
+                        return@withContext Result.failure(Exception("Failed to fetch credit notes: ${res.code()}"))
+                    }
+                    res.body()!!
                 }
-                val remoteList = res.body()!!
                 var syncedCount = 0
                 for (cn in remoteList) {
                     val cnBizId = cn.businessId ?: 1L
@@ -2561,71 +2618,142 @@ class ProductRepository(
         return db.productDao().getProductById(id)?.toDomain()
     }
 
-    suspend fun syncProductsWithServer(companyId: Long): Result<Int> {
+    fun observeProductById(id: Long): Flow<Product?> {
+        return db.productDao().observeProductById(id).map { it?.toDomain() }
+    }
+
+    fun getProductCustomerPurchases(companyId: Long, productName: String): Flow<List<com.digitalchopda.app.domain.model.ProductCustomerPurchase>> {
+        return db.invoiceDao().getInvoicesForCompany(companyId).map { invoices ->
+            val purchases = mutableListOf<com.digitalchopda.app.domain.model.ProductCustomerPurchase>()
+            val normTargetName = productName.trim().lowercase()
+            for (inv in invoices) {
+                val parsedItems = com.digitalchopda.app.core.document.DocumentItemParser.parseLineItems(
+                    itemsJson = inv.itemsJson,
+                    itemsSummary = inv.itemsSummary,
+                    defaultSubtotal = inv.subtotal
+                )
+                for (item in parsedItems) {
+                    val itemTitleNorm = item.title.trim().lowercase()
+                    if (itemTitleNorm == normTargetName || itemTitleNorm.contains(normTargetName) || normTargetName.contains(itemTitleNorm)) {
+                        purchases.add(
+                            com.digitalchopda.app.domain.model.ProductCustomerPurchase(
+                                invoiceId = inv.id,
+                                invoiceNumber = inv.invoiceNumber,
+                                customerName = inv.customerName.ifBlank { "Cash Customer" },
+                                customerPhone = inv.customerPhone,
+                                quantity = item.quantity,
+                                unitPrice = item.unitPrice,
+                                totalAmount = item.total,
+                                invoiceDate = inv.createdAt,
+                                status = inv.status
+                            )
+                        )
+                    }
+                }
+            }
+            purchases.sortedByDescending { it.invoiceDate }
+        }
+    }
+
+    fun getProductSupplierReceipts(companyId: Long, productName: String): Flow<List<com.digitalchopda.app.domain.model.ProductSupplierReceipt>> {
+        return db.purchaseDao().getPurchasesForCompany(companyId).map { purchases ->
+            val receipts = mutableListOf<com.digitalchopda.app.domain.model.ProductSupplierReceipt>()
+            val normTargetName = productName.trim().lowercase()
+            for (p in purchases) {
+                val items = db.purchaseDao().getPurchaseItems(p.id)
+                for (item in items) {
+                    val itemNorm = item.productName.trim().lowercase()
+                    if (itemNorm == normTargetName || itemNorm.contains(normTargetName) || normTargetName.contains(itemNorm)) {
+                        val supplier = db.supplierDao().getSupplierById(p.supplierId)
+                        receipts.add(
+                            com.digitalchopda.app.domain.model.ProductSupplierReceipt(
+                                purchaseId = p.id,
+                                purchaseNumber = p.purchaseNumber,
+                                supplierName = supplier?.name ?: "Supplier #${p.supplierId}",
+                                supplierPhone = supplier?.phone ?: "",
+                                quantity = item.quantity,
+                                unitPrice = item.unitPrice,
+                                totalAmount = item.totalAmount,
+                                purchaseDate = p.purchaseDate
+                            )
+                        )
+                    }
+                }
+            }
+            receipts.sortedByDescending { it.purchaseDate }
+        }
+    }
+
+    suspend fun syncProductsWithServer(companyId: Long, serverProducts: List<com.digitalchopda.app.core.network.ApiProductDto>? = null): Result<Int> {
         val api = apiService ?: return Result.failure(IllegalStateException("No network client"))
         return try {
-            val res = api.getProducts()
-            if (res.isSuccessful && res.body() != null) {
-                val remoteList = res.body()!!
-                db.withTransaction {
-                    for (p in remoteList) {
-                        val existing = db.productDao().getProductByName(companyId, p.name)
-                        val entity = ProductEntity(
-                            id = existing?.id ?: 0,
-                            companyId = companyId,
-                            name = p.name,
-                            defaultPrice = p.defaultPrice,
-                            hsnCode = p.hsnCode ?: existing?.hsnCode,
-                            gstRate = p.gstRate ?: existing?.gstRate ?: 18.0,
-                            unit = existing?.unit ?: "PCS",
-                            stockQuantity = p.stockQuantity ?: existing?.stockQuantity ?: 0.0,
-                            minStockAlert = p.minStockAlert ?: existing?.minStockAlert ?: 5.0,
-                            purchasePrice = p.purchasePrice ?: existing?.purchasePrice ?: 0.0,
-                            sku = p.sku ?: existing?.sku,
-                            barcode = p.barcode ?: existing?.barcode,
-                            version = existing?.version ?: 1,
-                            syncStatus = "SYNCED",
-                            serverProductId = p.id,
-                            primaryImageUrl = p.primaryImageUrl ?: existing?.primaryImageUrl,
-                            wholesalePrice = p.wholesalePrice ?: existing?.wholesalePrice,
-                            wholesaleQuantity = p.wholesaleQuantity ?: existing?.wholesaleQuantity ?: 1.0,
-                            batchNumber = p.batchNumber ?: existing?.batchNumber,
-                            expiryDate = p.expiryDate ?: existing?.expiryDate,
-                            showInOnlineStore = p.showInOnlineStore ?: existing?.showInOnlineStore ?: true,
-                            createdAt = existing?.createdAt ?: System.currentTimeMillis()
-                        )
-                        db.productDao().upsertProduct(entity)
-                    }
+            val remoteList: List<com.digitalchopda.app.core.network.ApiProductDto> = if (serverProducts != null) {
+                serverProducts
+            } else {
+                val res = api.getProducts()
+                if (res.isSuccessful && res.body() != null) {
+                    res.body()!!
+                } else {
+                    return Result.failure(Exception("Failed to fetch products: ${res.code()}"))
+                }
+            }
 
-                    // 🧹 Authoritative Reconciliation: Prune stale or reseeded products
-                    val currentProducts = db.productDao().getAllProductsSync(companyId)
-                    val remoteProductIds = remoteList.map { it.id }.toSet()
-                    val staleProducts = currentProducts.filter {
-                        it.companyId == companyId && (
-                            (it.serverProductId != null && it.serverProductId !in remoteProductIds && it.syncStatus == "SYNCED") ||
-                            (it.serverProductId == null && it.syncStatus == "SYNCED")
-                        )
-                    }
-                    for (sp in staleProducts) {
-                        db.productDao().deleteProduct(sp.id)
-                    }
+            db.withTransaction {
+                for (p in remoteList) {
+                    val existing = db.productDao().getProductByName(companyId, p.name)
+                    val entity = ProductEntity(
+                        id = existing?.id ?: 0,
+                        companyId = companyId,
+                        name = p.name,
+                        defaultPrice = p.defaultPrice,
+                        hsnCode = p.hsnCode ?: existing?.hsnCode,
+                        gstRate = p.gstRate ?: existing?.gstRate ?: 18.0,
+                        unit = existing?.unit ?: "PCS",
+                        stockQuantity = p.stockQuantity ?: existing?.stockQuantity ?: 0.0,
+                        minStockAlert = p.minStockAlert ?: existing?.minStockAlert ?: 5.0,
+                        purchasePrice = p.purchasePrice ?: existing?.purchasePrice ?: 0.0,
+                        sku = p.sku ?: existing?.sku,
+                        barcode = p.barcode ?: existing?.barcode,
+                        version = existing?.version ?: 1,
+                        syncStatus = "SYNCED",
+                        serverProductId = p.id,
+                        primaryImageUrl = p.primaryImageUrl ?: existing?.primaryImageUrl,
+                        wholesalePrice = p.wholesalePrice ?: existing?.wholesalePrice,
+                        wholesaleQuantity = p.wholesaleQuantity ?: existing?.wholesaleQuantity ?: 1.0,
+                        batchNumber = p.batchNumber ?: existing?.batchNumber,
+                        expiryDate = p.expiryDate ?: existing?.expiryDate,
+                        showInOnlineStore = p.showInOnlineStore ?: existing?.showInOnlineStore ?: true,
+                        createdAt = existing?.createdAt ?: System.currentTimeMillis()
+                    )
+                    db.productDao().upsertProduct(entity)
+                }
 
-                    val remainingProd = db.productDao().getAllProductsSync(companyId)
-                    val groupedProducts = remainingProd.filter { it.serverProductId != null }.groupBy { it.serverProductId!! }
-                    for ((_, duplicates) in groupedProducts) {
-                        if (duplicates.size > 1) {
-                            val sorted = duplicates.sortedByDescending { it.id }
-                            for (dup in sorted.drop(1)) {
-                                db.productDao().deleteProduct(dup.id)
-                            }
+                // 🧹 Authoritative Reconciliation: Prune stale or reseeded products
+                val currentProducts = db.productDao().getAllProductsSync(companyId)
+                val remoteProductIds = remoteList.map { it.id }.toSet()
+                val staleProducts = currentProducts.filter {
+                    it.companyId == companyId && (
+                        (it.serverProductId != null && it.serverProductId !in remoteProductIds && it.syncStatus == "SYNCED") ||
+                        (it.serverProductId == null && it.syncStatus == "SYNCED")
+                    )
+                }
+                for (sp in staleProducts) {
+                    db.productDao().deleteProduct(sp.id)
+                }
+
+                val remainingProd = db.productDao().getAllProductsSync(companyId)
+                val groupedProducts = remainingProd.filter { it.serverProductId != null }.groupBy { it.serverProductId!! }
+                for ((_, duplicates) in groupedProducts) {
+                    if (duplicates.size > 1) {
+                        val sorted = duplicates.sortedByDescending { it.id }
+                        for (dup in sorted.drop(1)) {
+                            db.productDao().deleteProduct(dup.id)
                         }
                     }
                 }
-
-                Result.success(remoteList.size)
-            } else {
-                Result.failure(Exception("Failed to fetch products: ${res.code()}"))
             }
+
+            Result.success(remoteList.size)
         } catch (e: Exception) {
             Result.failure(e)
         }
@@ -2914,68 +3042,7 @@ class AuthRepository(
             )
             val res = api.login(req)
             if (res.isSuccessful && res.body()?.token != null) {
-                val body = res.body()!!
-                val token = body.token!!
-                val userId = body.user?.id?.toString() ?: "1"
-                val activeBizId = body.activeBusiness?.id ?: body.businesses?.firstOrNull()?.id ?: 1L
-
-                tokenStorage.saveTokens(token, "")
-                tokenStorage.saveUserSession(userId, usernameOrMobile, activeBizId)
-
-                val companiesList = body.businesses?.map { b ->
-                    Company(
-                        id = b.id,
-                        firmName = b.name,
-                        ownerName = b.tradeName ?: body.user?.name ?: b.name,
-                        invoicePrefix = b.invoicePrefix ?: "INV-",
-                        isActive = (b.id == activeBizId)
-                    )
-                } ?: listOf(
-                    Company(
-                        id = activeBizId,
-                        firmName = body.activeBusiness?.name ?: "DigitalChopda Store",
-                        ownerName = body.user?.name ?: "Owner",
-                        isActive = true
-                    )
-                )
-
-                // Seed server businesses into Room
-                if (db != null) {
-                    for (c in companiesList) {
-                        db.companyDao().insertCompany(
-                            CompanyEntity(
-                                id = c.id,
-                                firmName = c.firmName,
-                                ownerName = c.ownerName,
-                                invoicePrefix = c.invoicePrefix,
-                                isActive = c.isActive
-                            )
-                        )
-                    }
-                }
-
-                // Immediately pull downstream documents from server into Room
-                kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
-                    try {
-                        billingRepository?.syncInvoicesWithServer(activeBizId)
-                        quotationRepository?.syncQuotationsWithServer(activeBizId)
-                        customerRepository?.syncContactsWithServer(activeBizId)
-                        productRepository?.syncProductsWithServer(activeBizId)
-                    } catch (e: Exception) {
-                        android.util.Log.e("AuthRepository", "Post-login sync failed", e)
-                    }
-                }
-
-                return Result.success(
-                    AuthResponse(
-                        success = true,
-                        accessToken = token,
-                        refreshToken = "",
-                        userId = userId,
-                        ownerName = body.user?.name ?: body.user?.username ?: "Merchant",
-                        companies = companiesList
-                    )
-                )
+                return processSuccessfulLogin(res.body()!!, usernameOrMobile.trim())
             } else {
                 val parsedError = try {
                     val errorString = res.errorBody()?.string()
@@ -2997,55 +3064,7 @@ class AuthRepository(
         return try {
             val res = api.verifyOtp(com.digitalchopda.app.core.network.ApiVerifyOtpRequest(phone = mobile.trim(), otp = otp.trim()))
             if (res.isSuccessful && res.body()?.token != null) {
-                val body = res.body()!!
-                val token = body.token!!
-                val userId = body.user?.id?.toString() ?: "1"
-                val activeBizId = body.activeBusiness?.id ?: body.businesses?.firstOrNull()?.id ?: 1L
-
-                tokenStorage.saveTokens(token, "")
-                tokenStorage.saveUserSession(userId, mobile, activeBizId)
-
-                val companiesList = body.businesses?.map { b ->
-                    Company(
-                        id = b.id,
-                        firmName = b.name,
-                        ownerName = b.tradeName ?: body.user?.name ?: b.name,
-                        invoicePrefix = b.invoicePrefix ?: "INV-",
-                        isActive = (b.id == activeBizId)
-                    )
-                } ?: listOf(
-                    Company(
-                        id = activeBizId,
-                        firmName = body.activeBusiness?.name ?: "DigitalChopda Store",
-                        ownerName = body.user?.name ?: "Owner",
-                        isActive = true
-                    )
-                )
-
-                if (db != null) {
-                    for (c in companiesList) {
-                        db.companyDao().insertCompany(
-                            CompanyEntity(
-                                id = c.id,
-                                firmName = c.firmName,
-                                ownerName = c.ownerName,
-                                invoicePrefix = c.invoicePrefix,
-                                isActive = c.isActive
-                            )
-                        )
-                    }
-                }
-
-                Result.success(
-                    AuthResponse(
-                        success = true,
-                        accessToken = token,
-                        refreshToken = "",
-                        userId = userId,
-                        ownerName = body.user?.name ?: body.user?.username ?: "Merchant",
-                        companies = companiesList
-                    )
-                )
+                processSuccessfulLogin(res.body()!!, mobile.trim())
             } else {
                 val parsedError = try {
                     val errorString = res.errorBody()?.string()
@@ -3060,6 +3079,181 @@ class AuthRepository(
         } catch (e: Exception) {
             Result.failure(e)
         }
+    }
+
+    suspend fun sendEmailOtp(email: String, purpose: String = "register", phone: String? = null): Result<com.digitalchopda.app.core.network.ApiSendEmailOtpResponse> {
+        val api = apiService ?: return Result.failure(IllegalStateException("No network client configured"))
+        return try {
+            val req = com.digitalchopda.app.core.network.ApiSendEmailOtpRequest(
+                email = email.trim().lowercase(),
+                purpose = purpose,
+                phone = phone?.trim()?.ifBlank { null }
+            )
+            val res = api.sendEmailOtp(req)
+            if (res.isSuccessful && res.body() != null) {
+                Result.success(res.body()!!)
+            } else {
+                val errorString = try {
+                    val s = res.errorBody()?.string()
+                    if (!s.isNullOrBlank()) org.json.JSONObject(s).optString("error", "") else ""
+                } catch (_: Exception) { "" }.ifBlank { "Failed to send verification code (Code ${res.code()})" }
+                Result.failure(IllegalArgumentException(errorString))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun verifyEmailOtp(email: String, otp: String): Result<AuthResponse> {
+        val api = apiService ?: return Result.failure(IllegalStateException("No network client configured"))
+        return try {
+            val req = com.digitalchopda.app.core.network.ApiVerifyEmailOtpRequest(
+                email = email.trim().lowercase(),
+                otp = otp.trim()
+            )
+            val res = api.verifyEmailOtp(req)
+            if (res.isSuccessful && res.body()?.token != null) {
+                processSuccessfulLogin(res.body()!!, email.trim())
+            } else {
+                val errorString = try {
+                    val s = res.errorBody()?.string()
+                    if (!s.isNullOrBlank()) org.json.JSONObject(s).optString("error", "") else ""
+                } catch (_: Exception) { "" }.ifBlank { "Invalid or expired verification code" }
+                Result.failure(IllegalArgumentException(errorString))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun registerWithEmailOtp(
+        name: String,
+        businessName: String,
+        email: String,
+        phone: String,
+        otp: String,
+        pass: String,
+        gstin: String? = null,
+        state: String? = null
+    ): Result<AuthResponse> {
+        val api = apiService ?: return Result.failure(IllegalStateException("No network client configured"))
+        return try {
+            val req = com.digitalchopda.app.core.network.ApiRegisterRequest(
+                name = name.trim(),
+                businessName = businessName.trim(),
+                email = email.trim().lowercase(),
+                phone = phone.trim(),
+                otp = otp.trim(),
+                password = pass.trim(),
+                gstin = gstin?.trim()?.ifBlank { null },
+                state = state?.trim()?.ifBlank { null }
+            )
+            val res = api.register(req)
+            if (res.isSuccessful && res.body()?.token != null) {
+                processSuccessfulLogin(res.body()!!, email.trim())
+            } else {
+                val errorString = try {
+                    val s = res.errorBody()?.string()
+                    if (!s.isNullOrBlank()) org.json.JSONObject(s).optString("error", "") else ""
+                } catch (_: Exception) { "" }.ifBlank { "Registration failed (Code ${res.code()})" }
+                Result.failure(IllegalArgumentException(errorString))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun resetPassword(email: String, otp: String, newPass: String): Result<Unit> {
+        val api = apiService ?: return Result.failure(IllegalStateException("No network client configured"))
+        return try {
+            val req = com.digitalchopda.app.core.network.ApiResetPasswordRequest(
+                email = email.trim().lowercase(),
+                otp = otp.trim(),
+                newPassword = newPass.trim()
+            )
+            val res = api.resetPassword(req)
+            if (res.isSuccessful) {
+                Result.success(Unit)
+            } else {
+                val errorString = try {
+                    val s = res.errorBody()?.string()
+                    if (!s.isNullOrBlank()) org.json.JSONObject(s).optString("error", "") else ""
+                } catch (_: Exception) { "" }.ifBlank { "Failed to reset password (Code ${res.code()})" }
+                Result.failure(IllegalArgumentException(errorString))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    private suspend fun processSuccessfulLogin(body: com.digitalchopda.app.core.network.ApiLoginResponse, sessionIdentifier: String): Result<AuthResponse> {
+        val token = body.token!!
+        val userId = body.user?.id?.toString() ?: "1"
+        val activeBizId = body.activeBusiness?.id ?: body.businesses?.firstOrNull()?.id ?: 1L
+
+        tokenStorage.saveTokens(token, "")
+        tokenStorage.saveUserSession(userId, sessionIdentifier, activeBizId)
+
+        val companiesList = body.businesses?.map { b ->
+            Company(
+                id = b.id,
+                firmName = b.name,
+                ownerName = b.tradeName ?: body.user?.name ?: b.name,
+                invoicePrefix = b.invoicePrefix ?: "INV-",
+                isActive = (b.id == activeBizId),
+                whatsappBotEnabled = b.whatsappBotEnabled,
+                plan = b.plan ?: "STARTER",
+                isExpired = b.subscriptionStatus?.equals("EXPIRED", ignoreCase = true) ?: false
+            )
+        } ?: listOf(
+            Company(
+                id = activeBizId,
+                firmName = body.activeBusiness?.name ?: "DigitalChopda Store",
+                ownerName = body.user?.name ?: "Owner",
+                isActive = true,
+                whatsappBotEnabled = body.activeBusiness?.whatsappBotEnabled ?: false,
+                plan = body.activeBusiness?.plan ?: "STARTER"
+            )
+        )
+
+        if (db != null) {
+            for (c in companiesList) {
+                db.companyDao().insertCompany(
+                    CompanyEntity(
+                        id = c.id,
+                        firmName = c.firmName,
+                        ownerName = c.ownerName,
+                        invoicePrefix = c.invoicePrefix,
+                        isActive = c.isActive,
+                        whatsappBotEnabled = c.whatsappBotEnabled,
+                        plan = c.plan,
+                        isExpired = c.isExpired
+                    )
+                )
+            }
+        }
+
+        kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+            try {
+                billingRepository?.syncInvoicesWithServer(activeBizId)
+                quotationRepository?.syncQuotationsWithServer(activeBizId)
+                customerRepository?.syncContactsWithServer(activeBizId)
+                productRepository?.syncProductsWithServer(activeBizId)
+            } catch (e: Exception) {
+                android.util.Log.e("AuthRepository", "Post-login sync failed", e)
+            }
+        }
+
+        return Result.success(
+            AuthResponse(
+                success = true,
+                accessToken = token,
+                refreshToken = "",
+                userId = userId,
+                ownerName = body.user?.name ?: body.user?.username ?: "Merchant",
+                companies = companiesList
+            )
+        )
     }
 
     suspend fun registerMerchant(
@@ -3164,7 +3358,10 @@ fun CompanyEntity.toDomain() = Company(
     bankName = bankName,
     bankAccountNo = bankAccountNo,
     bankIfsc = bankIfsc,
-    bankBranch = bankBranch
+    bankBranch = bankBranch,
+    whatsappBotEnabled = whatsappBotEnabled,
+    plan = plan ?: "STARTER",
+    isExpired = isExpired
 )
 
 fun LeaseEntity.toDomain() = SequenceLease(

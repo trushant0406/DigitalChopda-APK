@@ -26,6 +26,9 @@ data class ApiBusinessDto(
     @SerializedName("bank_account_no") val bankAccountNo: String? = null,
     @SerializedName("bank_ifsc") val bankIfsc: String? = null,
     @SerializedName("bank_branch") val bankBranch: String? = null,
+    @SerializedName("whatsapp_bot_enabled") val whatsappBotEnabled: Boolean = false,
+    val plan: String? = "STARTER",
+    @SerializedName("subscription_status") val subscriptionStatus: String? = null,
     val vpa: String? = null
 )
 
@@ -48,6 +51,7 @@ data class ApiUpdateBusinessRequest(
     @SerializedName("bank_account_no") val bankAccountNo: String? = null,
     @SerializedName("bank_ifsc") val bankIfsc: String? = null,
     @SerializedName("bank_branch") val bankBranch: String? = null,
+    @SerializedName("whatsapp_bot_enabled") val whatsappBotEnabled: Boolean? = null,
     val vpa: String? = null,
     @SerializedName("invoice_prefix") val invoicePrefix: String? = null
 )
@@ -73,6 +77,43 @@ data class ApiSendOtpResponse(
 data class ApiVerifyOtpRequest(
     val phone: String,
     val otp: String
+)
+
+data class ApiSendEmailOtpRequest(
+    val email: String,
+    val purpose: String = "register",
+    val phone: String? = null
+)
+
+data class ApiSendEmailOtpResponse(
+    val success: Boolean = true,
+    val message: String? = null,
+    val error: String? = null,
+    @SerializedName("remainingSeconds") val remainingSeconds: Int? = null,
+    @SerializedName("debugOtp") val debugOtp: String? = null
+)
+
+data class ApiVerifyEmailOtpRequest(
+    val email: String,
+    val otp: String
+)
+
+data class ApiRegisterRequest(
+    val name: String,
+    @SerializedName("businessName") val businessName: String,
+    val email: String,
+    val phone: String,
+    val otp: String,
+    val password: String,
+    val gstin: String? = null,
+    val state: String? = null,
+    val address: String? = null
+)
+
+data class ApiResetPasswordRequest(
+    val email: String,
+    val otp: String,
+    val newPassword: String
 )
 
 // --- Product / Catalog DTOs ---
@@ -461,9 +502,87 @@ data class ApiDashboardSummaryResponse(
     @SerializedName("suppliersCount") val suppliersCount: Int = 0,
     @SerializedName("totalReceivable") val totalReceivable: Double = 0.0,
     @SerializedName("totalPayable") val totalPayable: Double = 0.0,
+    @SerializedName("receivablePartiesCount") val receivablePartiesCount: Int? = 0,
+    @SerializedName("payablePartiesCount") val payablePartiesCount: Int? = 0,
     @SerializedName("netOutstanding") val netOutstanding: Double = 0.0,
     @SerializedName("dueToday") val dueToday: Int = 0,
     @SerializedName("overdue") val overdue: Int = 0
+)
+
+data class ApiDashboardAnalyticsResponse(
+    @SerializedName("period") val period: String? = "30d",
+    @SerializedName("series") val series: List<ApiAnalyticsSeriesPoint>? = emptyList(),
+    @SerializedName("totals") val totals: ApiAnalyticsTotals? = null,
+    @SerializedName("topCustomer") val topCustomer: ApiTopCustomerDto? = null,
+    @SerializedName("topCustomers") val topCustomers: List<ApiTopCustomerDto>? = emptyList(),
+    @SerializedName("topDebtor") val topDebtor: ApiTopDebtorDto? = null,
+    @SerializedName("topDebtors") val topDebtors: List<ApiTopDebtorDto>? = emptyList(),
+    @SerializedName("topProduct") val topProduct: ApiTopProductDto? = null,
+    @SerializedName("topProducts") val topProducts: List<ApiTopProductDto>? = emptyList(),
+    @SerializedName("lowStockItems") val lowStockItems: List<ApiLowStockItemDto>? = emptyList(),
+    @SerializedName("recentUrgentFollowups") val recentUrgentFollowups: List<ApiUrgentFollowupDto>? = emptyList()
+)
+
+data class ApiAnalyticsSeriesPoint(
+    @SerializedName("date") val date: String? = null,
+    @SerializedName("label") val label: String? = null,
+    @SerializedName("billed") val billed: Double = 0.0,
+    @SerializedName("collected") val collected: Double = 0.0,
+    @SerializedName("invoicesCount") val invoicesCount: Int = 0
+)
+
+data class ApiAnalyticsTotals(
+    @SerializedName("totalBilled") val totalBilled: Double = 0.0,
+    @SerializedName("totalCollected") val totalCollected: Double = 0.0,
+    @SerializedName("totalInvoices") val totalInvoices: Int = 0,
+    @SerializedName("averageOrderValue") val averageOrderValue: Double = 0.0,
+    @SerializedName("collectionEfficiency") val collectionEfficiency: Double = 86.4
+)
+
+data class ApiTopCustomerDto(
+    @SerializedName("contactId") val contactId: Long? = null,
+    @SerializedName("name") val name: String? = null,
+    @SerializedName("phone") val phone: String? = null,
+    @SerializedName("city") val city: String? = null,
+    @SerializedName("totalPaid") val totalPaid: Double = 0.0,
+    @SerializedName("paymentsCount") val paymentsCount: Int = 0,
+    @SerializedName("revenueShare") val revenueShare: Double = 0.0
+)
+
+data class ApiTopDebtorDto(
+    @SerializedName("contactId") val contactId: Long? = null,
+    @SerializedName("name") val name: String? = null,
+    @SerializedName("phone") val phone: String? = null,
+    @SerializedName("city") val city: String? = null,
+    @SerializedName("balanceDue") val balanceDue: Double = 0.0,
+    @SerializedName("daysPending") val daysPending: Int = 0
+)
+
+data class ApiTopProductDto(
+    @SerializedName("productName") val productName: String? = null,
+    @SerializedName("unitsSold") val unitsSold: Int = 0,
+    @SerializedName("totalRevenue") val totalRevenue: Double = 0.0,
+    @SerializedName("currentStock") val currentStock: Double = 0.0,
+    @SerializedName("minStockAlert") val minStockAlert: Double = 0.0,
+    @SerializedName("stockStatus") val stockStatus: String? = null
+)
+
+data class ApiLowStockItemDto(
+    @SerializedName("id") val id: Long? = null,
+    @SerializedName("name") val name: String? = null,
+    @SerializedName("sku") val sku: String? = null,
+    @SerializedName("stockQuantity") val stockQuantity: Double = 0.0,
+    @SerializedName("minStockAlert") val minStockAlert: Double = 0.0,
+    @SerializedName("defaultPrice") val defaultPrice: Double = 0.0
+)
+
+data class ApiUrgentFollowupDto(
+    @SerializedName("id") val id: Long? = null,
+    @SerializedName("invoiceNumber") val invoiceNumber: String? = null,
+    @SerializedName("customerName") val customerName: String? = null,
+    @SerializedName("customerPhone") val customerPhone: String? = null,
+    @SerializedName("balanceDue") val balanceDue: Double = 0.0,
+    @SerializedName("daysPending") val daysPending: Int = 0
 )
 
 data class ApiOrdersSummaryResponse(
@@ -591,7 +710,8 @@ data class ApiPurchaseItemDto(
     @SerializedName("quantity") val quantity: Double,
     @SerializedName("unit_price") val unitPrice: Double,
     @SerializedName("gst_rate") val gstRate: Double = 0.0,
-    @SerializedName("hsn_code") val hsnCode: String? = null
+    @SerializedName("hsn_code") val hsnCode: String? = null,
+    @SerializedName("total_amount") val totalAmount: Double = 0.0
 )
 
 data class ApiPurchaseDto(
@@ -652,4 +772,205 @@ data class ApiPreFilingAnomalyDto(
     @SerializedName("refNumber") val refNumber: String? = null,
     @SerializedName("suggestion") val suggestion: String? = null
 )
+
+// --- Purchase Orders (PO) DTOs (Migration 057) ---
+data class ApiPurchaseOrderDto(
+    @SerializedName("id") val id: Long,
+    @SerializedName("business_id") val businessId: Long? = null,
+    @SerializedName("supplier_id") val supplierId: Long,
+    @SerializedName("supplier_name") val supplierName: String? = null,
+    @SerializedName("order_number") val orderNumber: String,
+    @SerializedName("order_date") val orderDate: String? = null,
+    @SerializedName("expected_date") val expectedDate: String? = null,
+    @SerializedName("subtotal") val subtotal: Double = 0.0,
+    @SerializedName("tax_amount") val taxAmount: Double = 0.0,
+    @SerializedName("total_amount") val totalAmount: Double = 0.0,
+    @SerializedName("status") val status: String = "draft",
+    @SerializedName("notes") val notes: String? = null,
+    @SerializedName("items") val items: List<ApiPurchaseOrderItemDto>? = null,
+    @SerializedName("created_at") val createdAt: String? = null
+)
+
+data class ApiPurchaseOrderItemDto(
+    @SerializedName("id") val id: Long? = null,
+    @SerializedName("product_id") val productId: Long? = null,
+    @SerializedName("description") val description: String,
+    @SerializedName("quantity") val quantity: Double,
+    @SerializedName("unit_price") val unitPrice: Double,
+    @SerializedName("gst_rate") val gstRate: Double = 0.0,
+    @SerializedName("tax_amount") val taxAmount: Double = 0.0,
+    @SerializedName("total_amount") val totalAmount: Double = 0.0,
+    @SerializedName("hsn_code") val hsnCode: String? = null
+)
+
+// --- Debit Notes (Purchase Returns) DTOs (Migration 057) ---
+data class ApiDebitNoteDto(
+    @SerializedName("id") val id: Long,
+    @SerializedName("business_id") val businessId: Long? = null,
+    @SerializedName("supplier_id") val supplierId: Long,
+    @SerializedName("supplier_name") val supplierName: String? = null,
+    @SerializedName("purchase_id") val purchaseId: Long? = null,
+    @SerializedName("original_purchase_number") val originalPurchaseNumber: String? = null,
+    @SerializedName("debit_note_number") val debitNoteNumber: String,
+    @SerializedName("debit_note_date") val debitNoteDate: String? = null,
+    @SerializedName("subtotal") val subtotal: Double = 0.0,
+    @SerializedName("tax_amount") val taxAmount: Double = 0.0,
+    @SerializedName("total_amount") val totalAmount: Double = 0.0,
+    @SerializedName("balance_remaining") val balanceRemaining: Double = 0.0,
+    @SerializedName("reason") val reason: String? = null,
+    @SerializedName("status") val status: String = "issued",
+    @SerializedName("items") val items: List<ApiDebitNoteItemDto>? = null,
+    @SerializedName("created_at") val createdAt: String? = null
+)
+
+data class ApiDebitNoteItemDto(
+    @SerializedName("id") val id: Long? = null,
+    @SerializedName("product_id") val productId: Long? = null,
+    @SerializedName("description") val description: String,
+    @SerializedName("quantity") val quantity: Double,
+    @SerializedName("unit_price") val unitPrice: Double,
+    @SerializedName("gst_rate") val gstRate: Double = 0.0,
+    @SerializedName("tax_amount") val taxAmount: Double = 0.0,
+    @SerializedName("total_amount") val totalAmount: Double = 0.0,
+    @SerializedName("hsn_code") val hsnCode: String? = null
+)
+
+// --- Subscription & Plan Gating Status ---
+data class ApiSubscriptionPlanDto(
+    @SerializedName("key") val key: String = "STARTER",
+    @SerializedName("name") val name: String = "Starter Pro",
+    @SerializedName("tagline") val tagline: String? = null,
+    @SerializedName("monthlyPrice") val monthlyPrice: Int = 199,
+    @SerializedName("annualPrice") val annualPrice: Int = 1999,
+    @SerializedName("popular") val popular: Boolean = false,
+    @SerializedName("features") val features: List<String> = emptyList()
+)
+
+data class ApiSubscriptionStatusResponse(
+    @SerializedName("plan") val plan: String? = null,
+    @SerializedName("plan_tier") val planTierSnake: String? = null,
+    @SerializedName("planTier") val planTierCamel: String? = null,
+    @SerializedName("status") val status: String? = null,
+    @SerializedName("subscription_status") val subscriptionStatusSnake: String? = null,
+    @SerializedName("subscriptionStatus") val subscriptionStatusCamel: String? = null,
+    @SerializedName("is_expired") val isExpiredSnake: Boolean? = null,
+    @SerializedName("isExpired") val isExpiredCamel: Boolean? = null,
+    @SerializedName("trial_ends_at") val trialEndsAt: String? = null,
+    @SerializedName("subscription_expires_at") val subscriptionExpiresAt: String? = null,
+    @SerializedName("days_remaining") val daysRemaining: Int? = null,
+    @SerializedName("days_left") val daysLeftSnake: Int? = null,
+    @SerializedName("daysLeft") val daysLeftCamel: Int? = null,
+    @SerializedName("plans") val plans: List<ApiSubscriptionPlanDto> = emptyList()
+) {
+    val effectivePlanTier: String
+        get() = (planTierSnake ?: planTierCamel ?: plan ?: "PRO").uppercase()
+
+    val effectiveStatus: String
+        get() = (subscriptionStatusSnake ?: subscriptionStatusCamel ?: status ?: "TRIAL").uppercase()
+
+    val effectiveDaysLeft: Int
+        get() = daysLeftSnake ?: daysLeftCamel ?: daysRemaining ?: 30
+
+    val isExpired: Boolean
+        get() = isExpiredSnake ?: isExpiredCamel ?: (effectiveDaysLeft <= 0 && effectiveStatus != "LIFETIME")
+}
+
+// --- Request DTOs (Zero-Wildcard Retrofit Safety) ---
+data class ApiCreatePurchaseOrderItemRequest(
+    @SerializedName("product_id") val productId: Long? = null,
+    @SerializedName("product_name") val productName: String,
+    @SerializedName("hsn_code") val hsnCode: String? = null,
+    @SerializedName("quantity") val quantity: Double,
+    @SerializedName("unit_price") val unitPrice: Double,
+    @SerializedName("gst_rate") val gstRate: Double = 0.0
+)
+
+data class ApiCreatePurchaseOrderRequest(
+    @SerializedName("contact_id") val contactId: Long,
+    @SerializedName("po_number") val poNumber: String? = null,
+    @SerializedName("po_date") val poDate: String? = null,
+    @SerializedName("due_date") val dueDate: String? = null,
+    @SerializedName("notes") val notes: String? = null,
+    @SerializedName("items") val items: List<ApiCreatePurchaseOrderItemRequest> = emptyList(),
+    @SerializedName("client_reference_id") val clientReferenceId: String? = null
+)
+
+data class ApiCreateDebitNoteItemRequest(
+    @SerializedName("product_id") val productId: Long? = null,
+    @SerializedName("product_name") val productName: String,
+    @SerializedName("hsn_code") val hsnCode: String? = null,
+    @SerializedName("quantity") val quantity: Double,
+    @SerializedName("unit_price") val unitPrice: Double,
+    @SerializedName("gst_rate") val gstRate: Double = 0.0
+)
+
+data class ApiCreateDebitNoteRequest(
+    @SerializedName("contact_id") val contactId: Long,
+    @SerializedName("purchase_id") val purchaseId: Long? = null,
+    @SerializedName("debit_note_number") val debitNoteNumber: String? = null,
+    @SerializedName("debit_note_date") val debitNoteDate: String? = null,
+    @SerializedName("original_bill_no") val originalBillNo: String? = null,
+    @SerializedName("original_bill_date") val originalBillDate: String? = null,
+    @SerializedName("type") val type: String = "debit_note",
+    @SerializedName("reason") val reason: String = "goods_returned",
+    @SerializedName("notes") val notes: String? = null,
+    @SerializedName("items") val items: List<ApiCreateDebitNoteItemRequest> = emptyList(),
+    @SerializedName("client_reference_id") val clientReferenceId: String? = null
+)
+
+data class ApiPayPurchaseRequest(
+    @SerializedName("amount") val amount: Double,
+    @SerializedName("payment_mode") val paymentMode: String = "CASH",
+    @SerializedName("reference_number") val referenceNumber: String? = null,
+    @SerializedName("notes") val notes: String? = null
+)
+
+data class ApiGenericSuccessResponse(
+    @SerializedName("success") val success: Boolean = true,
+    @SerializedName("message") val message: String? = null
+)
+
+// --- Unified Fast Sync DTOs ---
+data class ApiFastSyncRequest(
+    val since: String? = null,
+    @SerializedName("device_id") val deviceId: String = "android-client",
+    val mutations: List<Map<String, Any>> = emptyList()
+)
+
+data class ApiFastSyncData(
+    val contacts: List<ApiContactDto> = emptyList(),
+    val products: List<ApiProductDto> = emptyList(),
+    val orders: List<ApiOrderDto> = emptyList(),
+    val purchases: List<ApiPurchaseDto> = emptyList(),
+    val quotations: List<ApiQuotationDto> = emptyList(),
+    @SerializedName("credit_notes") val creditNotes: List<ApiCreditNoteDto> = emptyList()
+)
+
+data class ApiFastSyncResponse(
+    val success: Boolean = true,
+    @SerializedName("server_time") val serverTime: String? = null,
+    val data: ApiFastSyncData? = null,
+    val acks: List<Map<String, Any>>? = null,
+    val error: String? = null
+)
+
+// --- App Version & Force Update DTOs ---
+data class ApiAppVersionResponse(
+    val success: Boolean = true,
+    val platform: String = "android",
+    @SerializedName("client_version") val clientVersion: String? = null,
+    @SerializedName("client_build") val clientBuild: Int? = null,
+    @SerializedName("current_version") val currentVersion: String = "1.0.2",
+    @SerializedName("current_build") val currentBuild: Int = 3,
+    @SerializedName("min_supported_version") val minSupportedVersion: String = "1.0.1",
+    @SerializedName("min_supported_build") val minSupportedBuild: Int = 2,
+    @SerializedName("force_update") val forceUpdate: Boolean = false,
+    @SerializedName("soft_update") val softUpdate: Boolean = false,
+    @SerializedName("update_url") val updateUrl: String = "/apk/DigitalChopda-release.apk",
+    @SerializedName("release_notes") val releaseNotes: String? = null,
+    @SerializedName("web_version") val webVersion: String? = null,
+    @SerializedName("contract_version") val contractVersion: String? = null,
+    @SerializedName("server_time") val serverTime: String? = null
+)
+
 

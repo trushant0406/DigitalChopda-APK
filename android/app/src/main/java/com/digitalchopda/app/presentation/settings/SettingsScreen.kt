@@ -33,6 +33,11 @@ import androidx.compose.material.icons.automirrored.filled.ArrowForwardIos
 import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Business
 import androidx.compose.material.icons.filled.Calculate
@@ -41,6 +46,8 @@ import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Fingerprint
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Phone
@@ -69,6 +76,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import com.digitalchopda.app.core.designsystem.BrandAccentSoft
 import com.digitalchopda.app.core.designsystem.CoralGradientButton
 import com.digitalchopda.app.core.designsystem.EmeraldJamaBg
+import com.digitalchopda.app.core.designsystem.SubscriptionPlansDialog
+import com.digitalchopda.app.core.designsystem.SubscriptionStatusCard
 import com.digitalchopda.app.core.printer.BluetoothPrinterManager
 import com.digitalchopda.app.core.sound.SoundEffectsManager
 import com.digitalchopda.app.presentation.gst.GstHubScreen
@@ -169,6 +178,19 @@ fun SettingsScreen(
         }
     }
 
+    var subscriptionStatus by remember { mutableStateOf<com.digitalchopda.app.core.network.ApiSubscriptionStatusResponse?>(null) }
+    var showPlansDialog by remember { mutableStateOf(false) }
+    var isCompaniesExpanded by remember { mutableStateOf(false) }
+
+    fun refreshSubscriptionStatus() {
+        scope.launch {
+            val subRes = companyRepository.getSubscriptionStatus()
+            if (subRes.isSuccess) {
+                subscriptionStatus = subRes.getOrNull()
+            }
+        }
+    }
+
     LaunchedEffect(Unit) {
         val loaded = companyRepository.getActiveCompany()
         activeCompany = loaded
@@ -176,6 +198,11 @@ fun SettingsScreen(
             companyRepository.syncCompaniesWithServer()
         } catch (_: Exception) {}
         refreshWaStatus()
+        refreshSubscriptionStatus()
+    }
+
+    LaunchedEffect(activeCompany.id) {
+        refreshSubscriptionStatus()
     }
 
     val companies by companyRepository.getAllCompanies().collectAsState(initial = emptyList())
@@ -336,6 +363,32 @@ fun SettingsScreen(
                                             )
                                         }
                                     }
+
+                                    val planTier = activeCompany.plan.uppercase().ifBlank { "STARTER" }
+                                    val (planBg, planBorder, planText) = when (planTier) {
+                                        "ENTERPRISE" -> Triple(Color(0xFFEDE9FE), Color(0xFFDDD6FE), Color(0xFF6D28D9))
+                                        "GROWTH PRO", "PRO" -> Triple(Color(0xFFFEF3C7), Color(0xFFFDE68A), Color(0xFFB45309))
+                                        else -> Triple(Color(0xFFEFF6FF), Color(0xFFBFDBFE), BrandPrimaryBlue)
+                                    }
+                                    Box(
+                                        modifier = Modifier
+                                            .clip(RoundedCornerShape(6.dp))
+                                            .background(planBg)
+                                            .border(0.8.dp, planBorder, RoundedCornerShape(6.dp))
+                                            .clickable { showPlansDialog = true }
+                                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                                    ) {
+                                        Text(
+                                            text = if (planTier == "PRO" || planTier == "GROWTH PRO") "GROWTH PRO" else planTier,
+                                            style = MaterialTheme.typography.labelSmall.copy(
+                                                color = planText,
+                                                fontSize = 9.5.sp,
+                                                fontWeight = FontWeight.Black
+                                            ),
+                                            maxLines = 1,
+                                            softWrap = false
+                                        )
+                                    }
                                 }
                                 if (activeCompany.ownerName.isNotBlank() && !activeCompany.ownerName.equals(activeCompany.firmName, ignoreCase = true) && !activeCompany.ownerName.equals("Admin User", ignoreCase = true)) {
                                     Spacer(modifier = Modifier.height(2.dp))
@@ -447,6 +500,17 @@ fun SettingsScreen(
                 }
             }
 
+            // ─── 1.5 SUBSCRIPTION & PLAN MANAGEMENT ───
+            item {
+                SubscriptionStatusCard(
+                    planTier = subscriptionStatus?.effectivePlanTier ?: activeCompany.plan,
+                    status = subscriptionStatus?.effectiveStatus ?: if (activeCompany.isExpired) "EXPIRED" else "TRIAL",
+                    daysLeft = subscriptionStatus?.effectiveDaysLeft ?: 28,
+                    isExpired = subscriptionStatus?.isExpired ?: activeCompany.isExpired,
+                    onUpgradeClick = { showPlansDialog = true }
+                )
+            }
+
             // ─── 2. GST TAX HUB & COMPLIANCE HERO ───
             item {
                 ChopdaCard(
@@ -520,139 +584,196 @@ fun SettingsScreen(
                 }
             }
 
-            // ─── 3. LINKED BUSINESSES (MULTI-FIRM) ───
+            // ─── 3. LINKED BUSINESSES (MULTI-FIRM DROPDOWN ACCORDION) ───
             item {
-                Column(modifier = Modifier.fillMaxWidth()) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 2.dp, vertical = 2.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = "LINKED BUSINESSES (${displayCompanies.size})",
-                            style = MaterialTheme.typography.labelSmall.copy(
-                                color = TextSubtle,
-                                letterSpacing = 1.1.sp,
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 11.sp
-                            )
-                        )
+                ChopdaCard(
+                    modifier = Modifier.fillMaxWidth(),
+                    cornerRadius = 14.dp,
+                    borderColor = BorderStrokeDark,
+                    backgroundColor = MidnightCardSurface
+                ) {
+                    Column(modifier = Modifier.fillMaxWidth()) {
+                        // Expandable Header Row
                         Row(
-                            verticalAlignment = Alignment.CenterVertically,
                             modifier = Modifier
-                                .clip(RoundedCornerShape(6.dp))
-                                .clickable { showAddCompanyDialog = true }
-                                .padding(horizontal = 6.dp, vertical = 2.dp)
+                                .fillMaxWidth()
+                                .clickable { isCompaniesExpanded = !isCompaniesExpanded }
+                                .padding(horizontal = 14.dp, vertical = 13.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Icon(
-                                imageVector = Icons.Default.Add,
-                                contentDescription = "Add Firm",
-                                tint = BrandPrimaryBlue,
-                                modifier = Modifier.size(14.dp)
-                            )
-                            Spacer(modifier = Modifier.width(3.dp))
-                            Text(
-                                text = "Add Firm",
-                                style = MaterialTheme.typography.labelSmall.copy(
-                                    color = BrandPrimaryBlue,
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 12.sp
-                                )
-                            )
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(4.dp))
-
-                    ChopdaCard(
-                        modifier = Modifier.fillMaxWidth(),
-                        cornerRadius = 14.dp,
-                        borderColor = BorderStrokeDark,
-                        backgroundColor = MidnightCardSurface
-                    ) {
-                        Column(modifier = Modifier.fillMaxWidth()) {
-                            displayCompanies.forEachIndexed { index, comp ->
-                                val isActive = comp.id == activeCompany.id || (activeCompany.firmName == comp.firmName)
-                                Row(
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Box(
                                     modifier = Modifier
-                                        .fillMaxWidth()
-                                        .clickable {
-                                            if (!isActive) {
-                                                scope.launch {
-                                                    companyRepository.switchActiveCompany(comp.id)
-                                                    activeCompany = comp
-                                                    Toast.makeText(context, "Switched active business to ${comp.firmName}", Toast.LENGTH_SHORT).show()
-                                                }
-                                            }
-                                        }
-                                        .padding(horizontal = 14.dp, vertical = 12.dp),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
+                                        .size(36.dp)
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(BrandAccentSoft),
+                                    contentAlignment = Alignment.Center
                                 ) {
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        modifier = Modifier.weight(1f)
-                                    ) {
-                                        val (avatarBg, avatarText) = getAvatarColors(comp.firmName)
-                                        Box(
-                                            modifier = Modifier
-                                                .size(34.dp)
-                                                .clip(RoundedCornerShape(8.dp))
-                                                .background(avatarBg),
-                                            contentAlignment = Alignment.Center
-                                        ) {
-                                            Text(
-                                                text = comp.firmName.take(2).uppercase(),
-                                                style = MaterialTheme.typography.labelMedium.copy(
-                                                    color = avatarText,
-                                                    fontWeight = FontWeight.Bold,
-                                                    fontSize = 12.sp
-                                                )
-                                            )
-                                        }
-                                        Spacer(modifier = Modifier.width(10.dp))
-                                        Column {
-                                            Text(
-                                                text = comp.firmName,
-                                                style = MaterialTheme.typography.titleSmall.copy(
-                                                    fontWeight = FontWeight.Bold,
-                                                    color = DarkNavy,
-                                                    fontSize = 13.5.sp
-                                                )
-                                            )
-                                            Spacer(modifier = Modifier.height(2.dp))
-                                            Text(
-                                                text = if (comp.gstin.isNotEmpty()) "GSTIN: ${comp.gstin}" else "Prefix: ${comp.invoicePrefix.ifEmpty { "INV" }} • Owner: ${comp.ownerName.ifEmpty { "Merchant" }}",
-                                                style = MaterialTheme.typography.bodySmall.copy(
-                                                    color = TextSubtle,
-                                                    fontSize = 11.sp
-                                                )
-                                            )
-                                        }
-                                    }
-
-                                    if (isActive) {
-                                        StatusPill(
-                                            text = "Active",
-                                            textColor = EmeraldJama,
-                                            backgroundColor = EmeraldJamaBg
-                                        )
-                                    } else {
+                                    Icon(
+                                        imageVector = Icons.Default.Business,
+                                        contentDescription = null,
+                                        tint = BrandPrimaryBlue,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
+                                Spacer(modifier = Modifier.width(10.dp))
+                                Column {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
                                         Text(
-                                            text = "Switch ›",
-                                            style = MaterialTheme.typography.labelMedium.copy(
+                                            text = "My Registered Companies (${displayCompanies.size})",
+                                            style = MaterialTheme.typography.titleMedium.copy(
+                                                fontWeight = FontWeight.Bold,
+                                                color = DarkNavy,
+                                                fontSize = 13.5.sp
+                                            )
+                                        )
+                                    }
+                                    Spacer(modifier = Modifier.height(2.dp))
+                                    Text(
+                                        text = "Active: ${activeCompany.firmName.ifEmpty { "My Firm" }} • ${if (isCompaniesExpanded) "Tap to collapse" else "Tap to view & switch"}",
+                                        style = MaterialTheme.typography.bodySmall.copy(
+                                            color = TextSubtle,
+                                            fontSize = 11.sp
+                                        )
+                                    )
+                                }
+                            }
+
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                // Add Firm Action
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(6.dp))
+                                        .background(ElevatedSlate)
+                                        .border(0.8.dp, BorderStrokeDark, RoundedCornerShape(6.dp))
+                                        .clickable { showAddCompanyDialog = true }
+                                        .padding(horizontal = 8.dp, vertical = 4.dp)
+                                ) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(
+                                            imageVector = Icons.Default.Add,
+                                            contentDescription = "Add Firm",
+                                            tint = BrandPrimaryBlue,
+                                            modifier = Modifier.size(13.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(3.dp))
+                                        Text(
+                                            text = "Add",
+                                            style = MaterialTheme.typography.labelSmall.copy(
                                                 color = BrandPrimaryBlue,
                                                 fontWeight = FontWeight.Bold,
-                                                fontSize = 12.5.sp
+                                                fontSize = 11.5.sp
                                             )
                                         )
                                     }
                                 }
 
-                                if (index < displayCompanies.size - 1) {
-                                    HorizontalDivider(color = BorderStrokeDark, thickness = 0.8.dp)
+                                Spacer(modifier = Modifier.width(8.dp))
+
+                                Icon(
+                                    imageVector = if (isCompaniesExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                                    contentDescription = if (isCompaniesExpanded) "Collapse" else "Expand",
+                                    tint = TextMuted,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                        }
+
+                        // Accordion Dropdown Content
+                        AnimatedVisibility(
+                            visible = isCompaniesExpanded,
+                            enter = expandVertically() + fadeIn(),
+                            exit = shrinkVertically() + fadeOut()
+                        ) {
+                            Column(modifier = Modifier.fillMaxWidth()) {
+                                HorizontalDivider(color = BorderStrokeDark, thickness = 0.8.dp)
+
+                                displayCompanies.forEachIndexed { index, comp ->
+                                    val isActive = comp.id == activeCompany.id || (activeCompany.firmName == comp.firmName)
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .background(if (isActive) Color(0xFFF8FAFC) else Color.Transparent)
+                                            .clickable {
+                                                if (!isActive) {
+                                                    scope.launch {
+                                                        companyRepository.switchActiveCompany(comp.id)
+                                                        activeCompany = comp
+                                                        Toast.makeText(context, "Switched active business to ${comp.firmName}", Toast.LENGTH_SHORT).show()
+                                                    }
+                                                }
+                                            }
+                                            .padding(horizontal = 14.dp, vertical = 12.dp),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            modifier = Modifier.weight(1f)
+                                        ) {
+                                            val (avatarBg, avatarText) = getAvatarColors(comp.firmName)
+                                            Box(
+                                                modifier = Modifier
+                                                    .size(34.dp)
+                                                    .clip(RoundedCornerShape(8.dp))
+                                                    .background(avatarBg),
+                                                contentAlignment = Alignment.Center
+                                            ) {
+                                                Text(
+                                                    text = comp.firmName.take(2).uppercase(),
+                                                    style = MaterialTheme.typography.labelMedium.copy(
+                                                        color = avatarText,
+                                                        fontWeight = FontWeight.Bold,
+                                                        fontSize = 12.sp
+                                                    )
+                                                )
+                                            }
+                                            Spacer(modifier = Modifier.width(10.dp))
+                                            Column {
+                                                Text(
+                                                    text = comp.firmName,
+                                                    style = MaterialTheme.typography.titleSmall.copy(
+                                                        fontWeight = FontWeight.Bold,
+                                                        color = DarkNavy,
+                                                        fontSize = 13.5.sp
+                                                    )
+                                                )
+                                                Spacer(modifier = Modifier.height(2.dp))
+                                                Text(
+                                                    text = if (comp.gstin.isNotEmpty()) "GSTIN: ${comp.gstin}" else "Prefix: ${comp.invoicePrefix.ifEmpty { "INV" }} • Owner: ${comp.ownerName.ifEmpty { "Merchant" }}",
+                                                    style = MaterialTheme.typography.bodySmall.copy(
+                                                        color = TextSubtle,
+                                                        fontSize = 11.sp
+                                                    )
+                                                )
+                                            }
+                                        }
+
+                                        if (isActive) {
+                                            StatusPill(
+                                                text = "Active",
+                                                textColor = EmeraldJama,
+                                                backgroundColor = EmeraldJamaBg
+                                            )
+                                        } else {
+                                            Text(
+                                                text = "Switch ›",
+                                                style = MaterialTheme.typography.labelMedium.copy(
+                                                    color = BrandPrimaryBlue,
+                                                    fontWeight = FontWeight.Bold,
+                                                    fontSize = 12.5.sp
+                                                )
+                                            )
+                                        }
+                                    }
+
+                                    if (index < displayCompanies.size - 1) {
+                                        HorizontalDivider(color = BorderStrokeDark, thickness = 0.8.dp)
+                                    }
                                 }
                             }
                         }
@@ -1140,6 +1261,55 @@ fun SettingsScreen(
                                     }
                                 }
                             }
+
+                            Spacer(modifier = Modifier.height(10.dp))
+                            HorizontalDivider(color = BorderStrokeDark, thickness = 0.8.dp)
+                            Spacer(modifier = Modifier.height(10.dp))
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = "Automated Dispatch Bot",
+                                        style = MaterialTheme.typography.bodyMedium.copy(
+                                            color = DarkNavy,
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 13.sp
+                                        )
+                                    )
+                                    Text(
+                                        text = "Automatically dispatch GST invoice PDFs and payment reminders via WhatsApp bot",
+                                        style = MaterialTheme.typography.labelSmall.copy(color = TextMuted, fontSize = 11.sp)
+                                    )
+                                }
+
+                                Spacer(modifier = Modifier.width(8.dp))
+
+                                Switch(
+                                    checked = activeCompany.whatsappBotEnabled,
+                                    onCheckedChange = { isChecked ->
+                                        val updated = activeCompany.copy(whatsappBotEnabled = isChecked)
+                                        activeCompany = updated
+                                        scope.launch {
+                                            companyRepository.updateCompany(updated)
+                                            Toast.makeText(
+                                                context,
+                                                if (isChecked) "WhatsApp Bot Enabled" else "WhatsApp Bot Disabled",
+                                                Toast.LENGTH_SHORT
+                                            ).show()
+                                        }
+                                    },
+                                    colors = SwitchDefaults.colors(
+                                        checkedThumbColor = Color.White,
+                                        checkedTrackColor = BrandPrimaryBlue,
+                                        uncheckedThumbColor = Color.White,
+                                        uncheckedTrackColor = ElevatedSlate
+                                    )
+                                )
+                            }
                         }
                     }
                 }
@@ -1322,6 +1492,13 @@ fun SettingsScreen(
             )
         }
     }
+
+    SubscriptionPlansDialog(
+        isOpen = showPlansDialog,
+        currentPlanTier = subscriptionStatus?.effectivePlanTier ?: activeCompany.plan,
+        firmName = activeCompany.firmName,
+        onDismissRequest = { showPlansDialog = false }
+    )
 
     if (showAddCompanyDialog) {
         AddCompanyDialog(

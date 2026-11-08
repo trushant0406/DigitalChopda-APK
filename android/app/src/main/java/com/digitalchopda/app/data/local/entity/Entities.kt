@@ -23,6 +23,9 @@ data class CompanyEntity(
     val bankAccountNo: String = "",
     val bankIfsc: String = "",
     val bankBranch: String = "",
+    val whatsappBotEnabled: Boolean = false,
+    val plan: String = "STARTER",
+    val isExpired: Boolean = false,
     val createdAt: Long = System.currentTimeMillis()
 )
 
@@ -92,7 +95,8 @@ data class InvoiceEntity(
         Index(value = ["customerPhone"]),
         Index(value = ["syncStatus"]),
         Index(value = ["invoiceId"]),
-        Index(value = ["orderId"])
+        Index(value = ["orderId"]),
+        Index(value = ["purchaseId"])
     ]
 )
 data class PaymentEntity(
@@ -104,6 +108,7 @@ data class PaymentEntity(
     val customerName: String = "",
     val invoiceId: Long? = null,
     val orderId: Long? = null,
+    val purchaseId: Long? = null,
     val invoiceNumber: String = "",
     val amount: Double,
     val isJama: Boolean, // true = You Got (Credit), false = You Gave (Debit)
@@ -317,6 +322,7 @@ data class PurchaseItemEntity(
     val quantity: Double,
     val unitPrice: Double,
     val gstRate: Double = 0.0,
+    val totalAmount: Double = 0.0,
     val hsnCode: String? = null
 )
 
@@ -467,6 +473,105 @@ data class DeliveryChallanEntity(
     val itemsJson: String = "[]",
     val syncStatus: String = "PENDING_SYNC",
     val createdAt: Long = System.currentTimeMillis()
+)
+
+@Entity(
+    tableName = "purchase_orders",
+    indices = [
+        Index(value = ["companyId"]),
+        Index(value = ["supplierId"]),
+        Index(value = ["orderNumber"])
+    ]
+)
+data class PurchaseOrderEntity(
+    @PrimaryKey(autoGenerate = true)
+    val id: Long = 0,
+    val companyId: Long,
+    val supplierId: Long,
+    val supplierName: String = "",
+    val orderNumber: String,
+    val orderDate: Long = System.currentTimeMillis(),
+    val expectedDate: Long? = null,
+    val subtotal: Double = 0.0,
+    val taxAmount: Double = 0.0,
+    val totalAmount: Double = 0.0,
+    val status: String = "draft", // draft, pending, approved, converted, cancelled
+    val notes: String? = null,
+    val clientReferenceId: String = java.util.UUID.randomUUID().toString(),
+    val syncStatus: String = "PENDING_SYNC",
+    val serverOrderId: Long? = null,
+    val createdAt: Long = System.currentTimeMillis()
+)
+
+@Entity(
+    tableName = "purchase_order_items",
+    indices = [
+        Index(value = ["purchaseOrderId"])
+    ]
+)
+data class PurchaseOrderItemEntity(
+    @PrimaryKey(autoGenerate = true)
+    val id: Long = 0,
+    val purchaseOrderId: Long,
+    val productName: String,
+    val quantity: Double,
+    val unitPrice: Double,
+    val gstRate: Double = 0.0,
+    val taxAmount: Double = 0.0,
+    val totalAmount: Double = 0.0,
+    val hsnCode: String? = null
+)
+
+@Entity(
+    tableName = "debit_notes",
+    indices = [
+        Index(value = ["companyId"]),
+        Index(value = ["supplierId"]),
+        Index(value = ["purchaseId"]),
+        Index(value = ["debitNoteNumber"])
+    ]
+)
+data class DebitNoteEntity(
+    @PrimaryKey(autoGenerate = true)
+    val id: Long = 0,
+    val companyId: Long,
+    val supplierId: Long,
+    val supplierName: String = "",
+    val purchaseId: Long? = null,
+    val originalPurchaseNumber: String = "",
+    val debitNoteNumber: String,
+    val debitNoteDate: Long = System.currentTimeMillis(),
+    val subtotal: Double = 0.0,
+    val taxAmount: Double = 0.0,
+    val totalAmount: Double = 0.0,
+    val balanceRemaining: Double = 0.0,
+    val reason: String = "Purchase Return",
+    val status: String = "issued", // draft, issued, settled, cancelled
+    val itemsSummary: String = "",
+    val notes: String? = null,
+    val clientReferenceId: String = java.util.UUID.randomUUID().toString(),
+    val syncStatus: String = "PENDING_SYNC",
+    val serverDebitNoteId: Long? = null,
+    val createdAt: Long = System.currentTimeMillis()
+)
+
+@Entity(
+    tableName = "debit_note_items",
+    indices = [
+        Index(value = ["debitNoteId"])
+    ]
+)
+data class DebitNoteItemEntity(
+    @PrimaryKey(autoGenerate = true)
+    val id: Long = 0,
+    val debitNoteId: Long,
+    val productName: String,
+    val quantity: Double,
+    val unitPrice: Double,
+    val gstRate: Double = 0.0,
+    val taxAmount: Double = 0.0,
+    val totalAmount: Double = 0.0,
+    val hsnCode: String? = null
 )
 
 

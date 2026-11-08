@@ -78,9 +78,12 @@ fun RecordPaymentDialog(
     onConfirmWithAllocations: ((amount: Double, paymentMode: String, notes: String, selectedInvoice: InvoiceEntity?, allocations: List<ApiPaymentAllocationItemDto>?) -> Unit)? = null
 ) {
     val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
+    val validInvoices = remember(unpaidInvoices) {
+        unpaidInvoices.filter { !it.status.equals("PAID", ignoreCase = true) && it.balanceDue > 0.01 }
+    }
     var selectedInvoice by remember {
         mutableStateOf<InvoiceEntity?>(
-            unpaidInvoices.firstOrNull { it.id == initialInvoiceId }
+            validInvoices.firstOrNull { it.id == initialInvoiceId }
         )
     }
     var isMultiBillMode by remember { mutableStateOf(false) }
@@ -135,8 +138,8 @@ fun RecordPaymentDialog(
                         customerName = partyName,
                         isHindi = false
                     )
-                    if (isJama && isMultiBillMode && unpaidInvoices.size > 1) {
-                        val allocationsList = unpaidInvoices.mapNotNull { inv ->
+                    if (isJama && isMultiBillMode && validInvoices.size > 1) {
+                        val allocationsList = validInvoices.mapNotNull { inv ->
                             if (selectedInvoiceIds[inv.id] == true) {
                                 val amt = allocatedMap[inv.id] ?: 0.0
                                 if (amt > 0.0) {
@@ -176,7 +179,7 @@ fun RecordPaymentDialog(
                 } else {
                     Text(
                         text = if (isJama) {
-                            if (isMultiBillMode && unpaidInvoices.size > 1) {
+                            if (isMultiBillMode && validInvoices.size > 1) {
                                 val count = selectedInvoiceIds.count { it.value }
                                 if (count > 0) "Confirm + Receive (Split $count Bills)" else "Confirm + Receive"
                             } else if (selectedInvoice != null) {
@@ -198,8 +201,8 @@ fun RecordPaymentDialog(
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
             // Settle Against Bill Selection (for Payment In)
-            if (isJama && unpaidInvoices.isNotEmpty()) {
-                if (unpaidInvoices.size > 1) {
+            if (isJama && validInvoices.isNotEmpty()) {
+                if (validInvoices.size > 1) {
                     // Mode Selector: Single Bill vs Multi-Bill Split
                     Row(
                         modifier = Modifier
@@ -236,7 +239,7 @@ fun RecordPaymentDialog(
                                     val amt = amountText.toDoubleOrNull() ?: 0.0
                                     if (amt > 0.0 && allocatedMap.isEmpty()) {
                                         var remaining = amt
-                                        for (inv in unpaidInvoices) {
+                                        for (inv in validInvoices) {
                                             if (remaining <= 0.0) break
                                             val take = Math.min(remaining, inv.balanceDue)
                                             if (take > 0.0) {
@@ -251,7 +254,7 @@ fun RecordPaymentDialog(
                             contentAlignment = Alignment.Center
                         ) {
                             Text(
-                                text = "Split Multi-Bills (${unpaidInvoices.size})",
+                                text = "Split Multi-Bills (${validInvoices.size})",
                                 fontWeight = if (isMultiBillMode) FontWeight.Bold else FontWeight.Medium,
                                 color = if (isMultiBillMode) Color.White else DarkNavy,
                                 fontSize = 12.sp
@@ -260,7 +263,7 @@ fun RecordPaymentDialog(
                     }
                 }
 
-                if (isMultiBillMode && unpaidInvoices.size > 1) {
+                if (isMultiBillMode && validInvoices.size > 1) {
                     // Multi-Bill Itemized Allocation
                     Column(
                         modifier = Modifier.fillMaxWidth(),
@@ -293,7 +296,7 @@ fun RecordPaymentDialog(
                                         var remaining = amt
                                         allocatedMap.clear()
                                         selectedInvoiceIds.clear()
-                                        for (inv in unpaidInvoices) {
+                                        for (inv in validInvoices) {
                                             if (remaining <= 0.0) break
                                             val take = Math.min(remaining, inv.balanceDue)
                                             if (take > 0.0) {
@@ -307,7 +310,7 @@ fun RecordPaymentDialog(
                             )
                         }
 
-                        unpaidInvoices.forEach { inv ->
+                        validInvoices.forEach { inv ->
                             val isChecked = selectedInvoiceIds[inv.id] == true
                             val allocVal = allocatedMap[inv.id] ?: 0.0
 
@@ -586,7 +589,7 @@ fun RecordPaymentDialog(
 
                                 HorizontalDivider(color = BorderStrokeDark.copy(alpha = 0.5f))
 
-                                unpaidInvoices.forEach { inv ->
+                                validInvoices.forEach { inv ->
                                     DropdownMenuItem(
                                         text = {
                                             Row(
@@ -623,6 +626,34 @@ fun RecordPaymentDialog(
                                             invoiceDropdownExpanded = false
                                         }
                                     )
+                                }
+                            }
+                        }
+
+                        // Itemized Bill Due Breakdown (Eliminates ambiguity/contradiction)
+                        if (selectedInvoice != null) {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(ElevatedSlate)
+                                    .border(1.dp, BorderStrokeDark, RoundedCornerShape(10.dp))
+                                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column {
+                                    Text("Bill Total", fontSize = 10.5.sp, color = TextSubtle, fontWeight = FontWeight.Medium)
+                                    Text("₹ ${selectedInvoice!!.grandTotal.toInt()}", fontSize = 12.5.sp, fontWeight = FontWeight.Bold, color = DarkNavy)
+                                }
+                                Column {
+                                    Text("Already Paid", fontSize = 10.5.sp, color = TextSubtle, fontWeight = FontWeight.Medium)
+                                    Text("₹ ${(selectedInvoice!!.grandTotal - selectedInvoice!!.balanceDue).coerceAtLeast(0.0).toInt()}", fontSize = 12.5.sp, fontWeight = FontWeight.SemiBold, color = EmeraldJama)
+                                }
+                                Column(horizontalAlignment = Alignment.End) {
+                                    Text("Remaining Due", fontSize = 10.5.sp, color = TextSubtle, fontWeight = FontWeight.Medium)
+                                    Text("₹ ${String.format(java.util.Locale.US, "%.2f", selectedInvoice!!.balanceDue)}", fontSize = 13.sp, fontWeight = FontWeight.ExtraBold, color = RubyUdhar)
                                 }
                             }
                         }

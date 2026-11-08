@@ -16,6 +16,7 @@ data class AppStrings(
     val splashStepSubReady: String = "Zero-knowledge merchant session active",
 
     // Navigation Dock
+    val navDashboard: String = "Dashboard",
     val navChopda: String,
     val navParty: String = "Party",
     val navBilling: String,
@@ -172,7 +173,8 @@ val EnglishStrings = AppStrings(
     splashStepSubVault = "Decrypting offline SQLiteCipher database",
     splashStepSubReady = "Zero-knowledge merchant session active",
 
-    navChopda = "Chopda",
+    navDashboard = "Dashboard",
+    navChopda = "Dashboard",
     navParty = "Party",
     navBilling = "Billing",
     navStock = "Products",
@@ -297,7 +299,8 @@ val GujaratiStrings = AppStrings(
     splashStepSubVault = "AES-૨૫૬ એન્ક્રિપ્ટેડ ડેટાબેઝ ડિક્રિપ્શન",
     splashStepSubReady = "સુરક્ષિત વેપાર સત્ર સફળતાપૂર્વક સક્રિય",
 
-    navChopda = "ચોપડો",
+    navDashboard = "ડેશબોર્ડ",
+    navChopda = "ડેશબોર્ડ",
     navParty = "પાર્ટી",
     navBilling = "બિલિંગ",
     navStock = "પ્રોડક્ટ્સ",
@@ -444,7 +447,8 @@ val HindiStrings = AppStrings(
     splashStepSubVault = "AES-256 एन्क्रिप्टेड डेटाबेस डिक्रिप्शन",
     splashStepSubReady = "सुरक्षित व्यापार सत्र सफलतापूर्वक सक्रिय",
 
-    navChopda = "चोपड़ा",
+    navDashboard = "डैशबोर्ड",
+    navChopda = "डैशबोर्ड",
     navParty = "पार्टी",
     navBilling = "बिलिंग",
     navStock = "प्रोडक्ट्स",

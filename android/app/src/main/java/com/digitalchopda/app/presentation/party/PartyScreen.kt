@@ -3,6 +3,7 @@ package com.digitalchopda.app.presentation.party
 import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
+import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -21,6 +22,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -59,6 +61,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -113,20 +116,14 @@ fun PartyScreen(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
-    var activeCompany by remember {
-        mutableStateOf(
-            Company(
-                id = 1L,
-                firmName = "ABC E-COMMERCE",
-                ownerName = "Admin User",
-                isActive = true
-            )
+    val activeCompanyFlowVal by companyRepository.getActiveCompanyFlow().collectAsState(initial = null)
+    val activeCompany = activeCompanyFlowVal ?: remember {
+        Company(
+            id = 1L,
+            firmName = "My Business",
+            ownerName = "Admin User",
+            isActive = true
         )
-    }
-
-    LaunchedEffect(Unit) {
-        val company = companyRepository.getActiveCompany()
-        activeCompany = company
     }
 
     val allParties by customerRepository.getCustomersForCompany(activeCompany.id).collectAsState(initial = emptyList())
@@ -136,22 +133,17 @@ fun PartyScreen(
     var isSyncing by remember { mutableStateOf(false) }
     var showAddPartyDialog by remember { mutableStateOf(false) }
 
+    val listState = rememberLazyListState()
+    val focusManager = LocalFocusManager.current
+    LaunchedEffect(listState.isScrollInProgress) {
+        if (listState.isScrollInProgress) {
+            focusManager.clearFocus()
+        }
+    }
+
     val isOnline by InstantNetworkSyncMonitor.isOnline.collectAsState()
     val isSyncingOutbox by InstantNetworkSyncMonitor.isSyncing.collectAsState()
     val pendingSyncCount by remember { DigitalChopdaApplication.instance.billingRepository.observePendingSyncCount() }.collectAsState(initial = 0)
-
-    // Auto-sync on screen launch
-    LaunchedEffect(activeCompany.id) {
-        if (activeCompany.id > 0) {
-            isSyncing = true
-            try {
-                customerRepository.syncContactsWithServer(activeCompany.id)
-            } catch (_: Exception) {
-            } finally {
-                isSyncing = false
-            }
-        }
-    }
 
     fun triggerSync() {
         InstantNetworkSyncMonitor.triggerManualSync(context)
@@ -179,16 +171,14 @@ fun PartyScreen(
     }
 
     fun launchWhatsAppReminder(party: CustomerEntity) {
-        try {
-            val cleanPhone = party.phone.replace("+", "").replace(" ", "").trim()
-            val text = "Namaste ${party.name}, gentle reminder regarding your outstanding ledger balance of ${CurrencyFormatter.formatCurrency(party.balance)} with ${activeCompany.firmName}. Kindly clear at your earliest convenience. Thank you!"
-            val intent = android.content.Intent(android.content.Intent.ACTION_VIEW).apply {
-                data = android.net.Uri.parse("https://api.whatsapp.com/send?phone=$cleanPhone&text=${java.net.URLEncoder.encode(text, "UTF-8")}")
-            }
-            context.startActivity(intent)
-        } catch (_: Exception) {
-            Toast.makeText(context, "WhatsApp is not installed on this device", Toast.LENGTH_SHORT).show()
-        }
+        val text = "Namaste ${party.name}, gentle reminder regarding your outstanding ledger balance of ${CurrencyFormatter.formatCurrency(party.balance)} with ${activeCompany.firmName}. Kindly clear at your earliest convenience. Thank you!"
+        com.digitalchopda.app.core.document.UniversalShareEngine.shareTextMessage(
+            context = context,
+            message = text,
+            recipientPhone = party.phone,
+            chooserTitle = "Share Ledger Reminder with ${party.name}",
+            preferWhatsApp = true
+        )
     }
 
     // Filter parties
@@ -266,32 +256,8 @@ fun PartyScreen(
                         isOnline = isOnline,
                         isSyncing = isSyncingOutbox || isSyncing,
                         onSyncClick = { triggerSync() },
-                        modifier = Modifier.padding(end = 6.dp)
+                        modifier = Modifier.padding(end = 12.dp)
                     )
-                    IconButton(
-                        onClick = { triggerSync() },
-                        modifier = Modifier
-                            .padding(end = 6.dp)
-                            .size(38.dp)
-                            .clip(CircleShape)
-                            .background(ElevatedSlate)
-                            .border(1.dp, BorderStrokeDark, CircleShape)
-                    ) {
-                        if (isSyncing) {
-                            CircularProgressIndicator(
-                                color = BrandPrimaryBlue,
-                                strokeWidth = 2.dp,
-                                modifier = Modifier.size(18.dp)
-                            )
-                        } else {
-                            Icon(
-                                Icons.Default.Refresh,
-                                contentDescription = "Sync Contacts",
-                                tint = BrandPrimaryBlue,
-                                modifier = Modifier.size(18.dp)
-                            )
-                        }
-                    }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MidnightCardSurface
@@ -410,21 +376,16 @@ fun PartyScreen(
                 }
             } else {
                 LazyColumn(
+                    state = listState,
                     modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                    contentPadding = PaddingValues(bottom = 16.dp)
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                    contentPadding = PaddingValues(bottom = 88.dp)
                 ) {
                     items(filteredParties, key = { it.id }) { party ->
                         PartyCardItem(
                             party = party,
                             onClick = {
                                 onNavigateToPartyDetail(party.id, 0)
-                            },
-                            onWhatsAppClick = {
-                                launchWhatsAppReminder(party)
-                            },
-                            onPaymentClick = {
-                                paymentDialogParty = party
                             }
                         )
                     }
@@ -497,18 +458,18 @@ fun PartyCardItem(
     Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(14.dp))
-            .border(1.dp, BorderStrokeDark, RoundedCornerShape(14.dp))
+            .clip(RoundedCornerShape(16.dp))
+            .border(1.dp, BorderStrokeDark, RoundedCornerShape(16.dp))
             .bouncyClick { onClick() },
         color = MidnightCardSurface
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(14.dp),
+                .padding(horizontal = 16.dp, vertical = 14.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Avatar Circle
+            // Avatar Circle with dynamic color & initials
             Box(
                 modifier = Modifier
                     .size(44.dp)
@@ -520,13 +481,13 @@ fun PartyCardItem(
                     text = initials,
                     color = avatarText,
                     fontSize = 15.sp,
-                    fontWeight = FontWeight.Black
+                    fontWeight = FontWeight.ExtraBold
                 )
             }
 
-            Spacer(modifier = Modifier.width(12.dp))
+            Spacer(modifier = Modifier.width(14.dp))
 
-            // Details
+            // Details Column with generous typography & metadata spacing
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = party.name,
@@ -534,136 +495,101 @@ fun PartyCardItem(
                     fontSize = 15.sp,
                     fontWeight = FontWeight.Bold,
                     maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
+                    modifier = Modifier.basicMarquee(iterations = Int.MAX_VALUE)
                 )
 
-                Spacer(modifier = Modifier.height(3.dp))
+                Spacer(modifier = Modifier.height(4.dp))
 
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    Text(
-                        text = party.phone,
-                        color = TextSubtle,
-                        fontSize = 12.sp,
-                        maxLines = 1
-                    )
-                    val cleanCity = party.city.trim().trimEnd(',', ' ')
-                    if (cleanCity.isNotBlank()) {
+                    if (party.phone.isNotBlank()) {
                         Text(
-                            text = "• $cleanCity",
-                            color = TextSubtle,
+                            text = party.phone,
+                            color = TextMuted,
                             fontSize = 12.sp,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
+                            maxLines = 1
                         )
                     }
-                    val isSupplier = party.partyType.equals("supplier", ignoreCase = true)
-                    val tagText = party.partyTag.ifBlank { if (isSupplier) "Supplier" else "Wholesale" }
-                    Text(
-                        text = "•",
-                        color = TextSubtle,
-                        fontSize = 12.sp
-                    )
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(4.dp))
-                            .background(if (isSupplier) Color(0xFFFEF3C7) else BrandAccentSoft)
-                            .border(0.8.dp, if (isSupplier) Color(0xFFFDE68A) else Color(0xFFBFDBFE), RoundedCornerShape(4.dp))
-                            .padding(horizontal = 5.dp, vertical = 1.dp)
-                    ) {
+
+                    val cleanCity = party.city.trim().trimEnd(',', ' ')
+                    if (cleanCity.isNotBlank()) {
+                        if (party.phone.isNotBlank()) {
+                            Text(
+                                text = "•",
+                                color = TextSubtle,
+                                fontSize = 11.sp
+                            )
+                        }
                         Text(
-                            text = tagText,
-                            color = if (isSupplier) Color(0xFF92400E) else BrandPrimaryBlue,
-                            fontSize = 9.5.sp,
-                            fontWeight = FontWeight.Bold
+                            text = cleanCity,
+                            color = TextMuted,
+                            fontSize = 12.sp,
+                            maxLines = 1,
+                            modifier = Modifier
+                                .weight(1f, fill = false)
+                                .basicMarquee(iterations = Int.MAX_VALUE)
                         )
+                    }
+
+                    val isSupplier = party.partyType.equals("supplier", ignoreCase = true)
+                    val tagText = party.partyTag.ifBlank { if (isSupplier) "Supplier" else "Customer" }
+                    if (tagText.isNotBlank()) {
+                        if (party.phone.isNotBlank() || cleanCity.isNotBlank()) {
+                            Text(
+                                text = "•",
+                                color = TextSubtle,
+                                fontSize = 11.sp
+                            )
+                        }
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(4.dp))
+                                .background(if (isSupplier) Color(0xFFFEF3C7) else BrandAccentSoft)
+                                .border(0.8.dp, if (isSupplier) Color(0xFFFDE68A) else Color(0xFFBFDBFE), RoundedCornerShape(4.dp))
+                                .padding(horizontal = 6.dp, vertical = 1.5.dp)
+                        ) {
+                            Text(
+                                text = tagText,
+                                color = if (isSupplier) Color(0xFF92400E) else BrandPrimaryBlue,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
                     }
                 }
             }
 
-            Spacer(modifier = Modifier.width(8.dp))
+            Spacer(modifier = Modifier.width(12.dp))
 
-            // Outstanding Balance & Quick Velocity Actions
-            Column(horizontalAlignment = Alignment.End) {
-                val bal = party.balance
-                val (balColor, balLabel) = when {
-                    bal > 0.01 -> EmeraldJama to "You'll Get"
-                    bal < -0.01 -> RubyUdhar to "You'll Give"
-                    else -> TextSubtle to "Settled"
-                }
+            // Pure Balance Hero: Red for Payable, Green for Receivable, Slate for Settled
+            val bal = party.balance
+            val balColor = when {
+                bal > 0.01 -> EmeraldJama
+                bal < -0.01 -> RubyUdhar
+                else -> TextSubtle
+            }
 
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
                 Text(
                     text = CurrencyFormatter.formatCurrency(abs(bal)),
                     color = balColor,
-                    fontSize = 15.sp,
-                    fontWeight = FontWeight.Black,
-                    textAlign = TextAlign.End
-                )
-                Text(
-                    text = balLabel,
-                    color = balColor.copy(alpha = 0.85f),
-                    fontSize = 10.sp,
-                    fontWeight = FontWeight.Medium,
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Bold,
                     textAlign = TextAlign.End
                 )
 
-                if ((onWhatsAppClick != null && party.phone.isNotBlank()) || (onPaymentClick != null && abs(bal) > 0.01)) {
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        if (onWhatsAppClick != null && party.phone.isNotBlank()) {
-                            Box(
-                                modifier = Modifier
-                                    .size(24.dp)
-                                    .clip(CircleShape)
-                                    .background(Color(0xFF25D366).copy(alpha = 0.15f))
-                                    .border(1.dp, Color(0xFF25D366).copy(alpha = 0.45f), CircleShape)
-                                    .clickable { onWhatsAppClick() },
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Chat,
-                                    contentDescription = "WhatsApp Reminder",
-                                    tint = Color(0xFF25D366),
-                                    modifier = Modifier.size(12.dp)
-                                )
-                            }
-                        }
-
-                        if (onPaymentClick != null && abs(bal) > 0.01) {
-                            Box(
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(6.dp))
-                                    .background(if (bal > 0) EmeraldJama.copy(alpha = 0.15f) else RubyUdhar.copy(alpha = 0.15f))
-                                    .border(1.dp, if (bal > 0) EmeraldJama.copy(alpha = 0.45f) else RubyUdhar.copy(alpha = 0.45f), RoundedCornerShape(6.dp))
-                                    .clickable { onPaymentClick() }
-                                    .padding(horizontal = 7.dp, vertical = 2.dp),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(
-                                    text = if (bal > 0) "Settle" else "Pay",
-                                    color = if (bal > 0) EmeraldJama else RubyUdhar,
-                                    fontSize = 10.sp,
-                                    fontWeight = FontWeight.Bold
-                                )
-                            }
-                        }
-                    }
-                }
+                Icon(
+                    Icons.AutoMirrored.Filled.ArrowForwardIos,
+                    contentDescription = "View Party",
+                    tint = TextSubtle.copy(alpha = 0.6f),
+                    modifier = Modifier.size(12.dp)
+                )
             }
-
-            Spacer(modifier = Modifier.width(8.dp))
-
-            Icon(
-                Icons.AutoMirrored.Filled.ArrowForwardIos,
-                contentDescription = "View Party",
-                tint = TextMuted,
-                modifier = Modifier.size(12.dp)
-            )
         }
     }
 }

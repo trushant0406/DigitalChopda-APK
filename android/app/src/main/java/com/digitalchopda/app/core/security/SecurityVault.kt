@@ -98,6 +98,7 @@ class TokenStorage(context: Context) {
         private const val KEY_SERVER_URL = "server_base_url"
         const val URL_LOCAL_ADB = "http://127.0.0.1:3000/api/"
         const val URL_CLOUD_PROD = "https://app.digitalchopda.in/api/"
+        const val URL_WIFI_LAN = "http://192.168.1.118:3000/api/"
         const val URL_OFFICE_WIFI = "http://10.74.4.212:3000/api/"
         const val URL_TAILSCALE_DEV = "http://100.99.250.0:3000/api/"
         const val URL_EMULATOR = "http://10.0.2.2:3000/api/"

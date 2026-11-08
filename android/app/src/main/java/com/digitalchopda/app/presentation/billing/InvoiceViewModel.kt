@@ -254,6 +254,31 @@ class InvoiceViewModel(
         addLineItem(lineItem)
     }
 
+    fun addProductFromCatalog(product: Product, quantity: Int = 1): LineItem {
+        val existingIndex = _lineItems.value.indexOfFirst {
+            it.itemId == product.id || it.title.equals(product.name, ignoreCase = true)
+        }
+        return if (existingIndex >= 0) {
+            val existing = _lineItems.value[existingIndex]
+            val updated = existing.copy(quantity = quantity)
+            val current = _lineItems.value.toMutableList()
+            current[existingIndex] = updated
+            _lineItems.value = current
+            updated
+        } else {
+            val lineItem = LineItem(
+                itemId = if (product.id > 0) product.id else System.currentTimeMillis(),
+                sku = product.hsnCode.orEmpty(),
+                title = product.name,
+                unitPrice = product.defaultPrice,
+                quantity = quantity,
+                gstRatePercent = product.gstRate
+            )
+            addLineItem(lineItem)
+            lineItem
+        }
+    }
+
     // Optimization 4: Barcode / QR Scan Hook
     fun addFromBarcode(scannedCode: String): Boolean {
         val trimmed = scannedCode.trim()

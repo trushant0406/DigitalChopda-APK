@@ -35,7 +35,7 @@ import java.util.concurrent.atomic.AtomicLong
 object InstantNetworkSyncMonitor {
 
     private const val TAG = "NetworkSyncMonitor"
-    private const val DEBOUNCE_MILLIS = 1200L
+    private const val DEBOUNCE_MILLIS = 300L
     private const val FOREGROUND_PULSE_INTERVAL_MS = 45_000L
 
     private val lastTriggerTime = AtomicLong(0L)

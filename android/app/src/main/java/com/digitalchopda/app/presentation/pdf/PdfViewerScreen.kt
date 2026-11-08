@@ -245,7 +245,7 @@ fun PdfViewerScreen(
                     val page = pdfRenderer.openPage(i)
                     val width = (page.width * 2.0f).toInt()
                     val height = (page.height * 2.0f).toInt()
-                    val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+                    val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.RGB_565)
                     page.render(bitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
                     page.close()
                     bitmaps.add(bitmap)
@@ -279,82 +279,28 @@ fun PdfViewerScreen(
 
     // ─── OPTION 2: SYSTEM MULTI-APP SHARE CHOOSER ───
     fun shareViaSystemChooser() {
-        try {
-            if (!file.exists()) {
-                Toast.makeText(context, "File does not exist", Toast.LENGTH_SHORT).show()
-                return
-            }
-            val contentUri = fileProviderUriBuilder(file)
-            val shareIntent = Intent(Intent.ACTION_SEND).apply {
-                type = "application/pdf"
-                putExtra(Intent.EXTRA_STREAM, contentUri)
-                putExtra(
-                    Intent.EXTRA_TEXT,
-                    "Hello $customerName,\nPlease find your document $invoiceNumber attached.\nThank you for your business!"
-                )
-                putExtra(Intent.EXTRA_SUBJECT, "Document $invoiceNumber")
-                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-            }
-            val chooser = Intent.createChooser(shareIntent, "Share Document $invoiceNumber")
-            context.startActivity(chooser)
-        } catch (e: Exception) {
-            Toast.makeText(context, "Sharing failed: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
-        }
+        com.digitalchopda.app.core.document.UniversalShareEngine.shareDocument(
+            context = context,
+            file = file,
+            mimeType = "application/pdf",
+            caption = "Hello $customerName,\nPlease find your document $invoiceNumber attached.\nThank you for your business!",
+            recipientPhone = customerPhone,
+            chooserTitle = "Share Document $invoiceNumber",
+            preferWhatsApp = false
+        )
     }
 
     // ─── OPTION 1: DISPATCH TO PARTY DIRECTLY VIA LOGGED-IN WHATSAPP ───
     fun sendToWhatsAppParty() {
-        val cleanPhone = customerPhone.replace(Regex("[^0-9]"), "")
-        val formattedPhone = if (cleanPhone.length == 10) "91$cleanPhone" else cleanPhone
-        val caption = "Hello $customerName,\nPlease find your document $invoiceNumber attached.\nThank you for your business!"
-
-        try {
-            if (!file.exists()) {
-                Toast.makeText(context, "File does not exist", Toast.LENGTH_SHORT).show()
-                return
-            }
-            val contentUri = fileProviderUriBuilder(file)
-
-            // Direct WhatsApp Send Intent
-            val sendIntent = Intent(Intent.ACTION_SEND).apply {
-                type = "application/pdf"
-                putExtra(Intent.EXTRA_STREAM, contentUri)
-                putExtra(Intent.EXTRA_TEXT, caption)
-                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                if (formattedPhone.isNotBlank()) {
-                    putExtra("jid", "$formattedPhone@s.whatsapp.net")
-                }
-                setPackage("com.whatsapp")
-            }
-            context.startActivity(sendIntent)
-        } catch (_: Exception) {
-            // Fallback to WhatsApp Business
-            try {
-                val contentUri = fileProviderUriBuilder(file)
-                val sendIntent = Intent(Intent.ACTION_SEND).apply {
-                    type = "application/pdf"
-                    putExtra(Intent.EXTRA_STREAM, contentUri)
-                    putExtra(Intent.EXTRA_TEXT, caption)
-                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                    if (formattedPhone.isNotBlank()) {
-                        putExtra("jid", "$formattedPhone@s.whatsapp.net")
-                    }
-                    setPackage("com.whatsapp.w4b")
-                }
-                context.startActivity(sendIntent)
-            } catch (_: Exception) {
-                if (formattedPhone.isNotBlank()) {
-                    try {
-                        val waUrl = "https://api.whatsapp.com/send?phone=$formattedPhone&text=${Uri.encode(caption)}"
-                        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(waUrl)))
-                    } catch (_: Exception) {
-                        shareViaSystemChooser()
-                    }
-                } else {
-                    shareViaSystemChooser()
-                }
-            }
-        }
+        com.digitalchopda.app.core.document.UniversalShareEngine.shareDocument(
+            context = context,
+            file = file,
+            mimeType = "application/pdf",
+            caption = "Hello $customerName,\nPlease find your document $invoiceNumber attached.\nThank you for your business!",
+            recipientPhone = customerPhone,
+            chooserTitle = "Share Document $invoiceNumber",
+            preferWhatsApp = true
+        )
     }
 
     // ─── OPTION 1B: OPTIONAL DISPATCH VIA COMPANY HEADLESS WHATSAPP ───

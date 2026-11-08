@@ -24,6 +24,10 @@ import com.digitalchopda.app.data.local.entity.SupplierEntity
 import com.digitalchopda.app.data.local.entity.OutboxEntity
 import com.digitalchopda.app.data.local.entity.BatchEntity
 import com.digitalchopda.app.data.local.entity.DeliveryChallanEntity
+import com.digitalchopda.app.data.local.entity.PurchaseOrderEntity
+import com.digitalchopda.app.data.local.entity.PurchaseOrderItemEntity
+import com.digitalchopda.app.data.local.entity.DebitNoteEntity
+import com.digitalchopda.app.data.local.entity.DebitNoteItemEntity
 import kotlinx.coroutines.flow.Flow
 
 @Dao
@@ -422,6 +426,9 @@ interface ProductDao {
     @Query("SELECT * FROM products WHERE id = :id LIMIT 1")
     suspend fun getProductById(id: Long): ProductEntity?
 
+    @Query("SELECT * FROM products WHERE id = :id LIMIT 1")
+    fun observeProductById(id: Long): Flow<ProductEntity?>
+
     @Query("SELECT * FROM products WHERE companyId = :companyId AND name = :name LIMIT 1")
     suspend fun getProductByName(companyId: Long, name: String): ProductEntity?
 
@@ -580,6 +587,54 @@ interface DeliveryChallanDao {
 
     @Update
     suspend fun updateChallan(challan: DeliveryChallanEntity)
+}
+
+@Dao
+interface PurchaseOrderDao {
+    @Query("SELECT * FROM purchase_orders WHERE companyId = :companyId ORDER BY createdAt DESC")
+    fun getAllOrders(companyId: Long): Flow<List<PurchaseOrderEntity>>
+
+    @Query("SELECT * FROM purchase_orders WHERE id = :id")
+    suspend fun getOrderById(id: Long): PurchaseOrderEntity?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertOrder(order: PurchaseOrderEntity): Long
+
+    @Update
+    suspend fun updateOrder(order: PurchaseOrderEntity)
+
+    @Query("DELETE FROM purchase_orders WHERE id = :id")
+    suspend fun deleteOrder(id: Long)
+
+    @Query("SELECT * FROM purchase_order_items WHERE purchaseOrderId = :orderId")
+    suspend fun getOrderItems(orderId: Long): List<PurchaseOrderItemEntity>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertOrderItems(items: List<PurchaseOrderItemEntity>)
+}
+
+@Dao
+interface DebitNoteDao {
+    @Query("SELECT * FROM debit_notes WHERE companyId = :companyId ORDER BY createdAt DESC")
+    fun getAllDebitNotes(companyId: Long): Flow<List<DebitNoteEntity>>
+
+    @Query("SELECT * FROM debit_notes WHERE id = :id")
+    suspend fun getDebitNoteById(id: Long): DebitNoteEntity?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertDebitNote(debitNote: DebitNoteEntity): Long
+
+    @Update
+    suspend fun updateDebitNote(debitNote: DebitNoteEntity)
+
+    @Query("DELETE FROM debit_notes WHERE id = :id")
+    suspend fun deleteDebitNote(id: Long)
+
+    @Query("SELECT * FROM debit_note_items WHERE debitNoteId = :debitNoteId")
+    suspend fun getDebitNoteItems(debitNoteId: Long): List<DebitNoteItemEntity>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertDebitNoteItems(items: List<DebitNoteItemEntity>)
 }
 
 

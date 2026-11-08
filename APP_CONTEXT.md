@@ -23,22 +23,23 @@ The application uses a 5-tab persistent bottom dock (`FloatingCapsuleDock` in `M
 
 ```
 ┌──────────────┬──────────────┬──────────────┬──────────────┬──────────────┐
-│ 0: Chopra    │ 1: Party     │ 2: Billing   │ 3: Products  │ 4: Settings  │
+│ 0: Dashboard │ 1: Party     │ 2: Billing   │ 3: Products  │ 4: Settings  │
 │ [14%, 96%]   │ [31%, 96%]   │ [48%, 96%]   │ [67%, 96%]   │ [86%, 96%]   │
 └──────────────┴──────────────┴──────────────┴──────────────┴──────────────┘
 ```
 
 | Tab Index | Route (`Screen.*`) | Screen Title / Labels | Screen Bounds & Coordinates |
 | :--- | :--- | :--- | :--- |
-| **0** | `Screen.Dashboard` | `चोपड़ा` (Chopda / Dashboard) | `point: "14%,96%"` (Center: `185, 2864`) |
-| **1** | `Screen.Party` | `पार्टी` (Parties / Khata Ledger) | `point: "31%,96%"` (Center: `416, 2864`) |
-| **2** | `Screen.Billing` | `बिलिंग` (Invoices, Quotes, Returns)| `point: "48%,96%"` (Center: `650, 2864`) |
-| **3** | `Screen.Products` | `प्रोडक्ट्स` (Stock Catalog) | `point: "67%,96%"` (Center: `903, 2864`) |
-| **4** | `Screen.GstHub` / Settings | `सेटिंग्स` (Settings & GST Hub) | `point: "86%,96%"` (Center: `1156, 2864`)|
+| **0** | `Screen.Dashboard` | `ડેશબોર્ડ` / `डैशबोर्ड` / `Dashboard` (Executive Bento Grid) | `point: "14%,96%"` (Center: `185, 2864`) |
+| **1** | `Screen.Party` | `પાર્ટી` / `पार्टी` (Parties / Khata Ledger) | `point: "31%,96%"` (Center: `416, 2864`) |
+| **2** | `Screen.Billing` | `બિલિંગ` / `बिलिंग` (Invoices, Quotes, Returns)| `point: "48%,96%"` (Center: `650, 2864`) |
+| **3** | `Screen.Products` | `પ્રોડક્ટ્સ` / `प्रोडक्ट्स` (Stock Catalog) | `point: "67%,96%"` (Center: `903, 2864`) |
+| **4** | `Screen.GstHub` / Settings | `સેટિંગ્સ` / `सेटिंग्स` (Settings & GST Hub) | `point: "86%,96%"` (Center: `1156, 2864`)|
 
 ### Full-Screen Sub-Destinations:
 * `Screen.PartyDetail`: `party_detail/{partyId}?initialTab={initialTab}` (Party 360° Profile, Passbook, Invoices)
-* `Screen.CreateInvoice`: `create_invoice?mode={mode}&editId={editId}` (POS Billing, Quotations, Barcode Scanner)
+* `Screen.ProductDetail`: `product_detail/{productId}` (Product 360° Stock Cockpit, Who Purchased, Inward Receipts, Specs)
+* `Screen.CreateInvoice`: `create_invoice?mode={mode}&editId={editId}&partyId={partyId}&partyName={partyName}&partyPhone={partyPhone}&productId={productId}&productName={productName}` (POS Billing, Quotations, Barcode Scanner, Auto-add catalog product with quantity prompt)
 * `Screen.DocumentDetail`: `document_detail/{docType}/{docId}` (Invoice, Quote, Credit Note details)
 * `Screen.PdfViewer`: `pdf_viewer?filePath={filePath}&...` (In-app PDF viewer with WhatsApp / Print sharing)
 * `Screen.Leads`: `leads` (CRM Pipeline & Follow-up Scheduler)
@@ -122,6 +123,7 @@ DEVICE=emulator-5554 ./run_e2e_tests.sh
 * **Design System (`core/designsystem/`)**:
   * `Color.kt`: Defines brand color palettes (`ChopdaRed`, `ChopdaGold`, `CreditGreen`, `DebitRed`, `SurfaceDark`, `CanvasSlate`).
   * `Components.kt`: Reusable composables including `MetricSummaryCard`, `FloatingCapsuleDock`, custom buttons, badges, and ledger rows.
+  * `SubscriptionComponents.kt`: Interactive SaaS subscription widgets (`SubscriptionStatusCard`, `SubscriptionPlansDialog`, `SubscriptionUpgradeSheet`) with 3-tier matrix (Starter Pro, Growth Pro, Enterprise), monthly/annual toggle, dynamic NPCI UPI QR generator, and 1-tap WhatsApp support payment activation.
   * `Theme.kt`: Material 3 `DigitalChopdaTheme` enforcing consistent typography, shapes, and color schemes.
   * `Type.kt`: Compose typography configuration optimized for financial numerals and Indian currency formats.
 * **Document Management (`core/document/`)**:
@@ -202,7 +204,7 @@ DEVICE=emulator-5554 ./run_e2e_tests.sh
   * `AddEditProductDialog.kt`: Dialog for adding or updating products, HSN codes, and pricing.
   * `AdjustStockDialog.kt`: Dialog for recording stock additions/reductions with audit reasons.
 * **Settings (`presentation/settings/`)**:
-  * `SettingsScreen.kt`: Application settings, language selection, backup, and security configurations.
+  * `SettingsScreen.kt`: Application settings, language selection, backup, and security configurations. Houses `SubscriptionStatusCard` directly below company header with tier badges, validity fuel gauge, and plan modal trigger. Features an expandable `AnimatedVisibility` Accordion Dropdown for "My Registered Companies" (`${displayCompanies.size}`), collapsing cluttered multi-firm lists into a sleek single card with "+ Add Firm" and instant firm switching.
   * `CompanySwitchSheet.kt`: Bottom sheet allowing merchants to instantly switch between active business firms.
 * **Splash (`presentation/splash/`)**:
   * `SplashScreen.kt`: Adaptive Velocity startup (<380ms transition into active merchant session, ~724ms cold launch).
@@ -211,10 +213,16 @@ DEVICE=emulator-5554 ./run_e2e_tests.sh
 * **`FormatUtils.kt`**: Helper functions for Indian currency formatting (`₹ 1,23,456.00`), phone number sanitation, and date-time formatting.
 
 ### 7.7 Network & API Layer (`core/network/`)
-* **`DigitalChopdaApiService.kt`**: 51 Retrofit REST endpoints with full backward/forward compatibility.
+* **`DigitalChopdaApiService.kt`**: 53 Retrofit REST endpoints with full backward/forward compatibility.
   * Payment deletion: `@HTTP(method = "DELETE", path = "credit/payments/{id}", hasBody = true)` with optional void reason.
   * Payment pre-deletion impact analysis: `@GET("credit/payments/{id}/impact")`.
   * Multi-invoice Auto-FIFO settlement and idempotency deduplication guards.
+  * **Unified Fast Sync**: `@POST("sync/fast-sync")` and `@GET("sync/fast-sync")` pulling all 6 entity sets (`contacts`, `products`, `orders`, `purchases`, `quotations`, `credit_notes`) in 1 single HTTP roundtrip (<150ms).
+
+### 7.8 Zero-Delay Background Architecture & Instant Reconnect
+* **`InstantNetworkSyncMonitor.kt`**: Reacts to network capability transitions with 300ms debounce. Triggers `InvoiceSyncWorker.enqueueImmediateSync`.
+* **`InvoiceSyncWorker.kt`**: Uses `ExistingWorkPolicy.REPLACE` so reconnect work is never dropped by WorkManager. Flushes local outboxes first in parent-first dependency order, then executes single-roundtrip FastSync pull.
+* **Non-Blocking Tab Navigation**: `PartyScreen`, `ProductsScreen`, `BillingHubScreen`, and `DashboardViewModel` stream from local Room SQLite Flows instantly (0ms) without triggering blocking network calls or UI spinners on tab switch.
 
 ---
 
@@ -239,5 +247,19 @@ Whenever planning, coding, or modifying any feature in DigitalChopda Android:
 - Update Section 3 (Database Architecture) whenever Room entities or DAOs are altered.
 
 ### 8.3 Backend & Cloud Sync Parity
-- Keep client DTOs in `core/network/ApiModels.kt` 100% aligned with the DigitalChopda Web/Backend (44 PostgreSQL migrations, `/api/v1/sync` batch delta synchronizer).
+- Keep client DTOs in `core/network/ApiModels.kt` 100% aligned with the DigitalChopda Web/Backend (55 PostgreSQL migrations, `/api/sync/fast-sync` unified batch delta synchronizer).
 - Enforce UUID idempotency keys on every offline transaction.
+
+### 8.4 Candidate Host Priority Order (`AuthHeaderInterceptor.kt`)
+1. `100.99.250.0` (Tailscale private developer mesh)
+2. `192.168.1.118` (Wi-Fi LAN Host IP)
+3. `127.0.0.1` (Zero-latency reverse ADB loopback via `adb reverse tcp:3000 tcp:3000`)
+4. `10.74.4.212` (Office Wi-Fi fallback)
+5. `10.0.2.2` (Android Emulator loopback)
+
+### 8.5 Tri-Platform API Contract & Force Update Protocol
+1. **Mandatory Version Handshake**: Call `GET app/version-check?platform=android&version=${BuildConfig.VERSION_NAME}&build=${BuildConfig.VERSION_CODE}` on startup via `DigitalChopdaApiService`.
+2. **DTO & Tolerant Reader**: `ApiAppVersionResponse` in `core/network/ApiModels.kt` provides default values for all properties (`currentVersion`, `currentBuild`, `minSupportedBuild`, `forceUpdate`, `updateUrl`, `releaseNotes`).
+3. **Hard Gate UI**: `ForceUpdateDialog.kt` in `core/designsystem/` blocks app interactions if `forceUpdate == true` (client build < `minSupportedBuild`), preventing data corruption from outdated client schemas.
+4. **Contract Verification**: Run `node backend/scripts/test_cross_platform_contract.js` in the backend workspace to guarantee 100% schema alignment across Web, Backend, and APK before building release artifacts.
+

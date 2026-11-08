@@ -298,10 +298,12 @@ fun ChopdaModalDialog(
                     .padding(horizontal = 16.dp),
                 contentAlignment = Alignment.Center
             ) {
+                val configuration = androidx.compose.ui.platform.LocalConfiguration.current
+                val maxDialogHeight = configuration.screenHeightDp.dp * maxHeightFraction
                 Surface(
                     modifier = Modifier
                         .fillMaxWidth(widthFraction)
-                        .heightIn(max = 620.dp)
+                        .heightIn(max = maxDialogHeight)
                         .shadow(12.dp, RoundedCornerShape(20.dp), spotColor = Color(0x30000000))
                         .clip(RoundedCornerShape(20.dp))
                         .border(1.dp, BorderStrokeDark, RoundedCornerShape(20.dp)),
@@ -847,7 +849,7 @@ fun CompanySwitcherHeader(
     ownerName: String,
     unreadNotifications: Int = 3,
     languageName: String? = null,
-    statusPillText: String? = "● Offline Base Mode (Local)",
+    statusPillText: String? = null,
     onLanguageClick: (() -> Unit)? = null,
     onCompanyClick: () -> Unit,
     onNotificationClick: () -> Unit,
@@ -907,9 +909,18 @@ fun CompanySwitcherHeader(
                     )
                 }
                 if (statusPillText != null) {
-                    val isPending = statusPillText.contains("Pending", ignoreCase = true)
-                    val pillBg = if (isPending) WarningAmberBg else EmeraldJamaBg
-                    val pillColor = if (isPending) WarningAmber else EmeraldJama
+                    val isPending = statusPillText.contains("Pending", ignoreCase = true) || statusPillText.contains("Syncing", ignoreCase = true)
+                    val isOffline = statusPillText.contains("Offline", ignoreCase = true)
+                    val pillBg = when {
+                        isPending -> WarningAmberBg
+                        isOffline -> Color(0xFFF1F5F9)
+                        else -> EmeraldJamaBg
+                    }
+                    val pillColor = when {
+                        isPending -> WarningAmber
+                        isOffline -> Color(0xFF64748B)
+                        else -> EmeraldJama
+                    }
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier

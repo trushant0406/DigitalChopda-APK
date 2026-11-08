@@ -52,6 +52,7 @@ fun MainContainerScreen(
     initialTab: Int = 0,
     onNavigateToLeads: () -> Unit,
     onNavigateToPartyDetail: (partyId: Long, initialTab: Int) -> Unit = { _, _ -> },
+    onNavigateToProductDetail: (productId: Long) -> Unit = {},
     onNavigateToCreateInvoice: (mode: String, editId: Long) -> Unit = { _, _ -> },
     onNavigateToDocumentDetail: (docType: String, docId: Long) -> Unit = { _, _ -> },
     onNavigateToPdfViewer: (filePath: String, invoiceId: Long, customerName: String, customerPhone: String, invoiceNumber: String) -> Unit,
@@ -152,7 +153,8 @@ fun MainContainerScreen(
                         3 -> ProductsScreen(
                             productRepository = app.productRepository,
                             companyRepository = app.companyRepository,
-                            onNavigateBack = { currentTab = 0 }
+                            onNavigateBack = { currentTab = 0 },
+                            onNavigateToProductDetail = onNavigateToProductDetail
                         )
                         4 -> SettingsScreen(
                             companyRepository = app.companyRepository,

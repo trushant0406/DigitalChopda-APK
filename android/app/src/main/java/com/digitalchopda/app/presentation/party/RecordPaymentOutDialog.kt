@@ -40,6 +40,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -383,9 +384,9 @@ fun RecordPaymentOutDialog(
                         colors = ButtonDefaults.buttonColors(containerColor = BrandPrimaryBlue)
                     ) {
                         if (isSaving) {
-                            CircularProgressIndicator(color = TextWhite, strokeWidth = 2.dp, modifier = Modifier.size(18.dp))
+                            CircularProgressIndicator(color = Color.White, strokeWidth = 2.dp, modifier = Modifier.size(18.dp))
                         } else {
-                            Text("Record Payment", fontWeight = FontWeight.Bold, color = TextWhite)
+                            Text("Record Payment", fontWeight = FontWeight.Bold, color = Color.White)
                         }
                     }
                 }

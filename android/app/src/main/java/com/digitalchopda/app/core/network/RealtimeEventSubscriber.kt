@@ -33,7 +33,7 @@ object RealtimeEventSubscriber {
                 .retryOnConnectionFailure(true)
                 .build()
 
-            val candidateHosts = listOf("100.99.250.0", "127.0.0.1", "10.74.4.212", "10.0.2.2")
+            val candidateHosts = listOf("100.99.250.0", "192.168.1.118", "127.0.0.1", "10.74.4.212", "10.0.2.2")
 
             while (isActive) {
                 var connected = false

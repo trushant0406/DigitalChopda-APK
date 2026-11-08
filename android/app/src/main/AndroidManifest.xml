@@ -10,6 +10,32 @@
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-permission android:name="android.permission.READ_CONTACTS" />
 
+    <!-- Android 11+ (API 30+) Package Visibility for Universal Dispatch & WhatsApp -->
+    <queries>
+        <package android:name="com.whatsapp" />
+        <package android:name="com.whatsapp.w4b" />
+        <intent>
+            <action android:name="android.intent.action.SEND" />
+            <data android:mimeType="application/pdf" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.SEND" />
+            <data android:mimeType="text/plain" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.SEND" />
+            <data android:mimeType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="https" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="tel" />
+        </intent>
+    </queries>
+
     <application
         android:name="com.digitalchopda.app.DigitalChopdaApplication"
         android:allowBackup="true"
@@ -44,7 +70,7 @@
         </provider>
 
         <receiver
-            android:name="com.digitalchopda.app.core.receiver.TestE2ESyncReceiver"
+            android:name=".core.receiver.TestE2ESyncReceiver"
             android:exported="true">
             <intent-filter>
                 <action android:name="com.digitalchopda.app.ACTION_CREATE_TEST_PARTY" />

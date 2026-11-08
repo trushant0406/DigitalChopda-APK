@@ -1,7 +1,9 @@
 package com.digitalchopda.app.presentation.products
 
 import android.widget.Toast
+import com.digitalchopda.app.core.network.InstantNetworkSyncMonitor
 import androidx.compose.foundation.background
+import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -19,16 +21,21 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowForwardIos
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Chat
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Inventory2
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.ShoppingBag
+import com.digitalchopda.app.core.designsystem.WhatsAppGreen
+import com.digitalchopda.app.core.document.UniversalShareEngine
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -62,6 +69,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -105,33 +113,36 @@ import kotlinx.coroutines.launch
 fun ProductsScreen(
     productRepository: ProductRepository,
     companyRepository: CompanyRepository,
-    onNavigateBack: () -> Unit
+    onNavigateBack: () -> Unit,
+    onNavigateToProductDetail: (Long) -> Unit = {}
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val strings = LocalAppStrings.current
 
-    var activeCompany by remember {
-        mutableStateOf(
-            Company(
-                id = 1L,
-                firmName = "Sharma Traders",
-                ownerName = "Amit Sharma",
-                gstin = "24AAACS1429B1Z8",
-                phone = "+91 98765 43210",
-                address = "Surat, Gujarat",
-                isActive = true
-            )
+    val activeCompanyFlowVal by companyRepository.getActiveCompanyFlow().collectAsState(initial = null)
+    val activeCompany = activeCompanyFlowVal ?: remember {
+        Company(
+            id = 1L,
+            firmName = "My Business",
+            ownerName = "Admin User",
+            isActive = true
         )
     }
 
-    LaunchedEffect(Unit) {
-        activeCompany = companyRepository.getActiveCompany()
+    var isSyncing by remember { mutableStateOf(false) }
+    val isSyncingOutbox by InstantNetworkSyncMonitor.isSyncing.collectAsState()
+
+    val listState = rememberLazyListState()
+    val focusManager = LocalFocusManager.current
+    LaunchedEffect(listState.isScrollInProgress) {
+        if (listState.isScrollInProgress) {
+            focusManager.clearFocus()
+        }
     }
 
-    var isSyncing by remember { mutableStateOf(false) }
-
     fun triggerSync() {
+        InstantNetworkSyncMonitor.triggerManualSync(context)
         scope.launch {
             isSyncing = true
             val res = productRepository.syncProductsWithServer(activeCompany.id)
@@ -139,12 +150,6 @@ fun ProductsScreen(
             if (res.isSuccess) {
                 Toast.makeText(context, "✓ Products synced with server (${res.getOrNull()} items)", Toast.LENGTH_SHORT).show()
             }
-        }
-    }
-
-    LaunchedEffect(activeCompany.id) {
-        if (activeCompany.id > 0) {
-            triggerSync()
         }
     }
 
@@ -208,25 +213,6 @@ fun ProductsScreen(
                     }
                 },
                 actions = {
-                    IconButton(
-                        onClick = { triggerSync() },
-                        modifier = Modifier.padding(end = 4.dp)
-                    ) {
-                        if (isSyncing) {
-                            CircularProgressIndicator(
-                                color = BrandPrimaryBlue,
-                                strokeWidth = 2.dp,
-                                modifier = Modifier.size(18.dp)
-                            )
-                        } else {
-                            Icon(
-                                imageVector = Icons.Default.Refresh,
-                                contentDescription = "Sync Products",
-                                tint = DarkNavy
-                            )
-                        }
-                    }
-
                     // Total Products Count Badge
                     Row(
                         modifier = Modifier
@@ -289,6 +275,7 @@ fun ProductsScreen(
         }
     ) { paddingValues ->
         LazyColumn(
+            state = listState,
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues),
@@ -594,15 +581,17 @@ fun ProductsScreen(
                 key = { it.id }
             ) { product ->
                 ChopdaCard(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .bouncyClick { onNavigateToProductDetail(product.id) },
                     cornerRadius = 14.dp,
                     borderColor = BorderStrokeDark,
                     backgroundColor = MidnightCardSurface,
-                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 10.dp)
+                    contentPadding = PaddingValues(horizontal = 14.dp, vertical = 12.dp)
                 ) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.Top
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
                         // Product Icon / Initial Avatar
                         val avatarColors = remember(product.name) {
@@ -616,10 +605,10 @@ fun ProductsScreen(
                         }
                         Box(
                             modifier = Modifier
-                                .size(40.dp)
-                                .clip(RoundedCornerShape(10.dp))
+                                .size(42.dp)
+                                .clip(RoundedCornerShape(12.dp))
                                 .background(avatarColors.first)
-                                .border(1.dp, avatarColors.second.copy(alpha = 0.25f), RoundedCornerShape(10.dp)),
+                                .border(1.dp, avatarColors.second.copy(alpha = 0.25f), RoundedCornerShape(12.dp)),
                             contentAlignment = Alignment.Center
                         ) {
                             Text(
@@ -627,12 +616,12 @@ fun ProductsScreen(
                                 style = MaterialTheme.typography.titleMedium.copy(
                                     fontWeight = FontWeight.Black,
                                     color = avatarColors.second,
-                                    fontSize = 13.sp
+                                    fontSize = 13.5.sp
                                 )
                             )
                         }
 
-                        Spacer(modifier = Modifier.width(10.dp))
+                        Spacer(modifier = Modifier.width(12.dp))
 
                         // Product Title, Price & Responsive Metadata
                         Column(modifier = Modifier.weight(1f)) {
@@ -651,7 +640,7 @@ fun ProductsScreen(
                                     ),
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis,
-                                    modifier = Modifier.weight(1f, fill = false)
+                                    modifier = Modifier.weight(1f)
                                 )
                                 Spacer(modifier = Modifier.width(8.dp))
                                 Text(
@@ -667,155 +656,26 @@ fun ProductsScreen(
 
                             Spacer(modifier = Modifier.height(4.dp))
 
-                            // Row 2: Badges (GST, Stock, HSN) and Unit Pricing
+                            // Row 2: Item Code & Unit + Navigation Indicator
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(5.dp),
-                                    modifier = Modifier.weight(1f, fill = false)
-                                ) {
-                                    if (!product.hsnCode.isNullOrBlank()) {
-                                        StatusPill(
-                                            text = "HSN: ${product.hsnCode}",
-                                            textColor = BrandPrimaryBlue,
-                                            backgroundColor = BrandAccentSoft
-                                        )
-                                    }
-                                    StatusPill(
-                                        text = "${product.gstRate.toInt()}% GST",
-                                        textColor = if (product.gstRate >= 18.0) RubyUdhar else EmeraldJama,
-                                        backgroundColor = if (product.gstRate >= 18.0) RubyUdhar.copy(alpha = 0.12f) else EmeraldJama.copy(alpha = 0.12f)
-                                    )
-                                    if (product.stockQuantity <= 0.0) {
-                                        StatusPill(
-                                            text = "Out of Stock",
-                                            textColor = RubyUdhar,
-                                            backgroundColor = RubyUdhar.copy(alpha = 0.12f)
-                                        )
-                                    } else if (product.stockQuantity <= product.minStockAlert) {
-                                        StatusPill(
-                                            text = "Low: ${product.stockQuantity.toInt()}",
-                                            textColor = Color(0xFFD97706),
-                                            backgroundColor = Color(0xFFFEF3C7)
-                                        )
-                                    } else {
-                                        StatusPill(
-                                            text = "${product.stockQuantity.toInt()} in stock",
-                                            textColor = EmeraldJama,
-                                            backgroundColor = EmeraldJama.copy(alpha = 0.12f)
-                                        )
-                                    }
-                                }
-                                Spacer(modifier = Modifier.width(6.dp))
                                 Text(
-                                    text = "per ${product.unit.lowercase()}",
-                                    style = MaterialTheme.typography.labelSmall.copy(
+                                    text = "Item Code: #${product.id} • per ${product.unit.lowercase()}",
+                                    style = MaterialTheme.typography.bodySmall.copy(
                                         color = TextSubtle,
-                                        fontSize = 10.sp
+                                        fontSize = 12.sp
                                     ),
                                     maxLines = 1
                                 )
-                            }
-                        }
-                    }
 
-                    Spacer(modifier = Modifier.height(8.dp))
-                    HorizontalDivider(color = BorderStrokeDark.copy(alpha = 0.7f), thickness = 1.dp)
-                    Spacer(modifier = Modifier.height(6.dp))
-
-                    // Actions Row: Item Code & Tactile Pill Buttons
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = "Item Code: #${product.id}",
-                            style = MaterialTheme.typography.bodySmall.copy(
-                                color = TextSubtle,
-                                fontSize = 11.sp
-                            )
-                        )
-
-                        Row(
-                            horizontalArrangement = Arrangement.spacedBy(6.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            // Adjust Stock Pill Button
-                            Row(
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(8.dp))
-                                    .background(EmeraldJama.copy(alpha = 0.12f))
-                                    .border(1.dp, EmeraldJama.copy(alpha = 0.3f), RoundedCornerShape(8.dp))
-                                    .clickable { productToAdjustStock = product }
-                                    .padding(horizontal = 8.dp, vertical = 4.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text(
-                                    text = "📦 Stock",
-                                    style = MaterialTheme.typography.labelMedium.copy(
-                                        color = EmeraldJama,
-                                        fontWeight = FontWeight.Bold,
-                                        fontSize = 11.sp
-                                    )
-                                )
-                            }
-
-                            // Edit Pill Button
-                            Row(
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(8.dp))
-                                    .background(BrandAccentSoft)
-                                    .border(1.dp, Color(0xFFBFDBFE), RoundedCornerShape(8.dp))
-                                    .clickable { productToEdit = product }
-                                    .padding(horizontal = 9.dp, vertical = 4.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
                                 Icon(
-                                    imageVector = Icons.Default.Edit,
-                                    contentDescription = "Edit",
-                                    tint = BrandPrimaryBlue,
-                                    modifier = Modifier.size(12.dp)
-                                )
-                                Spacer(modifier = Modifier.width(3.dp))
-                                Text(
-                                    text = "Edit",
-                                    style = MaterialTheme.typography.labelMedium.copy(
-                                        color = BrandPrimaryBlue,
-                                        fontWeight = FontWeight.Bold,
-                                        fontSize = 11.sp
-                                    )
-                                )
-                            }
-
-                            // Delete Pill Button
-                            Row(
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(8.dp))
-                                    .background(Color(0xFFFEF2F2))
-                                    .border(1.dp, Color(0xFFFECACA), RoundedCornerShape(8.dp))
-                                    .clickable { productToDelete = product }
-                                    .padding(horizontal = 9.dp, vertical = 4.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Delete,
-                                    contentDescription = "Delete",
-                                    tint = DangerRed,
-                                    modifier = Modifier.size(12.dp)
-                                )
-                                Spacer(modifier = Modifier.width(3.dp))
-                                Text(
-                                    text = "Delete",
-                                    style = MaterialTheme.typography.labelMedium.copy(
-                                        color = DangerRed,
-                                        fontWeight = FontWeight.Bold,
-                                        fontSize = 11.sp
-                                    )
+                                    imageVector = Icons.AutoMirrored.Filled.ArrowForwardIos,
+                                    contentDescription = "View Details",
+                                    tint = TextSubtle.copy(alpha = 0.45f),
+                                    modifier = Modifier.size(13.dp)
                                 )
                             }
                         }

@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.Intent
 import android.widget.Toast
 import androidx.compose.foundation.background
+import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -52,9 +53,12 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Chat
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Description
+import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.ShoppingBag
 import com.digitalchopda.app.core.designsystem.ChopdaModalDialog
+import com.digitalchopda.app.core.designsystem.PlanFeatureLockedDialog
+import com.digitalchopda.app.core.designsystem.UniversalShareSheet
 import com.digitalchopda.app.core.document.ReportExportHelper
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
@@ -134,6 +138,7 @@ import com.digitalchopda.app.data.local.entity.CustomerEntity
 import com.digitalchopda.app.data.repository.BillingRepository
 import com.digitalchopda.app.data.repository.CompanyRepository
 import com.digitalchopda.app.data.repository.CustomerRepository
+import com.digitalchopda.app.data.repository.toDomain
 import com.digitalchopda.app.data.repository.InventoryRepository
 import com.digitalchopda.app.domain.model.Company
 import com.digitalchopda.app.domain.model.InventoryItem
@@ -169,6 +174,8 @@ fun CreateInvoiceScreen(
     initialPartyId: Long = 0L,
     initialPartyName: String = "",
     initialPartyPhone: String = "",
+    initialProductId: Long = 0L,
+    initialProductName: String = "",
     onNavigateBack: () -> Unit,
     onNavigateToDocumentDetail: (docType: String, docId: Long) -> Unit = { _, _ -> },
     onNavigateToPdfViewer: (filePath: String, invoiceId: Long, customerName: String, customerPhone: String, invoiceNumber: String, docType: String, serverOrderId: Long) -> Unit = { _, _, _, _, _, _, _ -> },
@@ -186,6 +193,9 @@ fun CreateInvoiceScreen(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val strings = LocalAppStrings.current
+
+    var autoAddedProductForQuantity by remember { mutableStateOf<Product?>(null) }
+    var hasAutoAddedInitialProduct by remember { mutableStateOf(false) }
 
     LaunchedEffect(initialMode, editId, initialPartyId, initialPartyName, initialPartyPhone) {
         if (initialMode.equals("quotation", ignoreCase = true)) {
@@ -220,6 +230,35 @@ fun CreateInvoiceScreen(
     val isSaving by viewModel.isSaving.collectAsState()
     val documentMode by viewModel.documentMode.collectAsState()
 
+    LaunchedEffect(catalogProducts, initialProductId, initialProductName) {
+        if (!hasAutoAddedInitialProduct && (initialProductId > 0L || initialProductName.isNotBlank())) {
+            val prod = catalogProducts.firstOrNull {
+                (initialProductId > 0L && it.id == initialProductId) ||
+                (initialProductName.isNotBlank() && it.name.equals(initialProductName, ignoreCase = true))
+            } ?: if (initialProductId > 0L) {
+                productRepository?.getProductById(initialProductId)
+            } else null
+
+            if (prod != null) {
+                hasAutoAddedInitialProduct = true
+                viewModel.addProductFromCatalog(prod, quantity = 1)
+                autoAddedProductForQuantity = prod
+            } else if (catalogProducts.isNotEmpty() && initialProductName.isNotBlank()) {
+                hasAutoAddedInitialProduct = true
+                val fallbackProd = Product(
+                    id = if (initialProductId > 0L) initialProductId else System.currentTimeMillis(),
+                    companyId = activeCompany.id,
+                    name = initialProductName,
+                    defaultPrice = 0.0,
+                    stockQuantity = 0.0,
+                    unit = "pcs"
+                )
+                viewModel.addProductFromCatalog(fallbackProd, quantity = 1)
+                autoAddedProductForQuantity = fallbackProd
+            }
+        }
+    }
+
     var showAddItemDialog by remember { mutableStateOf(false) }
     var showDirectAddProductPrompt by remember { mutableStateOf(false) }
     var productQuickFilter by remember { mutableStateOf("") }
@@ -236,9 +275,11 @@ fun CreateInvoiceScreen(
     var showThermalPreview by remember { mutableStateOf(false) }
     var showUpiQrDialog by remember { mutableStateOf(false) }
     var showBarcodeScanner by remember { mutableStateOf(false) }
+    var showVoiceLockedDialog by remember { mutableStateOf(false) }
     val thermalSheetState = rememberModalBottomSheetState()
     var billSuccessData by remember { mutableStateOf<BillSuccessData?>(null) }
     var showCreatedWhatsAppDialog by remember { mutableStateOf(false) }
+    var showUniversalShareSheet by remember { mutableStateOf(false) }
 
     Box(modifier = Modifier.fillMaxSize()) {
         Scaffold(
@@ -284,8 +325,9 @@ fun CreateInvoiceScreen(
                                 )
                             }
                             Spacer(modifier = Modifier.width(5.dp))
+                            val modeSubtitle = if (documentMode == InvoiceViewModel.DocumentMode.QUOTATION) "Quotation / Estimate" else "Tax Invoice"
                             Text(
-                                text = "${activeCompany.firmName.ifBlank { "ABC E-COMMERCE" }} • Tax Invoice",
+                                text = "${activeCompany.firmName.ifBlank { "ABC E-COMMERCE" }} • $modeSubtitle",
                                 style = MaterialTheme.typography.bodySmall.copy(color = TextMuted, fontSize = 11.sp),
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
@@ -293,64 +335,7 @@ fun CreateInvoiceScreen(
                         }
                     }
                 },
-                actions = {
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        modifier = Modifier.padding(end = 6.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        // Scan Icon Button
-                        IconButton(
-                            onClick = { showBarcodeScanner = true },
-                            modifier = Modifier
-                                .size(36.dp)
-                                .clip(CircleShape)
-                                .background(ElevatedSlate)
-                                .border(1.dp, BorderStrokeDark, CircleShape)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.QrCodeScanner,
-                                contentDescription = "Scan Barcode",
-                                tint = DarkNavy,
-                                modifier = Modifier.size(18.dp)
-                            )
-                        }
-
-                        // UPI QR Icon Button
-                        IconButton(
-                            onClick = { showUpiQrDialog = true },
-                            modifier = Modifier
-                                .size(36.dp)
-                                .clip(CircleShape)
-                                .background(Color(0xFFEFF6FF))
-                                .border(1.dp, Color(0xFFBFDBFE), CircleShape)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.QrCode2,
-                                contentDescription = "UPI QR",
-                                tint = BrandPrimaryBlue,
-                                modifier = Modifier.size(18.dp)
-                            )
-                        }
-
-                        // Thermal Print Icon Button
-                        IconButton(
-                            onClick = { showThermalPreview = true },
-                            modifier = Modifier
-                                .size(36.dp)
-                                .clip(CircleShape)
-                                .background(ElevatedSlate)
-                                .border(1.dp, BorderStrokeDark, CircleShape)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Print,
-                                contentDescription = "Thermal Bill",
-                                tint = TextMuted,
-                                modifier = Modifier.size(18.dp)
-                            )
-                        }
-                    }
-                },
+                actions = {},
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MidnightCardSurface
                 )
@@ -597,17 +582,52 @@ fun CreateInvoiceScreen(
                             overflow = TextOverflow.Ellipsis,
                             modifier = Modifier.weight(1f, fill = false)
                         )
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text(
-                            text = "⚡ Edit / Custom",
-                            style = MaterialTheme.typography.labelSmall.copy(
-                                color = BrandPrimaryBlue,
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 11.sp
-                            ),
-                            maxLines = 1,
-                            modifier = Modifier.clickable { showCustomerModal = true }
-                        )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            // Voice Bill (Locked) Button - matching Web UI & screenshot
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(Color(0xFFEFF6FF))
+                                    .border(1.dp, Color(0xFFBFDBFE), RoundedCornerShape(8.dp))
+                                    .clickable { showVoiceLockedDialog = true }
+                                    .padding(horizontal = 8.dp, vertical = 4.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        imageVector = Icons.Default.Mic,
+                                        contentDescription = "Voice Bill",
+                                        tint = BrandPrimaryBlue,
+                                        modifier = Modifier.size(13.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(
+                                        text = "Voice Bill",
+                                        style = MaterialTheme.typography.labelSmall.copy(
+                                            fontWeight = FontWeight.Bold,
+                                            color = BrandPrimaryBlue,
+                                            fontSize = 11.sp
+                                        )
+                                    )
+                                    Spacer(modifier = Modifier.width(3.dp))
+                                    Text("🔒", fontSize = 10.sp)
+                                }
+                            }
+
+                            Text(
+                                text = "⚡ Edit / Custom",
+                                style = MaterialTheme.typography.labelSmall.copy(
+                                    color = BrandPrimaryBlue,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 11.sp
+                                ),
+                                maxLines = 1,
+                                modifier = Modifier.clickable { showCustomerModal = true }
+                            )
+                        }
                     }
 
                     Spacer(modifier = Modifier.height(8.dp))
@@ -997,23 +1017,30 @@ fun CreateInvoiceScreen(
                         modifier = Modifier
                             .height(42.dp)
                             .clip(RoundedCornerShape(10.dp))
-                            .background(ElevatedSlate)
-                            .border(1.dp, BorderStrokeDark, RoundedCornerShape(10.dp))
-                            .bouncyClick { showBarcodeScanner = true }
-                            .padding(horizontal = 14.dp),
+                            .background(Color(0xFFEFF6FF))
+                            .border(1.dp, Color(0xFFBFDBFE), RoundedCornerShape(10.dp))
+                            .clickable { showVoiceLockedDialog = true }
+                            .padding(horizontal = 10.dp),
                         contentAlignment = Alignment.Center
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text("📷", fontSize = 13.sp)
+                            Icon(
+                                imageVector = Icons.Default.Mic,
+                                contentDescription = "Voice Bill",
+                                tint = BrandPrimaryBlue,
+                                modifier = Modifier.size(15.dp)
+                            )
                             Spacer(modifier = Modifier.width(4.dp))
                             Text(
-                                text = "Scan",
+                                text = "Voice Bill",
                                 style = MaterialTheme.typography.labelMedium.copy(
                                     fontWeight = FontWeight.Bold,
-                                    color = DarkNavy,
+                                    color = BrandPrimaryBlue,
                                     fontSize = 12.sp
                                 )
                             )
+                            Spacer(modifier = Modifier.width(3.dp))
+                            Text("🔒", fontSize = 10.sp)
                         }
                     }
                 }
@@ -1317,8 +1344,9 @@ fun CreateInvoiceScreen(
                                             fontSize = 13.5.sp
                                         ),
                                         maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis,
-                                        modifier = Modifier.weight(1f, fill = false)
+                                        modifier = Modifier
+                                            .weight(1f, fill = false)
+                                            .basicMarquee(iterations = Int.MAX_VALUE)
                                     )
                                     Spacer(modifier = Modifier.width(6.dp))
                                     StatusPill(
@@ -1719,6 +1747,19 @@ fun CreateInvoiceScreen(
         )
     }
 
+    if (autoAddedProductForQuantity != null) {
+        ProductQuantityPromptDialog(
+            product = autoAddedProductForQuantity!!,
+            onDismiss = { autoAddedProductForQuantity = null },
+            onConfirmQuantity = { confirmedQty ->
+                val prod = autoAddedProductForQuantity!!
+                viewModel.addProductFromCatalog(prod, quantity = confirmedQty)
+                autoAddedProductForQuantity = null
+                Toast.makeText(context, "Added $confirmedQty × ${prod.name} to bill", Toast.LENGTH_SHORT).show()
+            }
+        )
+    }
+
     if (showDirectAddProductPrompt) {
         AddEditProductDialog(
             companyId = activeCompany.id,
@@ -1882,13 +1923,21 @@ fun CreateInvoiceScreen(
                             .background(ElevatedSlate)
                             .border(1.dp, BorderStrokeDark, RoundedCornerShape(12.dp))
                             .bouncyClick {
-                                bill.pdfFile?.let { file ->
-                                    ReportExportHelper.launchShare(
-                                        context = context,
-                                        file = file,
-                                        mimeType = "application/pdf",
-                                        chooserTitle = "Share ${bill.invoiceNumber}"
-                                    )
+                                val currentBill = bill
+                                if (currentBill.pdfFile == null || !currentBill.pdfFile.exists()) {
+                                    scope.launch {
+                                        try {
+                                            val inv = billingRepository.getInvoiceById(currentBill.invoiceId)
+                                            val company = activeCompany ?: billingRepository.getActiveCompany()
+                                            if (inv != null && company != null) {
+                                                val genFile = pdfGenerator.generateInvoicePdf(company, inv.toDomain())
+                                                billSuccessData = currentBill.copy(pdfFile = genFile)
+                                            }
+                                        } catch (_: Exception) {}
+                                        showUniversalShareSheet = true
+                                    }
+                                } else {
+                                    showUniversalShareSheet = true
                                 }
                             },
                         contentAlignment = Alignment.Center
@@ -2005,6 +2054,23 @@ fun CreateInvoiceScreen(
             quotationRepository = quotationRepository,
             pdfFilePath = bill.pdfFile?.absolutePath,
             onDismiss = { showCreatedWhatsAppDialog = false }
+        )
+    }
+
+    // 🛸 Enterprise Universal Share Bottom Sheet
+    if (showUniversalShareSheet && billSuccessData != null) {
+        val bill = billSuccessData!!
+        val captionMsg = "Hello ${bill.customerName},\nPlease find your ${bill.docTypeTitle} ${bill.invoiceNumber} for ₹ ${com.digitalchopda.app.util.CurrencyFormatter.formatINR(bill.grandTotal)} from ${activeCompany.firmName}.\nThank you for your business!"
+        UniversalShareSheet(
+            title = "Share ${bill.docTypeTitle}",
+            subtitle = "${bill.invoiceNumber} • ${bill.customerName}",
+            documentFile = bill.pdfFile,
+            captionMessage = captionMsg,
+            recipientPhone = bill.customerPhone,
+            onPrintClick = {
+                showThermalPreview = true
+            },
+            onDismiss = { showUniversalShareSheet = false }
         )
     }
 
@@ -2220,6 +2286,18 @@ fun CreateInvoiceScreen(
                     android.widget.Toast.LENGTH_SHORT
                 ).show()
                 showBarcodeScanner = false
+            }
+        )
+    }
+
+    if (showVoiceLockedDialog) {
+        PlanFeatureLockedDialog(
+            onDismissRequest = { showVoiceLockedDialog = false },
+            featureName = "Kirana Voice-to-Bill AI Recognition",
+            requiredPlan = "GROWTH PRO",
+            description = "Voice billing is available exclusively on Growth Pro plan. Upgrade to automatically generate bills and invoices from your voice in English, Hindi, and Gujarati.",
+            onUpgradeClick = {
+                Toast.makeText(context, "Visit web dashboard or contact support to upgrade to Growth Pro!", Toast.LENGTH_LONG).show()
             }
         )
     }
@@ -2868,3 +2946,169 @@ data class BillSuccessData(
     val pdfFile: java.io.File?,
     val serverOrderId: Long?
 )
+
+@Composable
+fun ProductQuantityPromptDialog(
+    product: Product,
+    onDismiss: () -> Unit,
+    onConfirmQuantity: (Int) -> Unit
+) {
+    var quantityText by remember { mutableStateOf("1") }
+    val unitPrice = product.defaultPrice
+    val qty = quantityText.toIntOrNull() ?: 1
+    val subtotal = qty * unitPrice
+    val gstAmount = subtotal * (product.gstRate / 100.0)
+    val grandTotal = subtotal + gstAmount
+
+    ChopdaModalDialog(
+        onDismissRequest = onDismiss,
+        title = "Enter Quantity",
+        subtitle = product.name,
+        icon = Icons.Default.ShoppingBag,
+        iconTint = BrandPrimaryBlue,
+        widthFraction = 0.94f,
+        isBottomSheet = true,
+        buttons = {
+            CoralGradientButton(
+                text = "CONFIRM & ADD TO BILL (₹ ${if (grandTotal % 1.0 == 0.0) grandTotal.toInt().toString() else String.format(java.util.Locale.US, "%.2f", grandTotal)})",
+                onClick = {
+                    onConfirmQuantity(maxOf(1, qty))
+                },
+                modifier = Modifier.fillMaxWidth()
+            )
+        }
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 4.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            // Price & Tax Info Banner
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(ElevatedSlate)
+                    .border(1.dp, BorderStrokeDark, RoundedCornerShape(10.dp))
+                    .padding(horizontal = 14.dp, vertical = 10.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column {
+                    Text(
+                        text = "Unit Selling Price",
+                        style = MaterialTheme.typography.bodySmall.copy(color = TextSubtle, fontSize = 11.5.sp)
+                    )
+                    Text(
+                        text = "₹ ${if (unitPrice % 1.0 == 0.0) unitPrice.toInt().toString() else String.format(java.util.Locale.US, "%.2f", unitPrice)} / ${product.unit.ifBlank { "pcs" }}",
+                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold, color = DarkNavy)
+                    )
+                }
+                if (product.gstRate > 0) {
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(BrandAccentSoft)
+                            .padding(horizontal = 8.dp, vertical = 4.dp)
+                    ) {
+                        Text(
+                            text = "${product.gstRate.toInt()}% GST",
+                            fontWeight = FontWeight.Bold,
+                            color = BrandPrimaryBlue,
+                            fontSize = 11.sp
+                        )
+                    }
+                }
+            }
+
+            // Big Stepper & Numeric Input
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                IconButton(
+                    onClick = {
+                        val current = quantityText.toIntOrNull() ?: 1
+                        if (current > 1) quantityText = (current - 1).toString()
+                    },
+                    modifier = Modifier
+                        .size(48.dp)
+                        .clip(CircleShape)
+                        .background(ElevatedSlate)
+                        .border(1.dp, BorderStrokeDark, CircleShape)
+                ) {
+                    Text("-", fontSize = 24.sp, fontWeight = FontWeight.Black, color = DarkNavy)
+                }
+
+                Spacer(modifier = Modifier.width(16.dp))
+
+                OutlinedTextField(
+                    value = quantityText,
+                    onValueChange = { input ->
+                        val filtered = input.filter { it.isDigit() }.take(4)
+                        quantityText = filtered
+                    },
+                    textStyle = MaterialTheme.typography.headlineMedium.copy(
+                        fontWeight = FontWeight.Black,
+                        color = DarkNavy,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                    ),
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    modifier = Modifier.width(120.dp),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = BrandPrimaryBlue,
+                        unfocusedBorderColor = BorderStrokeDark
+                    )
+                )
+
+                Spacer(modifier = Modifier.width(16.dp))
+
+                IconButton(
+                    onClick = {
+                        val current = quantityText.toIntOrNull() ?: 1
+                        quantityText = (current + 1).toString()
+                    },
+                    modifier = Modifier
+                        .size(48.dp)
+                        .clip(CircleShape)
+                        .background(BrandPrimaryBlue)
+                ) {
+                    Text("+", fontSize = 24.sp, fontWeight = FontWeight.Black, color = Color.White)
+                }
+            }
+
+            // Quick Adder Chips: +1, +5, +10, +25, +50
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                listOf(1, 5, 10, 25, 50).forEach { addVal ->
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(ElevatedSlate)
+                            .border(1.dp, BorderStrokeDark, RoundedCornerShape(8.dp))
+                            .clickable {
+                                val current = quantityText.toIntOrNull() ?: 0
+                                quantityText = (current + addVal).toString()
+                            }
+                            .padding(horizontal = 10.dp, vertical = 6.dp)
+                    ) {
+                        Text(
+                            text = "+$addVal",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = BrandPrimaryBlue
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
